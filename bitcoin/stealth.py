@@ -1,34 +1,34 @@
-import bitcoin.main as main
-import bitcoin.transaction as tx
+from bitcoin.main import *
+#import bitcoin.transaction as tx
 
 # Shared secrets and uncovering pay keys
 
 
 def shared_secret_sender(scan_pubkey, ephem_privkey):
-    shared_point = main.multiply(scan_pubkey, ephem_privkey)
-    shared_secret = main.sha256(main.encode_pubkey(shared_point, 'bin_compressed'))
+    shared_point = multiply(scan_pubkey, ephem_privkey)
+    shared_secret = sha256(main.encode_pubkey(shared_point, 'bin_compressed'))
     return shared_secret
 
 
 def shared_secret_receiver(ephem_pubkey, scan_privkey):
-    shared_point = main.multiply(ephem_pubkey, scan_privkey)
-    shared_secret = main.sha256(main.encode_pubkey(shared_point, 'bin_compressed'))
+    shared_point = multiply(ephem_pubkey, scan_privkey)
+    shared_secret = sha256(encode_pubkey(shared_point, 'bin_compressed'))
     return shared_secret
 
 
 def uncover_pay_pubkey_sender(scan_pubkey, spend_pubkey, ephem_privkey):
     shared_secret = shared_secret_sender(scan_pubkey, ephem_privkey)
-    return main.add_pubkeys(spend_pubkey, main.privtopub(shared_secret))
+    return add_pubkeys(spend_pubkey, privtopub(shared_secret))
 
 
 def uncover_pay_pubkey_receiver(scan_privkey, spend_pubkey, ephem_pubkey):
     shared_secret = shared_secret_receiver(ephem_pubkey, scan_privkey)
-    return main.add_pubkeys(spend_pubkey, main.privtopub(shared_secret))
+    return add_pubkeys(spend_pubkey, privtopub(shared_secret))
 
 
 def uncover_pay_privkey(scan_privkey, spend_privkey, ephem_pubkey):
     shared_secret = shared_secret_receiver(ephem_pubkey, scan_privkey)
-    return main.add_privkeys(spend_privkey, shared_secret)
+    return add_privkeys(spend_privkey, shared_secret)
 
 # Address encoding
 
@@ -38,15 +38,15 @@ def uncover_pay_privkey(scan_privkey, spend_privkey, ephem_pubkey):
 
 def pubkeys_to_basic_stealth_address(scan_pubkey, spend_pubkey, magic_byte=42):
     # magic_byte = 42 for mainnet, 43 for testnet.
-    hex_scankey = main.encode_pubkey(scan_pubkey, 'hex_compressed')
-    hex_spendkey = main.encode_pubkey(spend_pubkey, 'hex_compressed')
+    hex_scankey = encode_pubkey(scan_pubkey, 'hex_compressed')
+    hex_spendkey = encode_pubkey(spend_pubkey, 'hex_compressed')
     hex_data = '00{0:066x}01{1:066x}0100'.format(int(hex_scankey, 16), int(hex_spendkey, 16))
-    addr = main.hex_to_b58check(hex_data, magic_byte)
+    addr = hex_to_b58check(hex_data, magic_byte)
     return addr
 
 
 def basic_stealth_address_to_pubkeys(stealth_address):
-    hex_data = main.b58check_to_hex(stealth_address)
+    hex_data = b58check_to_hex(stealth_address)
     if len(hex_data) != 140:
         raise Exception('Stealth address is not of basic type (one scan key, one spend key, no prefix)')
 
@@ -61,7 +61,7 @@ def mk_stealth_metadata_script(ephem_pubkey, nonce):
     op_return = '6a'
     msg_size = '26'
     version = '06'
-    return op_return + msg_size + version + '{0:08x}'.format(nonce) + main.encode_pubkey(ephem_pubkey, 'hex_compressed')
+    return op_return + msg_size + version + '{0:08x}'.format(nonce) + encode_pubkey(ephem_pubkey, 'hex_compressed')
 
 
 def mk_stealth_tx_outputs(stealth_addr, value, ephem_privkey, nonce, network='btc'):
@@ -80,12 +80,12 @@ def mk_stealth_tx_outputs(stealth_addr, value, ephem_privkey, nonce, network='bt
             raise Exception('Invalid testnet stealth address: ' + stealth_addr)
         magic_byte_addr = 111
 
-    ephem_pubkey = main.privkey_to_pubkey(ephem_privkey)
+    ephem_pubkey = privkey_to_pubkey(ephem_privkey)
     output0 = {'script': mk_stealth_metadata_script(ephem_pubkey, nonce),
                'value': 0}
 
     pay_pubkey = uncover_pay_pubkey_sender(scan_pubkey, spend_pubkey, ephem_privkey)
-    pay_addr = main.pubkey_to_address(pay_pubkey, magic_byte_addr)
+    pay_addr = mpubkey_to_address(pay_pubkey, magic_byte_addr)
     output1 = {'address': pay_addr,
                'value': value}
 
