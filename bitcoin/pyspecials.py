@@ -71,13 +71,13 @@ if is_python2:
         import struct
         lx = lambda x, v: struct.pack("<"+x, int(v))
         if length == 1:
-            return lx('B', i)[0]
+            return lx('B', i)
         elif length == 2:
-            return lx('H', i)[0]
+            return lx('H', i)
         elif length == 4:
-            return lx('I', i)[0]
+            return lx('I', i)
         elif length == 8:
-            return lx('L', i)[0]
+            return lx('L', i)
         else: raise Exception("bad length or int value")
 
     def from_int_to_byte(a):
