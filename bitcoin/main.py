@@ -1,10 +1,8 @@
 #!/usr/bin/python
-from .py2specials import *
-from .py3specials import *
+from bitcoin.pyspecials import *
 import binascii
 import hashlib
 import re
-import sys
 import os
 import base64
 import time
@@ -12,8 +10,12 @@ import random
 import hmac
 from bitcoin.ripemd import *
 
-# Elliptic curve parameters (secp256k1)
 
+#global is_python2
+#is_python2 = sys.version_info.major == 2
+is_python2 = str == bytes
+
+# Elliptic curve parameters (secp256k1)
 P = 2**256 - 2**32 - 977
 N = 115792089237316195423570985008687907852837564279074904382605163141518161494337
 A = 0
@@ -33,8 +35,6 @@ def getG():
     return G
 
 # Extended Euclidean Algorithm
-
-
 def inv(a, n):
     if a == 0:
         return 0
@@ -152,8 +152,6 @@ def fast_add(a, b):
     return from_jacobian(jacobian_add(to_jacobian(a), to_jacobian(b)))
 
 # Functions for handling pubkey and privkey formats
-
-
 def get_pubkey_format(pub):
     if is_python2:
         two = '\x02'
@@ -163,7 +161,7 @@ def get_pubkey_format(pub):
         two = 2
         three = 3
         four = 4
-
+    
     if isinstance(pub, (tuple, list)): return 'decimal'
     elif len(pub) == 65 and pub[0] == four: return 'bin'
     elif len(pub) == 130 and pub[0:2] == '04': return 'hex'
@@ -330,10 +328,8 @@ def subtract_privkeys(p1, p2):
 def bin_hash160(string):
     intermed = hashlib.sha256(string).digest()
     digest = ''
-    try:
-        digest = hashlib.new('ripemd160', intermed).digest()
-    except:
-        digest = RIPEMD160(intermed).digest()
+    try:    digest = hashlib.new('ripemd160', intermed).digest()
+    except: digest = RIPEMD160(intermed).digest()
     return digest
 
 
@@ -342,7 +338,7 @@ def hash160(string):
 
 
 def bin_sha256(string):
-    binary_data = string if isinstance(string, bytes) else bytes(string, 'utf-8')
+    binary_data = string if isinstance(string, bytes) else by(string)
     return hashlib.sha256(binary_data).digest()
 
 def sha256(string):
@@ -404,20 +400,16 @@ def electrum_sig_hash(message):
 
 def random_key():
     # Gotta be secure after that java.SecureRandom fiasco...
-    entropy = random_string(32) \
-        + str(random.randrange(2**256)) \
-        + str(int(time.time() * 1000000))
+    entropy = from_string_to_bytes(
+        random_string(32) + str(random.randrange(2**256)) \
+        + str(int(time.time() * 1000000)))
     return sha256(entropy)
 
 
 def random_electrum_seed():
-    entropy = os.urandom(32) \
-        + str(random.randrange(2**256)) \
-        + str(int(time.time() * 1000000))
-    return sha256(entropy)[:32]
+    return random_key()[:32]
 
 # Encodings
-
 def b58check_to_bin(inp):
     leadingzbytes = len(re.match('^1*', inp).group(0))
     data = b'\x00' * leadingzbytes + changebase(inp, 58, 256)
@@ -455,7 +447,7 @@ pubtoaddr = pubkey_to_address
 
 def encode_sig(v, r, s):
     vb, rb, sb = from_int_to_byte(v), encode(r, 256), encode(s, 256)
-    
+
     result = base64.b64encode(vb+b'\x00'*(32-len(rb))+rb+b'\x00'*(32-len(sb))+sb)
     return result if is_python2 else str(result, 'utf-8')
 
@@ -530,3 +522,35 @@ def ecdsa_raw_recover(msghash, vrs):
 
 def ecdsa_recover(msg, sig):
     return encode_pubkey(ecdsa_raw_recover(electrum_sig_hash(msg), decode_sig(sig)), 'hex')
+
+
+# PBKDF2: a simple implementation using stock python modules.
+# Modifications based on https://matt.ucc.asn.au/src/pbkdf2.py
+def bin_pbkdf2(password, salt, iters, keylen, digestmod):
+    h = hmac.new(password, digestmod=digestmod)
+    def prf(data):
+        hm = h.copy()
+        hm.update(data)
+        return bytearray(hm.digest())
+    key = bytearray()
+    i = 1
+    while len(key) < keylen:
+        T = U = prf(salt + struct.pack('>i', i))
+        for _ in range(iters - 1):
+            U = prf(U)
+            T = bytearray(x ^ y for x, y in zip(T, U))
+        key += T
+        i += 1
+    return bytes(key[:keylen])
+
+def pbkdf2(password, salt, iters=2048, keylen=64, digestmod=hashlib.sha512):
+    if salt is None or len(salt) == 0: salt = b''
+    bx = lambda x: x if isinstance(x, bytes) else bytes(x, 'utf-8')
+    password, salt = map(bx, (password, salt))
+    return safe_hexlify(bin_pbkdf2(password=password, salt=salt, iters=2048, keylen=64, digestmod=hashlib.sha512))
+
+# Easy pbkdf2 (takes strings/bytes)
+def hmac_sha512(key, msg=None):
+    if msg is None: msg = b''
+    b = bin_pbkdf2(password=key, salt=msg, iters=2048, keylen=64, digestmod=hashlib.sha512)
+    return safe_hexlify(b)
