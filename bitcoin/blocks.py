@@ -1,6 +1,5 @@
 from bitcoin.main import *
 
-
 def serialize_header(inp):
     o = encode(inp['version'], 256, 4)[::-1] + \
         inp['prevhash'].decode('hex')[::-1] + \
