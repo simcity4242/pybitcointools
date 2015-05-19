@@ -2,57 +2,69 @@ from bitcoin.main import *
 import hmac
 import hashlib
 from binascii import hexlify
-# Electrum wallets
 
+
+# Electrum wallets
+# Takes Electrum v2.0 13 word mnemonic string and returns seed. Only works on English for now
+def bin_electrum_extract_seed(phrase, password=''):
+    if isinstance(phrase, string_types):
+        try:
+            mnemonic = ' '.join(phrase.lower().strip().split())
+        except Exception as e:
+                raise Exception(str(e))
+    else:
+        raise TypeError
+    mnemonic = from_string_to_bytes(phrase)
+    pwd = from_string_to_bytes("electrum"
+                               "{}".format(from_string_to_bytes(password)))
+    rootseed = hmac_sha512(key=mnemonic, msg=pwd)
+    assert len(rootseed) == 64
+    return rootseed
+
+def electrum_extract_seed(phrase, password=''):
+    return safe_hexlify(bin_electrum_extract_seed(phrase, password=''))
+
+def electrum_mprvk(mnemonic, password=''):
+    return bip32_master_key(bin_electrum_extract_seed(mnemonic, password=''))
 
 def electrum_stretch(seed):
     return slowsha(seed)
 
 # Accepts seed or stretched seed, returns master public key
-
-
-def electrum_mpk(seed):
+def electrum_mpubk(seed):
     if len(seed) == 32:
         seed = electrum_stretch(seed)
     return privkey_to_pubkey(seed)[2:]
 
 # Accepts (seed or stretched seed), index and secondary index
 # (conventionally 0 for ordinary addresses, 1 for change) , returns privkey
-
-
 def electrum_privkey(seed, n, for_change=0):
     if len(seed) == 32:
         seed = electrum_stretch(seed)
-    mpk = electrum_mpk(seed)
-    offset = dbl_sha256(from_int_representation_to_bytes(n)+b':'+from_int_representation_to_bytes(for_change)+b':'+binascii.unhexlify(mpk))
+    mpk = electrum_mpubk(seed)
+    offset = bin_dbl_sha256(from_string_to_bytes("{}:{}:{}".format(n, for_change, binascii.unhexlify(mpk))))
     return add_privkeys(seed, offset)
 
 # Accepts (seed or stretched seed or master pubkey), index and secondary index
 # (conventionally 0 for ordinary addresses, 1 for change) , returns pubkey
-
-
 def electrum_pubkey(masterkey, n, for_change=0):
     if len(masterkey) == 32:
-        mpk = electrum_mpk(electrum_stretch(masterkey))
+        mpk = electrum_mpubk(electrum_stretch(masterkey))
     elif len(masterkey) == 64:
-        mpk = electrum_mpk(masterkey)
+        mpk = electrum_mpubk(masterkey)
     else:
         mpk = masterkey
     bin_mpk = encode_pubkey(mpk, 'bin_electrum')
-    offset = bin_dbl_sha256(from_int_representation_to_bytes(n)+b':'+from_int_representation_to_bytes(for_change)+b':'+bin_mpk)
+    offset = bin_dbl_sha256(from_string_to_bytes("{}:{}:{}".format(n, for_change, bin_mpk)))
     return add_pubkeys('04'+mpk, privtopub(offset))
 
 # seed/stretched seed/pubkey -> address (convenience method)
-
-
 def electrum_address(masterkey, n, for_change=0, version=0):
     return pubkey_to_address(electrum_pubkey(masterkey, n, for_change), version)
 
 # Given a master public key, a private key from that wallet and its index,
 # cracks the secret exponent which can be used to generate all other private
 # keys in the wallet
-
-
 def crack_electrum_wallet(mpk, pk, n, for_change=0):
     bin_mpk = encode_pubkey(mpk, 'bin_electrum')
     offset = dbl_sha256(str(n)+':'+str(for_change)+':'+bin_mpk)
@@ -67,8 +79,6 @@ PRIVATE = [MAINNET_PRIVATE, TESTNET_PRIVATE]
 PUBLIC = [MAINNET_PUBLIC, TESTNET_PUBLIC]
 
 # BIP32 child key derivation
-
-
 def raw_bip32_ckd(rawtuple, i):
     vbytes, depth, fingerprint, oldi, chaincode, key = rawtuple
     i = int(i)
@@ -147,8 +157,6 @@ def bip32_extract_key(data):
 # Exploits the same vulnerability as above in Electrum wallets
 # Takes a BIP32 pubkey and one of the child privkeys of its corresponding
 # privkey and returns the BIP32 privkey associated with that pubkey
-
-
 def raw_crack_bip32_privkey(parent_pub, priv):
     vbytes, depth, fingerprint, i, chaincode, key = priv
     pvbytes, pdepth, pfingerprint, pi, pchaincode, pkey = parent_pub
