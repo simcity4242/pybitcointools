@@ -2,9 +2,10 @@
 import binascii, re, json, copy, sys
 from bitcoin.main import *
 from _functools import reduce
+from btc.pyspecials import safe_hexlify, from_string_to_bytes, from_int_to_byte, from_string_to_bytes
+
 
 ### Hex to bin converter and vice versa for objects
-
 
 def json_is_base(obj, base):
     if not is_python2 and isinstance(obj, bytes):
@@ -39,8 +40,8 @@ def json_changebase(obj, changer):
         return [json_changebase(x, changer) for x in obj]
     return dict((x, json_changebase(obj[x], changer)) for x in obj)
 
-# Transaction serialization and deserialization
 
+# Transaction serialization and deserialization
 
 def deserialize(tx):
     if isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx):
@@ -149,7 +150,6 @@ def signature_form(tx, i, script, hashcode=SIGHASH_ALL):
 
 # Making the actual signatures
 
-
 def der_encode_sig(v, r, s):
     b1, b2 = safe_hexlify(encode(r, 256)), safe_hexlify(encode(s, 256))
     if r >= 2**255:
@@ -200,7 +200,6 @@ def ecdsa_tx_recover(tx, sig, hashcode=SIGHASH_ALL):
 
 # Scripts
 
-
 def mk_pubkey_script(addr):
     # Keep the auxiliary functions around for altcoins' sake
     return '76a914' + b58check_to_hex(addr) + '88ac'
@@ -211,7 +210,6 @@ def mk_scripthash_script(addr):
 
 # Address representation to output script
 
-
 def address_to_script(addr):
     if addr[0] == '3' or addr[0] == '2':
         return mk_scripthash_script(addr)
@@ -219,7 +217,6 @@ def address_to_script(addr):
         return mk_pubkey_script(addr)
 
 # Output script to address representation
-
 
 def script_to_address(script, vbyte=0):
     if re.match('^[0-9a-fA-F]*$', script):
@@ -293,7 +290,7 @@ if is_python2:
     def serialize_script(script):
         if json_is_base(script, 16):
             return binascii.hexlify(serialize_script(json_changebase(script,
-                                    lambda x: binascii.unhexlify(x))))
+                                    lambda x: binascii.unhexlify(str(x)))))
         return ''.join(map(serialize_script_unit, script))
 else:
     def serialize_script(script):
@@ -316,7 +313,6 @@ def mk_multisig_script(*args):  # [pubs],k or pub1,pub2...pub[n],k
     return serialize_script([k]+pubs+[len(pubs)]) + 'ae'
 
 # Signing and verifying
-
 
 def verify_tx_input(tx, i, script, sig, pub):
     if re.match('^[0-9a-fA-F]*$', tx):
@@ -449,8 +445,6 @@ def select(unspent, value):
     return low[:i]
 
 # Only takes inputs of the form { "output": blah, "value": foo }
-
-
 def mksend(*args):
     argz, change, fee = args[:-2], args[-2], int(args[-1])
     ins, outs = [], []
@@ -480,3 +474,29 @@ def mksend(*args):
         outputs2 += [{"address": change, "value": isum-osum-fee}]
 
     return mktx(ins, outputs2)
+
+def mk_opreturn(msg, rawtx=None, json=0):
+    def op_push(data):
+        import struct
+        if len(data) < 0x4c:
+            return from_int_to_byte(len(data)) + from_string_to_bytes(data)
+        elif len(data) < 0xff:
+            return from_int_to_byte(76) + struct.pack('<B', len(data)) + from_string_to_bytes(data)
+        elif len(data) < 0xffff:
+            return from_int_to_byte(77) + struct.pack('<H', len(data)) + from_string_to_bytes(data)
+        elif len(data) < 0xffffffff:
+            return from_int_to_byte(78) + struct.pack('<I', len(data)) + from_string_to_bytes(data)
+        else: raise Exception("Input data error. Rawtx must be hex chars 0xffffffff > len(data) > 0")
+
+    orhex = safe_hexlify(b'\x6a' + op_push(msg))
+    orjson = {'script' : orhex, 'value' : 0}
+    if rawtx is not None:
+        try:
+            txo = deserialize(rawtx)
+            if not 'outs' in txo.keys(): raise Exception("OP_Return cannot be the sole output!")
+            txo['outs'].append(orjson)
+            newrawtx = serialize(txo)
+            return newrawtx
+        except:
+            raise Exception("Raw Tx Error!")
+    return orhex if not json else orjson
