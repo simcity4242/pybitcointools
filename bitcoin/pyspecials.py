@@ -88,6 +88,16 @@ if sys.version_info.major == 2:
         # return a
         return ord(a)
 
+    def from_le_bytes_to_int(bstr):
+        import struct
+        lx = lambda x, v: struct.unpack('<'+x, bstr)
+        blen = len(bstr)
+        if blen == 1: return lx('B', bstr)
+        elif blen == 2: return lx('H', bstr)
+        elif blen == 4: return lx('I', bstr)
+        elif blen == 8: return lx('L', bstr)
+        else: raise Exception("Bad byte-string input")
+
     def from_string_to_bytes(a):
         return a
 
@@ -183,8 +193,6 @@ elif sys.version_info.major == 3:
         return ''.join('{:02x}'.format(y) for y in b)
 
     def safe_from_hex(b):
-        if isinstance(b, str):
-            return bytes.fromhex(b)
         return bytes.fromhex(b)
 
     safe_unhexlify = safe_from_hex
@@ -192,22 +200,25 @@ elif sys.version_info.major == 3:
     def from_int_representation_to_bytes(a):
         return by(str(a))
 
-    def from_int_to_byte(a):
-        return bytes([a])
-
     def from_int_to_le_bytes(i, length=1):
         if length == 1:
             return from_int_to_byte(i)
         return int.to_bytes(i, length=length, 'little')
 
+    def from_int_to_byte(a):
+        return bytes([a])
+
     def from_byte_to_int(a):
         return a
+
+    def from_le_bytes_to_int(bstr):
+        return int.from_bytes(bstr, 'little')
 
     def from_string_to_bytes(a):
         return a if isinstance(a, bytes) else by(a)
 
     def from_bytestring_to_string(a):
-        return st(a)
+        return a if isinstance(a, string_types) else st(a)
 
     from_bytes_to_string = from_bytestring_to_string
 
