@@ -1,4 +1,5 @@
 #!/usr/bin/python
+from bitcoin.pyspecials import *
 import json, re
 import random
 import sys
@@ -14,10 +15,10 @@ def make_request(*args):
     opener.addheaders = [('User-agent',
                           'Mozilla/5.0'+str(random.randrange(1000000)))]
     try:
-        return opener.open(*args).read().strip()
+        return st(opener.open(*args).read().strip()) # st returns a string, NOT bytestring
     except Exception as e:
         try:
-            p = e.read().strip()
+            p = st(e.read().strip())
         except:
             p = e
         raise Exception(p)
@@ -324,8 +325,8 @@ def firstbits(address):
 
 
 def get_block_at_height(height):
-    j = json.loads(make_request("https://blockchain.info/block-height/" +
-                   str(height)+"?format=json"))
+    j = json.loads(st(make_request("https://blockchain.info/block-height/" +
+                   str(height)+"?format=json")))
     for b in j['blocks']:
         if b['main_chain'] is True:
             return b
@@ -352,26 +353,6 @@ def get_block_header_data(inp):
         'nonce': j['nonce'],
     }
 
-def blockr_get_block_header_data(height, network='btc'):
-    if network == 'testnet':
-        blockr_url = "https://tbtc.blockr.io/api/v1/block/raw/"
-    elif network == 'btc':
-        blockr_url = "https://btc.blockr.io/api/v1/block/raw/"
-    else:
-        raise Exception(
-            'Unsupported network {0} for blockr_get_block_header_data'.format(network))
-
-    k = json.loads(make_request(blockr_url + str(height)))
-    j = k['data']
-    return {
-        'version': j['version'],
-        'hash': j['hash'],
-        'prevhash': j['previousblockhash'],
-        'timestamp': j['time'],
-        'merkle_root': j['merkleroot'],
-        'bits': int(j['bits'], 16),
-        'nonce': j['nonce'],
-    }
 
 def get_txs_in_block(inp):
     j = _get_block(inp)
@@ -382,3 +363,11 @@ def get_txs_in_block(inp):
 def get_block_height(txhash):
     j = json.loads(make_request('https://blockchain.info/rawtx/'+txhash))
     return j['block_height']
+
+
+def get_block_coinbase(inp):
+    j = _get_block(inp=inp)
+    cb = binascii.unhexlify( st(j['tx'][0]['inputs'][0]['script']))
+    alpha = ''.join(map(chr, list(range(32, 126))))
+    cbtext = ''.join(map(chr, filter(lambda x: chr(x) in alpha, bytearray(cb))))
+    return cbtext if not '' else None
