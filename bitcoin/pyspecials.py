@@ -71,13 +71,13 @@ if is_python2:
         import struct
         lx = lambda x, v: struct.pack("<"+x, int(v))
         if length == 1:
-            return lx('B', i)
+            return lx('B', i)[0]
         elif length == 2:
-            return lx('H', i)
+            return lx('H', i)[0]
         elif length == 4:
-            return lx('I', i)
+            return lx('I', i)[0]
         elif length == 8:
-            return lx('L', i)
+            return lx('L', i)[0]
         else: raise Exception("bad length or int value")
 
     def from_int_to_byte(a):
@@ -92,10 +92,10 @@ if is_python2:
         import struct
         lx = lambda x, v: struct.unpack('<'+x, bstr)
         blen = len(bstr)
-        if blen == 1: return lx('B', bstr)
-        elif blen == 2: return lx('H', bstr)
-        elif blen == 4: return lx('I', bstr)
-        elif blen == 8: return lx('L', bstr)
+        if blen == 1: return lx('B', bstr)[0]
+        elif blen == 2: return lx('H', bstr)[0]
+        elif blen == 4: return lx('I', bstr)[0]
+        elif blen == 8: return lx('L', bstr)[0]
         else: raise Exception("Bad byte-string input")
 
     def from_string_to_bytes(a):
@@ -203,7 +203,7 @@ elif sys.version_info.major == 3:
     def from_int_to_le_bytes(i, length=1):
         if length == 1:
             return from_int_to_byte(i)
-        return int.to_bytes(i, length=length, 'little')
+        return int.to_bytes(i, length=length, byteorder='little')
 
     def from_int_to_byte(a):
         return bytes([a])
