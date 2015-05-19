@@ -4,11 +4,11 @@ import binascii
 import os
 import hashlib
 
-is_python2 = str == bytes
+is_python2 = (str == bytes) and (sys.version_info.major == 2)
 
 #   PYTHON 2 FUNCTIONS
 #
-if sys.version_info.major == 2:
+if is_python2:
     
     python2 = bytes == str
     st = lambda u: str(u) if is_python2 else str(u, 'utf-8')
@@ -136,7 +136,7 @@ if sys.version_info.major == 2:
 #   PYTHON 3
 #
 elif sys.version_info.major == 3:
-    is_python2 = bytes == str
+    #is_python2 = bytes == str
 
     st = lambda u: str(u) if is_python2 else str(u, 'utf-8')
     by = lambda v: bytes(v) if is_python2 else bytes(v, 'utf-8')
@@ -271,5 +271,5 @@ elif sys.version_info.major == 3:
         return str(os.urandom(x))
 
 else:
-    from btc.py2specials import *
-    from btc.py3specials import *
+    from bitcoin.py2specials import *
+    from bitcoin.py3specials import *
