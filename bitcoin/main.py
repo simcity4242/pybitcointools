@@ -342,7 +342,7 @@ def bin_sha256(string):
     return hashlib.sha256(binary_data).digest()
 
 def sha256(string):
-    return bytes_to_hex_string(bin_sha256(string))
+    return safe_hexlify(bin_sha256(string))
 
 
 def bin_ripemd160(string):
@@ -543,14 +543,13 @@ def bin_pbkdf2(password, salt, iters, keylen, digestmod):
         i += 1
     return bytes(key[:keylen])
 
-def pbkdf2(password, salt, iters=2048, keylen=64, digestmod=hashlib.sha512):
-    if salt is None or len(salt) == 0: salt = b''
-    bx = lambda x: x if isinstance(x, bytes) else bytes(x, 'utf-8')
-    password, salt = map(bx, (password, salt))
-    return safe_hexlify(bin_pbkdf2(password=password, salt=salt, iters=2048, keylen=64, digestmod=hashlib.sha512))
-
-# Easy pbkdf2 (takes strings/bytes)
-def hmac_sha512(key, msg=None):
-    if msg is None: msg = b''
-    b = bin_pbkdf2(password=key, salt=msg, iters=2048, keylen=64, digestmod=hashlib.sha512)
+def pbkdf2_hmac_sha512(password, salt=None):
+    salt = b'' if salt is None else from_string_to_bytes(salt)
+    password = from_string_to_bytes(password)
+    try:
+        from hashlib import pbkdf2_hmac
+        b = pbkdf2_hmac('sha512', password, salt, 2048, 64)
+    except ImportError:
+        b = bin_pbkdf2(password, salt, 2048, 64, hashlib.sha512)
     return safe_hexlify(b)
+
