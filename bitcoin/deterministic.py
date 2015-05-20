@@ -17,7 +17,7 @@ def bin_electrum_extract_seed(phrase, password=''):
     mnemonic = from_string_to_bytes(phrase)
     pwd = from_string_to_bytes("electrum"
                                "{}".format(from_string_to_bytes(password)))
-    rootseed = hmac_sha512(key=mnemonic, msg=pwd)
+    rootseed = pbkdf2_hmac_sha512(key=mnemonic, msg=pwd)
     assert len(rootseed) == 64
     return rootseed
 
