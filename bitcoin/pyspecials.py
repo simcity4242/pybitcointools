@@ -17,7 +17,7 @@ if is_python2:
     string_types = (str, unicode)
     string_or_bytes_types = (str, unicode)
     bytestring_types = bytearray
-    int_types = int, float, long
+    int_types = (int, float, long)
 
     # Base switching
     code_strings = {
