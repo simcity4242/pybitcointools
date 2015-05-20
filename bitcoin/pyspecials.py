@@ -3,6 +3,7 @@ import re
 import binascii
 import os
 import hashlib
+import struct
 
 is_python2 = (str == bytes) and (sys.version_info.major == 2)
 
@@ -66,7 +67,8 @@ if is_python2:
         return str(a)
 
     def from_int_to_le_bytes(i, length=1):
-        import struct
+        blen = len(encode(int(i), 256))
+        length = length if (blen <= length) else blen
         lx = lambda x, v: struct.pack("<"+x, int(v))
         if length == 1:
             return lx('B', i)
@@ -87,7 +89,6 @@ if is_python2:
         return ord(a)
 
     def from_le_bytes_to_int(bstr):
-        import struct
         lx = lambda x, v: struct.unpack('<'+x, bstr)
         blen = len(bstr)
         if blen == 1: return lx('B', bstr)[0]
@@ -192,6 +193,7 @@ elif sys.version_info.major == 3:
         return by(str(a))
 
     def from_int_to_le_bytes(i, length=1):
+
         return int.to_bytes(i, length=length, byteorder='little')
 
     def from_int_to_byte(a):
