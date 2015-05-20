@@ -11,13 +11,13 @@ is_python2 = (str == bytes) and (sys.version_info.major == 2)
 if is_python2:
     
     python2 = bytes == str
-    st = lambda u: str(u) if is_python2 else str(u, 'utf-8')
-    by = lambda v: bytes(v) if is_python2 else bytes(v, 'utf-8')
+    st = lambda u: str(u)
+    by = lambda v: bytes(v)
 
-    string_types = (str, unicode) if is_python2 else (str)
-    string_or_bytes_types = string_types if is_python2 else (str, bytes)
-    bytestring_types = bytearray if is_python2 else (bytes, bytearray)
-    int_types = (int, float, long) if is_python2 else (int, float)
+    string_types = (str, unicode)
+    string_or_bytes_types = (str, unicode)
+    bytestring_types = bytearray
+    int_types = int, float, long
 
     # Base switching
     code_strings = {
@@ -56,15 +56,13 @@ if is_python2:
         checksum = bin_dbl_sha256(inp_fmtd)[:4]
         return '1' * leadingzbytes + changebase(inp_fmtd+checksum, 256, 58)
         
-    def bytes_to_hex_string(b):
-        return b.encode('hex')
+    def safe_hexlify(b):
+        return binascii.hexlify(b)
 
-    def safe_from_hex(s):
-        return s.decode('hex')
-
-    safe_unhexlify = safe_from_hex
+    def safe_unhexlify(s):
+        return binascii.unhexlify(s)
         
-    def from_int_representation_to_bytes(a):
+    def from_int_repr_to_bytes(a):
         return str(a)
 
     def from_int_to_le_bytes(i, length=1):
@@ -99,16 +97,13 @@ if is_python2:
         else: raise Exception("Bad byte-string input")
 
     def from_string_to_bytes(a):
-        return a
+        return by(a)
 
-    def from_bytestring_to_string(a):
+    def from_bytes_to_string(a):
         return st(a)
 
-    from_bytes_to_string = from_bytestring_to_string
+    from_bytestring_to_string = from_bytes_to_string
         
-    def safe_hexlify(a):
-        return binascii.hexlify(a)
-
     def encode(val, base, minlen=0):
         base, minlen = int(base), int(minlen)
         code_string = get_code_string(base)
@@ -138,13 +133,13 @@ if is_python2:
 elif sys.version_info.major == 3:
     #is_python2 = bytes == str
 
-    st = lambda u: str(u) if is_python2 else str(u, 'utf-8')
-    by = lambda v: bytes(v) if is_python2 else bytes(v, 'utf-8')
+    string_types = str
+    string_or_bytes_types = (str, bytes)
+    bytestring_types = (bytes, bytearray)
+    int_types = (int, float)
 
-    string_types = (str, unicode) if is_python2 else (str)
-    string_or_bytes_types = string_types if is_python2 else (str, bytes)
-    bytestring_types = bytearray if is_python2 else (bytes, bytearray)
-    int_types = (int, float, long) if is_python2 else (int, float)
+    st = lambda s: str(s, 'utf-8') if not isinstance(s, str) else s
+    by = lambda b: bytes(b, 'utf-8') if not isinstance(b, bytes) else b
 
     # Base switching
     code_strings = {
@@ -177,7 +172,6 @@ elif sys.version_info.major == 3:
             return lpad(string, get_code_string(frm)[0], minlen)
         return encode(decode(string, frm), to, minlen)
 
-
     def bin_to_b58check(inp, magicbyte=0):
         inp_fmtd = from_int_to_byte(int(magicbyte))+inp
         leadingzbytes = 0
@@ -187,22 +181,17 @@ elif sys.version_info.major == 3:
         checksum = bin_dbl_sha256(inp_fmtd)[:4]
         return '1' * leadingzbytes + changebase(inp_fmtd+checksum, 256, 58)
 
-    def bytes_to_hex_string(b):
-        if isinstance(b, str):
-            return b
-        return ''.join('{:02x}'.format(y) for y in b)
+    def safe_hexlify(a):
+        return st(binascii.hexlify(a))
 
-    def safe_from_hex(b):
-        return bytes.fromhex(b)
+    def safe_unhexlify(b):
+        # 'abcde' / b'abcd' => b'\xab\xcd'
+        return bytes.fromhex(b) if isinstance(b, str) else binascii.unhexlify(b)
 
-    safe_unhexlify = safe_from_hex
-
-    def from_int_representation_to_bytes(a):
+    def from_int_repr_to_bytes(a):
         return by(str(a))
 
     def from_int_to_le_bytes(i, length=1):
-        if length == 1:
-            return from_int_to_byte(i)
         return int.to_bytes(i, length=length, byteorder='little')
 
     def from_int_to_byte(a):
@@ -215,15 +204,12 @@ elif sys.version_info.major == 3:
         return int.from_bytes(bstr, 'little')
 
     def from_string_to_bytes(a):
-        return a if isinstance(a, bytes) else by(a)
+        return by(a)
 
-    def from_bytestring_to_string(a):
-        return a if isinstance(a, string_types) else st(a)
+    def from_bytes_to_string(a):
+        return st(a)
 
-    from_bytes_to_string = from_bytestring_to_string
-
-    def safe_hexlify(a):
-        return st(binascii.hexlify(a))
+    from_bytestring_to_string = from_bytes_to_string
 
     def encode(val, base, minlen=0):
         base, minlen = int(base), int(minlen)
