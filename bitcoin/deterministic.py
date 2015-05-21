@@ -3,35 +3,34 @@ import hmac
 import hashlib
 from binascii import hexlify
 
+# TODO: detect Elec 1, 2 & BIP39
 
 # Electrum wallets
-# Takes Electrum v2.0 13 word mnemonic string and returns seed. Only works on English for now
 def bin_electrum_extract_seed(phrase, password=''):
     if isinstance(phrase, string_types):
         try:
             mnemonic = ' '.join(phrase.lower().strip().split())
         except Exception as e:
-                raise Exception(str(e))
-    else:
-        raise TypeError
+            raise Exception(str(e))
+    else:   raise TypeError
     mnemonic = from_string_to_bytes(phrase)
-    pwd = from_string_to_bytes("electrum"
-                               "{}".format(from_string_to_bytes(password)))
-    rootseed = pbkdf2_hmac_sha512(key=mnemonic, msg=pwd)
+    pwd = from_string_to_bytes("electrum{}".format(password))
+    rootseed = safe_unhexlify( pbkdf2_hmac_sha512(mnemonic, pwd) )
     assert len(rootseed) == 64
     return rootseed
 
 def electrum_extract_seed(phrase, password=''):
-    return safe_hexlify(bin_electrum_extract_seed(phrase, password=''))
+    return safe_hexlify(bin_electrum_extract_seed(phrase, password))
 
 def electrum_mprvk(mnemonic, password=''):
-    return bip32_master_key(bin_electrum_extract_seed(mnemonic, password=''))
+    return bip32_master_key(bin_electrum_extract_seed(mnemonic, password))
 
 def electrum_stretch(seed):
     return slowsha(seed)
 
 # Accepts seed or stretched seed, returns master public key
 def electrum_mpubk(seed):
+    # TODO: add electrum_seed function to return mpk for both Elec1/2
     if len(seed) == 32:
         seed = electrum_stretch(seed)
     return privkey_to_pubkey(seed)[2:]
