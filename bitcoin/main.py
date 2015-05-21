@@ -385,12 +385,24 @@ def hash_to_int(x):
 
 
 def num_to_var_int(x):
+    # TODO: use num_to_op_push lambda below
     x = int(x)
-    if x < 253: return from_int_to_byte(x)
-    elif x < 65536: return from_int_to_byte(253)+encode(x, 256, 2)[::-1]
-    elif x < 4294967296: return from_int_to_byte(254) + encode(x, 256, 4)[::-1]
-    else: return from_int_to_byte(255) + encode(x, 256, 8)[::-1]
+    pcfx = lambda pc, i, ln: from_int_to_byte(pc) + from_int_to_le_bytes(i, ln)
+    if x < 253:     return pcfx(0, x, 1)[1:]
+    elif x < 2**16: return pcfx(253, x, 2)
+    elif x < 2**32: return pcfx(254, x, 4)
+    elif x < 2**64: return pcfx(255, x, 8)
+    else: raise ValueError(x < 2**64)
 
+def num_to_op_push(x):
+    # TODO: check x < 0xff is right, or is it x <= 0xff ?
+    x = int(x)
+    pcfx = lambda pc, i, ln: from_int_to_byte(pc) + from_int_to_le_bytes(i, ln)
+    if x < 76:              return pcfx(0, x, 1)[1:]
+    elif x < 0xff:          return pcfx(76, x, 1)
+    elif x < 0xffff:        return pcfx(77, x, 2)
+    elif x < 0xffffffff:    return pcfx(78, x, 4)
+    else: raise ValueError("0xffffffff > value >= 0")
 
 # WTF, Electrum?
 def electrum_sig_hash(message):
