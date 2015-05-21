@@ -263,7 +263,7 @@ def blockr_fetchtx(txhash, network='btc'):
     if not re.match('^[0-9a-fA-F]*$', txhash):
         txhash = txhash.encode('hex')
     jsondata = json.loads(make_request(blockr_url+txhash))
-    return jsondata['data']['tx']['hex']
+    return st(jsondata['data']['tx']['hex'])    # TODO: added st() to repair unicode return hex strings for python 2
 
 
 def helloblock_fetchtx(txhash, network='btc'):
@@ -365,9 +365,9 @@ def get_block_height(txhash):
     return j['block_height']
 
 
-def get_block_coinbase(inp):
-    j = _get_block(inp=inp)
+def get_block_coinbase(txval):
+    j = _get_block(inp=txval)
     cb = binascii.unhexlify( st(j['tx'][0]['inputs'][0]['script']))
-    alpha = ''.join(map(chr, list(range(32, 126))))
-    cbtext = ''.join(map(chr, filter(lambda x: chr(x) in alpha, bytearray(cb))))
+    alpha = ''.join(list(map(chr, list(range(32, 126)))))
+    cbtext = ''.join(list(map(chr, filter(lambda x: chr(x) in alpha, bytearray(cb)))))
     return cbtext if not '' else None
