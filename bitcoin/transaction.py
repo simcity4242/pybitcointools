@@ -2,7 +2,7 @@
 import binascii, re, json, copy, sys
 from bitcoin.main import *
 from _functools import reduce
-from btc.pyspecials import safe_hexlify, from_string_to_bytes, from_int_to_byte, from_string_to_bytes
+from bitcoin.pyspecials import safe_hexlify, from_string_to_bytes, from_int_to_byte, from_string_to_bytes
 
 
 ### Hex to bin converter and vice versa for objects
@@ -475,28 +475,19 @@ def mksend(*args):
 
     return mktx(ins, outputs2)
 
-def mk_opreturn(msg, rawtx=None, json=0):
-    def op_push(data):
-        import struct
-        if len(data) < 0x4c:
-            return from_int_to_byte(len(data)) + from_string_to_bytes(data)
-        elif len(data) < 0xff:
-            return from_int_to_byte(76) + struct.pack('<B', len(data)) + from_string_to_bytes(data)
-        elif len(data) < 0xffff:
-            return from_int_to_byte(77) + struct.pack('<H', len(data)) + from_string_to_bytes(data)
-        elif len(data) < 0xffffffff:
-            return from_int_to_byte(78) + struct.pack('<I', len(data)) + from_string_to_bytes(data)
-        else: raise Exception("Input data error. Rawtx must be hex chars 0xffffffff > len(data) > 0")
-
-    orhex = safe_hexlify(b'\x6a' + op_push(msg))
+# returns
+def mk_opreturn(msg='', rawtx=None, jsonfmt=0):
+    # TODO: add *args for json format or separate function?
+    mlen = len(msg)
+    orhex = safe_hexlify(b'\x6a' + num_to_op_push(mlen) + msg)
     orjson = {'script' : orhex, 'value' : 0}
     if rawtx is not None:
-        try:
+        try:    # TODO: accept json TxObjs
             txo = deserialize(rawtx)
-            if not 'outs' in txo.keys(): raise Exception("OP_Return cannot be the sole output!")
+            if 'outs' not in txo: raise Exception("OP_Return cannot be the sole output!")
             txo['outs'].append(orjson)
             newrawtx = serialize(txo)
             return newrawtx
         except:
             raise Exception("Raw Tx Error!")
-    return orhex if not json else orjson
+    return orhex if not jsonfmt else orjson
