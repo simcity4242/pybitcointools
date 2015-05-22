@@ -2,31 +2,42 @@ from bitcoin.main import *
 import hmac
 import hashlib
 from binascii import hexlify
+from bitcoin.pyspecials import *
+from bitcoin.mnemonic import prepare_elec2_seed, is_elec1_seed, is_elec2_seed
 
 # TODO: detect Elec 1, 2 & BIP39
 
 # Electrum wallets
-def bin_electrum_extract_seed(phrase, password=''):
-    if isinstance(phrase, string_types):
-        try:
-            mnemonic = ' '.join(phrase.lower().strip().split())
-        except Exception as e:
-            raise Exception(str(e))
-    else:   raise TypeError
-    mnemonic = from_string_to_bytes(phrase)
-    pwd = from_string_to_bytes("electrum{}".format(password))
-    rootseed = safe_unhexlify( pbkdf2_hmac_sha512(mnemonic, pwd) )
+def bin_electrum_extract_seed(mn_seed, password=''):
+    if isinstance((mn_seed,password), string_types):
+        mn_seed = prepare_elec2_seed(mn_seed)
+    elif isinstance(mn_seed, list):
+        mn_seed = prepare_elec2_seed(' '.join(mn_seed.lower().strip().split()))
+    else:
+        raise Exception("mnemonic string req")
+
+    mn_seed = from_string_to_bytes(mn_seed)
+    password = from_string_to_bytes("electrum{}".format(password))
+    rootseed = bin_pbkdf2(mn_seed, password)
     assert len(rootseed) == 64
     return rootseed
 
-def electrum_extract_seed(phrase, password=''):
-    return safe_hexlify(bin_electrum_extract_seed(phrase, password))
+def electrum_extract_seed(mn_seed, password=''):
+    return safe_hexlify(bin_electrum_extract_seed(mn_seed, password))
 
 def electrum_mprvk(mnemonic, password=''):
     return bip32_master_key(bin_electrum_extract_seed(mnemonic, password))
 
 def electrum_stretch(seed):
-    return slowsha(seed)
+    if isinstance(seed, string_types) and re.match('^[0-9a-fA-F]*$', seed):
+        seed = from_string_to_bytes(seed)
+    if is_elec1_seed(seed):
+        return slowsha(seed)
+    elif is_elec2_seed(seed):
+        return electrum_extract_seed(seed)
+    else:
+        return seed
+    
 
 # Accepts seed or stretched seed, returns master public key
 def electrum_mpubk(seed):
