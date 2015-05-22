@@ -1,6 +1,8 @@
 #!/usr/bin/python
 from bitcoin.main import *
 from bitcoin.pyspecials import *
+import string, unicodedata, random
+from math import ceil, log
 
 # get wordlists
 
@@ -165,3 +167,50 @@ def electrum1_mnemonic_encode(hexvalue):
 
 electrum1_mn_decode = electrum1_mnemonic_decode
 electrum1_mn_encode = electrum1_mnemonic_encode
+
+def electrum2_seed(bits=128, prefix='01', custent=1):
+    # TODO: https://github.com/spesmilo/electrum/blob/feature/newsync/lib/bitcoin.py#L155
+    n = int(ceil(log(int(custent), 2)))
+    k = len(prefix)*4
+    np = max(16, k+bits-n)
+    myent = random.randrange( pow(2, np) )  # TODO: note it should be ecdsa.util.randrange
+    nonce = 0
+    while True:
+        nonce+=1
+        i = custent * (myent + nonce)
+        mn_seed = electrum2_mnemonic_encode(i)
+        assert i == electrum2_mnemonic_decode(mn_seed)
+        break
+    return mn_seed
+
+def electrum2_mnemonic_encode(i):
+    try: ELEC2WORDS = open_wordlist('bip39')
+    except: ELEC2WORDS = download_wordlist('bip39')
+    assert len(ELEC2WORDS) == 2048
+
+    mn_words, n = [], len(ELEC2WORDS)
+    while i:
+        x = i%n
+        i = i//n
+        mn_words.append(ELEC2WORDS[x])
+    return ' '.join(mn_words)
+
+def electrum2_mnemonic_decode(mn_seed):
+    try: ELEC2WORDS = open_wordlist('bip39')
+    except: ELEC2WORDS = download_wordlist('bip39')
+    assert len(ELEC2WORDS) == 2048
+
+    mn_words = mn_seed.split()
+    i, n = 0, len(ELEC2WORDS)
+    while mn_words:
+        w = mn_words.pop()
+        k = ELEC2WORDS.index(w)
+        i = i*n + k
+    return i
+
+def electrum2_check_seed(mn_seed, custent):
+    i = electrum2_mnemonic_decode(mn_seed)
+    return i % custent == 0
+
+electrum2_mn_decode = electrum2_mnemonic_decode
+electrum2_mn_encode = electrum2_mnemonic_encode
