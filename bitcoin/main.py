@@ -538,7 +538,7 @@ def ecdsa_recover(msg, sig):
 
 # PBKDF2: a simple implementation using stock python modules.
 # Modifications based on https://matt.ucc.asn.au/src/pbkdf2.py
-def bin_pbkdf2(password, salt, iters, keylen, digestmod):
+def bin_pbkdf2(password, salt, iters=2048, keylen=64, digestmod=hashlib.sha512):
     h = hmac.new(password, digestmod=digestmod)
     def prf(data):
         hm = h.copy()
@@ -565,3 +565,4 @@ def pbkdf2_hmac_sha512(password, salt=None):
         b = bin_pbkdf2(password, salt, 2048, 64, hashlib.sha512)
     return safe_hexlify(b)
 
+hmac_sha_512 = lambda x, y: hmac.new(x, y, hashlib.sha512)
