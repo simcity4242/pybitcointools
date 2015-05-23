@@ -28,29 +28,29 @@ def electrum_extract_seed(mn_seed, password=''):
 def electrum_mprvk(mnemonic, password=''):
     return bip32_master_key(bin_electrum_extract_seed(mnemonic, password))
 
-def electrum_stretch(seed):
+def electrum_keystretch(seed, password=None):
     if isinstance(seed, string_types) and re.match('^[0-9a-fA-F]*$', seed):
         seed = from_string_to_bytes(seed)
     if is_elec1_seed(seed):
         return slowsha(seed)
     elif is_elec2_seed(seed):
-        return electrum_extract_seed(seed)
+        password = from_string_to_bytes(password)
+        return electrum_extract_seed(seed, password)
     else:
         return seed
-    
 
 # Accepts seed or stretched seed, returns master public key
 def electrum_mpubk(seed):
     # TODO: add electrum_seed function to return mpk for both Elec1/2
-    if len(seed) == 32:
-        seed = electrum_stretch(seed)
+    if len(seed) == 32 and not is_elec2_seed(seed):
+        seed = electrum_keystretch(seed)
     return privkey_to_pubkey(seed)[2:]
 
 # Accepts (seed or stretched seed), index and secondary index
 # (conventionally 0 for ordinary addresses, 1 for change) , returns privkey
 def electrum_privkey(seed, n, for_change=0):
     if len(seed) == 32:
-        seed = electrum_stretch(seed)
+        seed = electrum_keystretch(seed)
     mpk = electrum_mpubk(seed)
     offset = bin_dbl_sha256(from_string_to_bytes("{}:{}:{}".format(n, for_change, binascii.unhexlify(mpk))))
     return add_privkeys(seed, offset)
@@ -59,7 +59,7 @@ def electrum_privkey(seed, n, for_change=0):
 # (conventionally 0 for ordinary addresses, 1 for change) , returns pubkey
 def electrum_pubkey(masterkey, n, for_change=0):
     if len(masterkey) == 32:
-        mpk = electrum_mpubk(electrum_stretch(masterkey))
+        mpk = electrum_mpubk(electrum_keystretch(masterkey))
     elif len(masterkey) == 64:
         mpk = electrum_mpubk(masterkey)
     else:
@@ -81,12 +81,9 @@ def crack_electrum_wallet(mpk, pk, n, for_change=0):
     return subtract_privkeys(pk, offset)
 
 # Below code ASSUMES binary inputs and compressed pubkeys
-MAINNET_PRIVATE = b'\x04\x88\xAD\xE4'
-MAINNET_PUBLIC = b'\x04\x88\xB2\x1E'
-TESTNET_PRIVATE = b'\x04\x35\x83\x94'
-TESTNET_PUBLIC = b'\x04\x35\x87\xCF'
-PRIVATE = [MAINNET_PRIVATE, TESTNET_PRIVATE]
-PUBLIC = [MAINNET_PUBLIC, TESTNET_PUBLIC]
+MAINNET_PRIVATE, MAINNET_PUBLIC = b'\x04\x88\xAD\xE4', b'\x04\x88\xB2\x1E'
+TESTNET_PRIVATE, TESTNET_PUBLIC = b'\x04\x35\x83\x94', b'\x04\x35\x87\xCF'
+PRIVATE, PUBLIC = [MAINNET_PRIVATE, TESTNET_PRIVATE], [MAINNET_PUBLIC, TESTNET_PUBLIC]
 
 # BIP32 child key derivation
 def raw_bip32_ckd(rawtuple, i):
@@ -102,12 +99,12 @@ def raw_bip32_ckd(rawtuple, i):
     if i >= 2**31:
         if vbytes in PUBLIC:
             raise Exception("Can't do private derivation on public key!")
-        I = hmac.new(chaincode, b'\x00'+priv[:32]+encode(i, 256, 4), hashlib.sha512).digest()
+        I = hmac_sha_512(chaincode, b'\x00'+priv[:32]+encode(i, 256, 4)).digest()
     else:
-        I = hmac.new(chaincode, pub+encode(i, 256, 4), hashlib.sha512).digest()
+        I = hmac_sha_512(chaincode, pub+encode(i, 256, 4)).digest()
 
     if vbytes in PRIVATE:
-        newkey = add_privkeys(I[:32]+B'\x01', priv)
+        newkey = add_privkeys(I[:32] + b'\x01', priv)
         fingerprint = bin_hash160(privtopub(key))[:4]
     if vbytes in PUBLIC:
         newkey = add_pubkeys(compress(privtopub(I[:32])), key)
@@ -153,7 +150,7 @@ def bip32_ckd(data, i):
 
 
 def bip32_master_key(seed, vbytes=MAINNET_PRIVATE):
-    I = hmac.new(from_string_to_bytes("Bitcoin seed"), seed, hashlib.sha512).digest()
+    I = hmac_sha_512(from_string_to_bytes("Bitcoin seed"), seed).digest()
     return bip32_serialize((vbytes, 0, b'\x00'*4, 0, I[32:], I[:32]+b'\x01'))
 
 
@@ -175,7 +172,7 @@ def raw_crack_bip32_privkey(parent_pub, priv):
     if i >= 2**31:
         raise Exception("Can't crack private derivation!")
 
-    I = hmac.new(pchaincode, pkey+encode(i, 256, 4), hashlib.sha512).digest()
+    I = hmac_sha_512(pchaincode, pkey+encode(i, 256, 4)).digest()
 
     pprivkey = subtract_privkeys(key, I[:32]+b'\x01')
 
