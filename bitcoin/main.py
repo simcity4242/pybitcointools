@@ -469,18 +469,18 @@ def decode_sig(sig):
     return from_byte_to_int(bytez[0]), decode(bytez[1:33], 256), decode(bytez[33:], 256)
 
 # https://tools.ietf.org/html/rfc6979#section-3.2
-
+hmac_sha_256 = lambda k, s: hmac.new(k, s, hashlib.sha256)
 
 def deterministic_generate_k(msghash, priv):
     v = b'\x01' * 32
     k = b'\x00' * 32
     priv = encode_privkey(priv, 'bin')
     msghash = encode(hash_to_int(msghash), 256, 32)
-    k = hmac.new(k, v+b'\x00'+priv+msghash, hashlib.sha256).digest()
-    v = hmac.new(k, v, hashlib.sha256).digest()
-    k = hmac.new(k, v+b'\x01'+priv+msghash, hashlib.sha256).digest()
-    v = hmac.new(k, v, hashlib.sha256).digest()
-    return decode(hmac.new(k, v, hashlib.sha256).digest(), 256)
+    k = hmac_sha_256(k, v + b'\x00' + priv + msghash).digest()
+    v = hmac_sha_256(k, v).digest()
+    k = hmac_sha_256(k, v + b'\x01' + priv + msghash).digest()
+    v = hmac_sha_256(k, v).digest()
+    return decode(hmac_sha_256(k, v).digest(), 256)
 
 
 def ecdsa_raw_sign(msghash, priv):
@@ -565,4 +565,4 @@ def pbkdf2_hmac_sha512(password, salt=None):
         b = bin_pbkdf2(password, salt, 2048, 64, hashlib.sha512)
     return safe_hexlify(b)
 
-hmac_sha_512 = lambda x, y: hmac.new(x, y, hashlib.sha512)
+hmac_sha_512 = lambda k, s: hmac.new(k, s, hashlib.sha512)
