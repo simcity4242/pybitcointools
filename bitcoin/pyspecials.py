@@ -27,7 +27,6 @@ if is_python2:
         16: '0123456789abcdef',
         32: 'abcdefghijklmnopqrstuvwxyz234567',
         58: '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz',
-        #128: ''.join([chr(x) for x in range(128)]),
         256: ''.join([chr(x) for x in range(256)])
     }
 
