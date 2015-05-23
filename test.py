@@ -532,3 +532,17 @@ class TestConversions(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+# def bip39_mn_to_hex(mnemonic, saltpass=''):
+#     """
+#     >>>bip39_mn_to_hex("board flee heavy tunnel powder denial science ski answer betray cargo cat")
+#     '18ab19a9f54a9274f03e5209a2ac8a91'
+#     """
+
+# def bip39_hex_to_mn(hexstr):
+#     """
+#     >>> bip39_hex_to_mn('eaebabb2383351fd31d703840b32e9e2')
+#     'turtle front uncle idea crush write shrug there lottery flower risk shell'
+#     """
+
