@@ -9,7 +9,7 @@ from bitcoin.mnemonic import prepare_elec2_seed, is_elec1_seed, is_elec2_seed
 
 # Electrum wallets
 def bin_electrum_extract_seed(mn_seed, password=''):
-    if isinstance((mn_seed,password), string_types):
+    if isinstance(mn_seed, string_types):
         mn_seed = prepare_elec2_seed(mn_seed)
     elif isinstance(mn_seed, list):
         mn_seed = prepare_elec2_seed(' '.join(mn_seed.lower().strip().split()))
@@ -31,13 +31,11 @@ def electrum_mprvk(mnemonic, password=''):
 def electrum_keystretch(seed, password=None):
     if isinstance(seed, string_types) and re.match('^[0-9a-fA-F]*$', seed):
         seed = from_string_to_bytes(seed)
-    if is_elec1_seed(seed):
-        return slowsha(seed)
-    elif is_elec2_seed(seed):
-        password = from_string_to_bytes(password)
+        if is_elec1_seed(seed):
+            return slowsha(seed)
+    if is_elec2_seed(seed):
         return electrum_extract_seed(seed, password)
-    else:
-        return seed
+    return seed
 
 # Accepts seed or stretched seed, returns master public key
 def electrum_mpubk(seed):
