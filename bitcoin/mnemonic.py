@@ -64,7 +64,7 @@ def bip39_check(mnemonic):
     assert len(mn_array) in range(3, 124, 3)
     assert all(map(lambda x: x in BIP39LIST, mn_array)) # check all words are in list
 
-    binstr = ''.join([ changebase(BIP39LIST.index(x), 10, 2, 11) for x in mn_array])
+    binstr = ''.join([ changebase(str(BIP39LIST.index(x)), 10, 2, 11) for x in mn_array])
     L = len(binstr)
     bd = binstr[:L // 33 * 32]
     cs = binstr[-L // 33:]
