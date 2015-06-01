@@ -4,7 +4,7 @@ from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, from_string_to_byte
 import string, unicodedata, random, hmac, re
 
 
-def get_wordlists():
+def _get_wordlists():
     # Try to access local lists, otherwise download text lists
     # Return tuple of wordlists: (ELECTRUM, BIP39)
     try:
@@ -22,7 +22,7 @@ def get_wordlists():
     return (ELEC, BIP39)
 
 global ELECWORDS, BIP39LIST
-ELECWORDS, BIP39LIST = get_wordlists()
+ELECWORDS, BIP39LIST = _get_wordlists()
 
 def bip39_hex_to_mn(hexstr):
     if isinstance(hexstr, string_or_bytes_types) and re.match('^[0-9a-fA-F]*$', hexstr):
@@ -123,9 +123,6 @@ def elec1_mn_encode(hexstr):
         out += [ words[w1], words[w2], words[w3] ]
     return ' '.join(out)
 
-electrum1_mn_decode = elec1_mn_decode
-electrum1_mn_encode = elec1_mn_encode
-
 def elec2_seed(num_bits=128, prefix='01', custom_entropy=1):
     # TODO: https://github.com/spesmilo/electrum/blob/feature/newsync/lib/bitcoin.py#L155
     import random, math
@@ -158,7 +155,7 @@ def elec2_mn_encode(i):
 def elec2_mn_decode(mn_seed):
     words = mn_seed.split()
     wordlist = BIP39LIST
-    n = 2048
+    n = len(BIP39LIST) # 2048
     i = 0
     while words:
         w = words.pop()
