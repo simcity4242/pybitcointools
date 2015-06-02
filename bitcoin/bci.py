@@ -371,4 +371,4 @@ def get_block_coinbase(txval):
     cb = safe_unhexlify(st(j['tx'][0]['inputs'][0]['script']))
     alpha = ''.join(list(map(chr, list(range(32, 126)))))
     cbtext = ''.join(list(map(chr, filter(lambda x: chr(x) in alpha, bytearray(cb)))))
-    return cbtext if not '' else None
+    return cbtext
