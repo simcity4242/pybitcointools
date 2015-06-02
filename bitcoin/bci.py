@@ -366,7 +366,7 @@ def get_block_height(txhash):
 
 
 def get_block_coinbase(txval):
-    # TODO: use translation table for coinbase fields
+    # TODO: use translation table for coinbase fields 
     j = _get_block(inp=txval)
     cb = safe_unhexlify(st(j['tx'][0]['inputs'][0]['script']))
     alpha = ''.join(list(map(chr, list(range(32, 126)))))
