@@ -88,12 +88,12 @@ if is_python2:
         return ord(a)
 
     def from_le_bytes_to_int(bstr):
-        lx = lambda x, v: struct.unpack('<'+x, bstr)
+        lx = lambda x, v: struct.unpack('<'+x, bstr)[0]
         blen = len(bstr)
-        if blen == 1: return lx('B', bstr)[0]
-        elif blen == 2: return lx('H', bstr)[0]
-        elif blen == 4: return lx('I', bstr)[0]
-        elif blen == 8: return lx('L', bstr)[0]
+        if blen == 1:   return lx('B', bstr)
+        elif blen == 2: return lx('H', bstr)
+        elif blen == 4: return lx('I', bstr)
+        elif blen == 8: return lx('L', bstr)
         else: raise Exception("Bad byte-string input")
 
     def from_string_to_bytes(a):
@@ -103,7 +103,13 @@ if is_python2:
         return st(a)
 
     from_bytestring_to_string = from_bytes_to_string
-        
+    
+    def short_hex(hexstr):
+        if not re.match('^[0-9a-fA-F]*$', hexstr):
+            return hexstr
+        t = by(hexstr)
+        return t[0:4]+"..."+t[-4:] if len(t)>=11 else t
+	
     def encode(val, base, minlen=0):
         base, minlen = int(base), int(minlen)
         code_string = get_code_string(base)
@@ -133,6 +139,7 @@ if is_python2:
 elif sys.version_info.major == 3:
     #is_python2 = bytes == str
 
+    xrange = range
     string_types = str
     string_or_bytes_types = (str, bytes)
     bytestring_types = (bytes, bytearray)
@@ -212,6 +219,12 @@ elif sys.version_info.major == 3:
 
     from_bytestring_to_string = from_bytes_to_string
 
+    def short_hex(hexstr):
+        if len(hexstr) < 11 or not re.match('^[0-9a-fA-F]*$', hexstr):
+            return hexstr
+        t = by(hexstr)
+        return t[0:4]+"..."+t[-4:]
+	
     def encode(val, base, minlen=0):
         base, minlen = int(base), int(minlen)
         code_string = get_code_string(base)
