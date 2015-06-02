@@ -79,6 +79,18 @@ if is_python2:
             return lx('L', i)
         else: raise Exception("bad length or int value")
 
+    # def from_int_to_bytes(v, length=1, byteorder='little'):
+    #     blen = len(encode(int(v), 256))
+    #     length = length if (blen <= length) else blen
+    #     l = bytearray()
+    #     for i in range(length):
+    #         mod = v & 255
+    #         v >>= 8
+    #         l.append(mod)
+    #     if byteorder == 'big':
+    #         l.reverse()
+    #     return bytes(l)
+
     def from_int_to_byte(a):
         # return bytes([a])
         return chr(a)
@@ -95,6 +107,18 @@ if is_python2:
         elif blen == 4: return lx('I', bstr)
         elif blen == 8: return lx('L', bstr)
         else: raise Exception("Bad byte-string input")
+
+    # def from_bytes_to_int(bytes, byteorder='big', signed=False):
+    #     if byteorder != 'big':
+    #         bytes = reversed(bytes)
+    #     v = 0
+    #     bytes_to_ints = (lambda x: [ord(c) for c in x]) if bytes == str else lambda x: x
+    #     for c in bytes_to_ints(bytes):
+    #         v <<= 8
+    #         v += c
+    #     if signed and bytes[0] & 0x80:
+    #         v = v - (1 << (8*len(bytes)))
+    #     return v
 
     def from_string_to_bytes(a):
         return by(a)
@@ -271,5 +295,4 @@ elif sys.version_info.major == 3:
         return str(os.urandom(x))
 
 else:
-    from bitcoin.py2specials import *
-    from bitcoin.py3specials import *
+    raise IOError("pyspecials import error!")
