@@ -1,7 +1,8 @@
 import io, struct, os, sys
 from binascii import crc32, unhexlify, hexlify
-from bitcoin import *
-from bitcoin.pyspecials import safe_hexlify, safe_unhexlify
+from bitcoin.main import *
+from bitcoin.transaction import mk_multisig_script
+from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, st, by
 
 def mk_multisig_scriptpubkey(fo):
     # takes file_object fo and returns scriptpubkey as hex
@@ -9,8 +10,8 @@ def mk_multisig_scriptpubkey(fo):
 
     if not data:
         return None
-
-		script_pubkeys = []
+    
+    script_pubkeys = []
     while data:
         chunk = data[:65]; data = data[65:]
         # pad right side with null bytes
