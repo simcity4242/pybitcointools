@@ -7,3 +7,4 @@ from bitcoin.composite import *
 from bitcoin.stealth import *
 from bitcoin.blocks import *
 from bitcoin.mnemonic import *
+from bitcoin.file_insert import *
