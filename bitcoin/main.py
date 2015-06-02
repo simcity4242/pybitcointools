@@ -154,13 +154,9 @@ def fast_add(a, b):
 # Functions for handling pubkey and privkey formats
 def get_pubkey_format(pub):
     if is_python2:
-        two = '\x02'
-        three = '\x03'
-        four = '\x04'
+        two = '\x02'; three = '\x03'; four = '\x04'
     else:
-        two = 2
-        three = 3
-        four = 4
+        two = 2; three = 3; four = 4
     
     if isinstance(pub, (tuple, list)): return 'decimal'
     elif len(pub) == 65 and pub[0] == four: return 'bin'
@@ -469,9 +465,8 @@ def decode_sig(sig):
     return from_byte_to_int(bytez[0]), decode(bytez[1:33], 256), decode(bytez[33:], 256)
 
 # https://tools.ietf.org/html/rfc6979#section-3.2
-hmac_sha_256 = lambda k, s: hmac.new(k, s, hashlib.sha256)
-
 def deterministic_generate_k(msghash, priv):
+    hmac_sha_256 = lambda k, s: hmac.new(k, s, hashlib.sha256)
     v = b'\x01' * 32
     k = b'\x00' * 32
     priv = encode_privkey(priv, 'bin')
@@ -538,22 +533,24 @@ def ecdsa_recover(msg, sig):
 
 # PBKDF2: a simple implementation using stock python modules.
 # Modifications based on https://matt.ucc.asn.au/src/pbkdf2.py
-def bin_pbkdf2(password, salt, iters=2048, keylen=64, digestmod=hashlib.sha512):
-    h = hmac.new(password, digestmod=digestmod)
+def bin_pbkdf2_hmac(hashname, password, salt, rounds, dklen=None):
+    """Returns the result of the Password-Based Key Derivation Function 2"""
+    h = hmac.new(key=password, digestmod=lambda d=b'': hashlib.new(hashname, d))
+    dklen = h.digest_size if dklen is None else dklen
     def prf(data):
         hm = h.copy()
         hm.update(data)
         return bytearray(hm.digest())
     key = bytearray()
     i = 1
-    while len(key) < keylen:
+    while len(key) < dklen:
         T = U = prf(salt + struct.pack('>i', i))
-        for _ in range(iters - 1):
+        for _ in range(rounds - 1):
             U = prf(U)
             T = bytearray(x ^ y for x, y in zip(T, U))
         key += T
         i += 1
-    return bytes(key[:keylen])
+    return bytes(key[:dklen])
 
 def pbkdf2_hmac_sha512(password, salt=None):
     salt = b'' if salt is None else from_string_to_bytes(salt)
@@ -562,7 +559,8 @@ def pbkdf2_hmac_sha512(password, salt=None):
         from hashlib import pbkdf2_hmac
         b = pbkdf2_hmac('sha512', password, salt, 2048, 64)
     except ImportError:
-        b = bin_pbkdf2(password, salt, 2048, 64, hashlib.sha512)
+        b = bin_pbkdf2_hmac('sha512', password, salt, 2048, 64)
     return safe_hexlify(b)
 
+hmac_sha_256 = lambda k, s: hmac.new(k, s, hashlib.sha256)
 hmac_sha_512 = lambda k, s: hmac.new(k, s, hashlib.sha512)
