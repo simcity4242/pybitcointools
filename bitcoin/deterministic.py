@@ -2,23 +2,23 @@ from bitcoin.main import *
 import hmac
 import hashlib
 from binascii import hexlify
-from bitcoin.pyspecials import *
+from bitcoin.pyspecials import st, by, string_types, from_string_to_bytes, from_bytes_to_string, safe_hexlify, safe_unhexlify
 from bitcoin.mnemonic import prepare_elec2_seed, is_elec1_seed, is_elec2_seed
 
 # TODO: detect Elec 1, 2 & BIP39
 
 # Electrum wallets
 def bin_electrum_extract_seed(mn_seed, password=''):
+    assert len(mn_seed) == 1
     if isinstance(mn_seed, string_types):
         mn_seed = prepare_elec2_seed(mn_seed)
     elif isinstance(mn_seed, list):
-        mn_seed = prepare_elec2_seed(' '.join(mn_seed.lower().strip().split()))
-    else:
-        raise Exception("mnemonic string req")
+        mn_seed = prepare_elec2_seed(' '.join(mn_seed).lower().strip())
+    else: raise Exception("mnemonic string req")
 
     mn_seed = from_string_to_bytes(mn_seed)
     password = from_string_to_bytes("electrum{}".format(password))
-    rootseed = bin_pbkdf2(mn_seed, password)
+    rootseed = safe_unhexlify(pbkdf2_hmac_sha512(mn_seed, password))
     assert len(rootseed) == 64
     return rootseed
 
@@ -31,11 +31,13 @@ def electrum_mprvk(mnemonic, password=''):
 def electrum_keystretch(seed, password=None):
     if isinstance(seed, string_types) and re.match('^[0-9a-fA-F]*$', seed):
         seed = from_string_to_bytes(seed)
-        if is_elec1_seed(seed):
-            return slowsha(seed)
-    if is_elec2_seed(seed):
+    if is_elec1_seed(seed):
+        return slowsha(seed)
+    elif is_elec2_seed(seed):
+        password = from_string_to_bytes(password)
         return electrum_extract_seed(seed, password)
-    return seed
+    else:
+        return seed
 
 # Accepts seed or stretched seed, returns master public key
 def electrum_mpubk(seed):
@@ -167,8 +169,7 @@ def raw_crack_bip32_privkey(parent_pub, priv):
     pvbytes, pdepth, pfingerprint, pi, pchaincode, pkey = parent_pub
     i = int(i)
 
-    if i >= 2**31:
-        raise Exception("Can't crack private derivation!")
+    if i >= 2**31: raise Exception("Can't crack private derivation!")
 
     I = hmac_sha_512(pchaincode, pkey+encode(i, 256, 4)).digest()
 
@@ -203,10 +204,30 @@ def coinvault_priv_to_bip32(*args):
 
 
 def bip32_descend(*args):
+    # accepts
     if len(args) == 2 and isinstance(args[1], list):
         key, path = args
     else:
-        key, path = args[0], map(int, args[1:])
+        key, path = args[0], parse_bip32_path(args[1:])
     for p in path:
         key = bip32_ckd(key, p)
     return bip32_extract_key(key)
+
+def parse_bip32_path(*args):
+    """Takes bip32 path as string "m/0'/2H" or 0' """
+    if len(args)==1:
+        if isinstance(args[0], list):
+            return args[0]
+        path = st(args[0])
+    else:
+        path = '/'.join(map(st, args))
+
+    if path.startswith('m/'):
+        path = path[2:]
+    patharr = []
+    for v in path.split('/'):
+        if v[-1] in ("'H"):
+            v = int(v[:-1]) + 0x80000000
+        v = int(v)
+        patharr.append(v)
+    return patharr
