@@ -12,7 +12,6 @@ from bitcoin.ripemd import *
 
 
 #global is_python2
-#is_python2 = sys.version_info.major == 2
 is_python2 = str == bytes
 
 # Elliptic curve parameters (secp256k1)
@@ -151,6 +150,7 @@ def fast_multiply(a, n):
 def fast_add(a, b):
     return from_jacobian(jacobian_add(to_jacobian(a), to_jacobian(b)))
 
+# TODO: check pubkey Electrum
 # Functions for handling pubkey and privkey formats
 def get_pubkey_format(pub):
     if is_python2:
@@ -158,13 +158,13 @@ def get_pubkey_format(pub):
     else:
         two = 2; three = 3; four = 4
     
-    if isinstance(pub, (tuple, list)): return 'decimal'
-    elif len(pub) == 65 and pub[0] == four: return 'bin'
-    elif len(pub) == 130 and pub[0:2] == '04': return 'hex'
-    elif len(pub) == 33 and pub[0] in [two, three]: return 'bin_compressed'
-    elif len(pub) == 66 and pub[0:2] in ['02', '03']: return 'hex_compressed'
-    elif len(pub) == 64: return 'bin_electrum'
-    elif len(pub) == 128: return 'hex_electrum'
+    if isinstance(pub, (tuple, list)):                  return 'decimal'
+    elif len(pub) == 65 and pub[0] == four:             return 'bin'
+    elif len(pub) == 130 and pub[0:2] == '04':          return 'hex'
+    elif len(pub) == 33 and pub[0] in [two, three]:     return 'bin_compressed'
+    elif len(pub) == 66 and pub[0:2] in ['02', '03']:   return 'hex_compressed'
+    elif len(pub) == 64:                                return 'bin_electrum'
+    elif len(pub) == 128:                               return 'hex_electrum'
     else: raise Exception("Pubkey not in recognized format")
 
 
@@ -184,6 +184,7 @@ def encode_pubkey(pub, formt):
 
 
 def decode_pubkey(pub, formt=None):
+    """"""
     if not formt: formt = get_pubkey_format(pub)
     if formt == 'decimal': return pub
     elif formt == 'bin': return (decode(pub[1:33], 256), decode(pub[33:65], 256))
@@ -400,6 +401,24 @@ def num_to_op_push(x):
     elif x < 0xffffffff:    return pcfx(78, x, 4)
     else: raise ValueError("0xffffffff > value >= 0")
 
+def wrap_varint(hexdata):
+    if re.match('^[0-9a-fA-F]*$', hexdata):
+        hdata = safe_unhexlify(hexdata)
+        varint = num_to_var_int(len(hdata))
+        return safe_hexlify(varint) + hexdata
+    else:
+        varint = num_to_var_int(len(hexdata))
+        return varint + hexdata
+
+def wrap_script(hexdata):
+    if re.match('^[0-9a-fA-F]*$', hexdata):
+        hdata = safe_unhexlify(hexdata)
+        pushcode = num_to_op_push(len(hdata))
+        return safe_hexlify(pushcode) + hexdata
+    else:
+        pushcode = num_to_op_push(len(hexdata))
+        return pushcode + hexdata
+
 # WTF, Electrum?
 def electrum_sig_hash(message):
     padded = b"\x18Bitcoin Signed Message:\n" + num_to_var_int(len(message)) + from_string_to_bytes(message)
@@ -552,9 +571,8 @@ def bin_pbkdf2_hmac(hashname, password, salt, rounds, dklen=None):
         i += 1
     return bytes(key[:dklen])
 
-def pbkdf2_hmac_sha512(password, salt=None):
-    salt = b'' if salt is None else from_string_to_bytes(salt)
-    password = from_string_to_bytes(password)
+def pbkdf2_hmac_sha512(password, salt):
+    password, salt = map(from_string_to_bytes, (password, salt))
     try:
         from hashlib import pbkdf2_hmac
         b = pbkdf2_hmac('sha512', password, salt, 2048, 64)
