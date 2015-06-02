@@ -1,5 +1,5 @@
 #!/usr/bin/python
-from bitcoin.pyspecials import *
+from bitcoin.pyspecials import st, by, safe_hexlify, safe_unhexlify
 import json, re
 import random
 import sys
@@ -56,7 +56,7 @@ def bci_unspent(*args):
         try:
             jsonobj = json.loads(data)
             for o in jsonobj["unspent_outputs"]:
-                h = o['tx_hash'].decode('hex')[::-1].encode('hex')
+                h = safe_hexlify(safe_unhexlify(o['tx_hash'])[::-1])
                 u.append({
                     "output": h+':'+str(o['tx_output_n']),
                     "value": o['value']
@@ -128,6 +128,7 @@ def helloblock_unspent(*args):
 unspent_getters = {
     'bci': bci_unspent,
     'blockr': blockr_unspent,
+  # 'webbtc': webbtc_unspent,           #
     'helloblock': helloblock_unspent
 }
 
@@ -188,14 +189,12 @@ def history(*args):
 
 # Pushes a transaction to the network using https://blockchain.info/pushtx
 def bci_pushtx(tx):
-    if not re.match('^[0-9a-fA-F]*$', tx):
-        tx = tx.encode('hex')
+    if not re.match('^[0-9a-fA-F]*$', tx): tx = safe_hexlify(tx)
     return make_request('https://blockchain.info/pushtx', 'tx='+tx)
 
 
 def eligius_pushtx(tx):
-    if not re.match('^[0-9a-fA-F]*$', tx):
-        tx = tx.encode('hex')
+    if not re.match('^[0-9a-fA-F]*$', tx): tx = safe_hexlify(tx)
     s = make_request(
         'http://eligius.st/~wizkid057/newstats/pushtxn.php',
         'transaction='+tx+'&send=Push')
@@ -215,20 +214,20 @@ def blockr_pushtx(tx, network='btc'):
         raise Exception(
             'Unsupported network {0} for blockr_pushtx'.format(network))
 
-    if not re.match('^[0-9a-fA-F]*$', tx):
-        tx = tx.encode('hex')
+    if not re.match('^[0-9a-fA-F]*$', tx): tx = safe_hexlify(tx)
     return make_request(blockr_url, '{"hex":"%s"}' % tx)
 
 
 def helloblock_pushtx(tx):
     if not re.match('^[0-9a-fA-F]*$', tx):
-        tx = tx.encode('hex')
+        tx = safe_hexlify(tx)
     return make_request('https://mainnet.helloblock.io/v1/transactions',
                         'rawTxHex='+tx)
 
 pushtx_getters = {
     'bci': bci_pushtx,
     'blockr': blockr_pushtx,
+  # 'webbtc': webbtc_pushtx,        # POST to test.webbtc.com/relay_tx
     'helloblock': helloblock_pushtx
 }
 
@@ -247,7 +246,7 @@ def last_block_height():
 # Gets a specific transaction
 def bci_fetchtx(txhash):
     if not re.match('^[0-9a-fA-F]*$', txhash):
-        txhash = txhash.encode('hex')
+        txhash = safe_hexlify(txhash)
     data = make_request('https://blockchain.info/rawtx/'+txhash+'?format=hex')
     return data
 
@@ -261,14 +260,14 @@ def blockr_fetchtx(txhash, network='btc'):
         raise Exception(
             'Unsupported network {0} for blockr_fetchtx'.format(network))
     if not re.match('^[0-9a-fA-F]*$', txhash):
-        txhash = txhash.encode('hex')
+        txhash = safe_hexlify(txhash)
     jsondata = json.loads(make_request(blockr_url+txhash))
-    return st(jsondata['data']['tx']['hex'])    # TODO: added st() to repair unicode return hex strings for python 2
+    return st(jsondata['data']['tx']['hex'])    # added st() to repair unicode return hex strings for python 2
 
 
 def helloblock_fetchtx(txhash, network='btc'):
     if not re.match('^[0-9a-fA-F]*$', txhash):
-        txhash = txhash.encode('hex')
+        txhash = safe_hexlify(txhash)
     if network == 'testnet':
         url = 'https://testnet.helloblock.io/v1/transactions/'
     elif network == 'btc':
@@ -307,6 +306,7 @@ def helloblock_fetchtx(txhash, network='btc'):
 fetchtx_getters = {
     'bci': bci_fetchtx,
     'blockr': blockr_fetchtx,
+  # 'webbtc': webbtc_fetchtx,       #   http://test.webbtc.com/tx/txid.[hex,json, bin]
     'helloblock': helloblock_fetchtx
 }
 
@@ -366,8 +366,9 @@ def get_block_height(txhash):
 
 
 def get_block_coinbase(txval):
+    # TODO: use translation table for coinbase fields
     j = _get_block(inp=txval)
-    cb = binascii.unhexlify( st(j['tx'][0]['inputs'][0]['script']))
+    cb = safe_unhexlify(st(j['tx'][0]['inputs'][0]['script']))
     alpha = ''.join(list(map(chr, list(range(32, 126)))))
     cbtext = ''.join(list(map(chr, filter(lambda x: chr(x) in alpha, bytearray(cb)))))
     return cbtext if not '' else None
