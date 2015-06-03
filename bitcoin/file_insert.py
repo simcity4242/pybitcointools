@@ -1,7 +1,8 @@
 import io, struct, os, sys
 from binascii import crc32, unhexlify, hexlify
 from bitcoin.main import *
-from bitcoin.transaction import mk_multisig_script
+from bitcoin.bci import unspent, blockr_unspent, blockr_pushtx, blockr_fetchtx, eligius_pushtx, helloblock_unspent, bci_unspent
+from bitcoin.transaction import mk_multisig_script, select, multiaccess, access, sum, mktx, mksend, mk_pubkey_script, sign, multisign
 from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, st, by
 
 def mk_multisig_scriptpubkey(fo):
@@ -50,6 +51,19 @@ def file_insert(filename, value=None, jsonfmt=1):
     if jsonfmt:
         return list(TXOUTS)
     return wrap_varint(TXOUTS)
+
+def encode_file(filename, privkey, value=None, input_address=None, network=None):
+    network = 'testnet' if network is None else network
+    if input_address is not None:
+        u = blockr_unspent(input_address, 'testnet')
+    if not value: value = 547
+    OUTS = file_insert(filename, value)
+    TXFEE = int(1.1 * (10000*os.path.getsize(filename)/1000))
+    TOTALFEE = TXFEE + int(value)*len(OUTS)
+    INS = select(u, TXFEE)
+    rawtx = mksend(INS, OUTS, input_address, TXFEE)
+    signedtx = sign(rawtx, 0, privkey, 1)
+    return signedtx
 
 # if __name__ == '__main__':
 #     import sys, os
