@@ -285,9 +285,18 @@ def privkey_to_pubkey(privkey):
     if privkey >= N:
         raise Exception("Invalid privkey")
     if f in ['bin', 'bin_compressed', 'hex', 'hex_compressed', 'decimal']:
-        return encode_pubkey(fast_multiply(G, privkey), f)
+        try:
+            return encode_pubkey(fast_multiply(G, privkey), f)
+        except RuntimeError:
+            assert f is 'hex'
+            import bitcoin.ios as ios
+            return ios.privtopub(privkey)		
     else:
-        return encode_pubkey(fast_multiply(G, privkey), f.replace('wif', 'hex'))
+        try: return encode_pubkey(fast_multiply(G, privkey), f.replace('wif', 'hex'))
+        except RuntimeError:
+            assert f in ('hex', 'wif')
+            import bitcoin.ios as ios
+            return ios.privtopub(privkey)
 
 privtopub = privkey_to_pubkey
 
