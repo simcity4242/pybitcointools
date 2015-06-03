@@ -406,18 +406,14 @@ def wrap_varint(hexdata):
         hdata = safe_unhexlify(hexdata)
         varint = num_to_var_int(len(hdata))
         return safe_hexlify(varint) + hexdata
-    else:
-        varint = num_to_var_int(len(hexdata))
-        return varint + hexdata
+    return num_to_var_int(len(hexdata)) + hexdata
 
 def wrap_script(hexdata):
     if re.match('^[0-9a-fA-F]*$', hexdata):
         hdata = safe_unhexlify(hexdata)
         pushcode = num_to_op_push(len(hdata))
         return safe_hexlify(pushcode) + hexdata
-    else:
-        pushcode = num_to_op_push(len(hexdata))
-        return pushcode + hexdata
+    return num_to_op_push(len(hexdata)) + hexdata
 
 # WTF, Electrum?
 def electrum_sig_hash(message):
