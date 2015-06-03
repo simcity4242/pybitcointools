@@ -37,7 +37,7 @@ def mk_txouts(fo, value=None, jsonfmt=1):
 
 def file_insert(filename, value=None, jsonfmt=1):
     """Encode filename into the blockchain using multisig addresses"""
-	# TODO: sum (outsputs*547) + (10000*kBytes)
+    # TODO: sum (outsputs*547) + (10000*kBytes)
     try:
         fileobj = open(filename, 'rb').read()
     except:
@@ -49,5 +49,12 @@ def file_insert(filename, value=None, jsonfmt=1):
     TXOUTS = mk_txouts(fd, value, jsonfmt)
     if jsonfmt:
         return list(TXOUTS)
-    #safe_hexlify(num_to_var_int(len(TXOUTS.split(safe_hexlify(struct.pack('<Q', value))))-1))
     return wrap_varint(TXOUTS)
+
+# if __name__ == '__main__':
+#     import sys, os
+#     if len(sys.argv) < 2: 
+#         print("file_insert.py FILENAME OUTPUT_VALUE [INPUT_ADDRESS]")
+#     elif len(sys.argv) == 3:
+#         filename = sys.argv[-1]     # TODO: check file exists
+#     elif len(sys.argv) == 4:
