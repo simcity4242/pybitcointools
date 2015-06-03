@@ -1,8 +1,11 @@
 #!/usr/bin/python
 from bitcoin.main import *
-from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, from_string_to_bytes
+from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, from_string_to_bytes, st, by, changebase
 import string, unicodedata, random, hmac, re
 
+
+def _get_directory():
+    return os.path.join(os.path.dirname(__file__), 'wordlist')
 
 def _get_wordlists():
     # Try to access local lists, otherwise download text lists
@@ -10,6 +13,7 @@ def _get_wordlists():
     try:
         from bitcoin._electrum1wordlist import ELECTRUM_WORDS as ELEC
         from bitcoin._bip39wordlist import BIP0039_WORDLIST as BIP39
+        #from bitcoin._bip39jap import BIP0039_WORDLIST as BIP39
     except ImportError:
         from bitcoin.bci import make_request
         ELEC, BIP39 = map(
@@ -64,7 +68,7 @@ def bip39_check(mnemonic):
     assert len(mn_array) in range(3, 124, 3)
     assert all(map(lambda x: x in BIP39LIST, mn_array)) # check all words are in list
 
-    binstr = ''.join([ changebase(str(BIP39LIST.index(x)), 10, 2, 11) for x in mn_array])
+    binstr = ''.join([ changebase(st(BIP39LIST.index(x)), 10, 2, 11) for x in mn_array])
     L = len(binstr)
     bd = binstr[:L // 33 * 32]
     cs = binstr[-L // 33:]
@@ -75,8 +79,8 @@ def bip39_check(mnemonic):
 def random_bip39_pair(bits=128):
     """Generates a tuple of (hex seed, mnemonic)"""
     if bits%32 != 0: raise Exception('%d not divisible by 32! Try 128 bits' % bits)
-    seed = safe_hexlify(by(random_string(bits // 8)))       # CHECK FOR PY3
-    return (seed, bip39_hex_to_mn(seed))
+    hexseed = safe_hexlify(by(random_key()[:bits // 8]))       # CHECK FOR PY3
+    return (hexseed, bip39_hex_to_mn(hexseed))
 
 def random_bip39_seed(bits=128):
     return random_bip39_pair(bits)[0]
@@ -92,8 +96,7 @@ def elec1_mn_decode(mnemonic):
     elif isinstance(mnemonic, list):
         mn_wordlist = mnemonic
     else:   raise TypeError("Bad input: reqs mnemonic string")
-    #   https://github.com/spesmilo/electrum/blob/
-    #       1b6abf6e028cbabd5e125784cff6d4ada665e722/lib/old_mnemonic.py#L1672
+    #   https://github.com/spesmilo/electrum/blob/1b6abf6e028cbabd5e125784cff6d4ada665e722/lib/old_mnemonic.py#L1672
     wlist, words, n = mn_wordlist, ELECWORDS, 1626
     output = ''
     for i in range(len(wlist)//3):
@@ -122,6 +125,9 @@ def elec1_mn_encode(hexstr):
         w3 = ((x//n//n) + w2)%n
         out += [ words[w1], words[w2], words[w3] ]
     return ' '.join(out)
+
+electrum1_mn_decode = elec1_mn_decode
+electrum1_mn_encode = elec1_mn_encode
 
 def elec2_seed(num_bits=128, prefix='01', custom_entropy=1):
     # TODO: https://github.com/spesmilo/electrum/blob/feature/newsync/lib/bitcoin.py#L155
@@ -155,7 +161,7 @@ def elec2_mn_encode(i):
 def elec2_mn_decode(mn_seed):
     words = mn_seed.split()
     wordlist = BIP39LIST
-    n = len(BIP39LIST) # 2048
+    n = 2048
     i = 0
     while words:
         w = words.pop()
@@ -167,9 +173,6 @@ def elec2_check_seed(mn_seed, custom_entropy=1):
     assert is_elec2_seed(mn_seed)
     i = elec2_mn_decode(mn_seed)
     return i % custom_entropy == 0
-
-electrum2_mn_decode = elec2_mn_decode
-electrum2_mn_encode = elec2_mn_encode
 
 def is_elec2_seed(seed, prefix='01'):
     hmac_sha_512 = lambda x, y: hmac.new(x, y, hashlib.sha512).hexdigest()
