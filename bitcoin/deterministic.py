@@ -34,7 +34,7 @@ def electrum_keystretch(seed, password=None):
     if is_elec1_seed(seed):
         return slowsha(seed)
     elif is_elec2_seed(seed):
-        password = from_string_to_bytes(password)
+        password = from_string_to_bytes(password) if password is not None else None
         return electrum_extract_seed(seed, password)
     else:
         return seed
@@ -204,11 +204,12 @@ def coinvault_priv_to_bip32(*args):
 
 
 def bip32_descend(*args):
-    # accepts
     if len(args) == 2 and isinstance(args[1], list):
         key, path = args
     else:
-        key, path = args[0], parse_bip32_path(args[1:])
+        key, path = args[0], args[1:]
+    try: path = parse_bip32_path(path)
+    except: pass
     for p in path:
         key = bip32_ckd(key, p)
     return bip32_extract_key(key)
@@ -222,12 +223,25 @@ def parse_bip32_path(*args):
     else:
         path = '/'.join(map(st, args))
 
-    if path.startswith('m/'):
-        path = path[2:]
+    if path.startswith('m/'): path = path[2:]
     patharr = []
     for v in path.split('/'):
         if v[-1] in ("'H"):
             v = int(v[:-1]) + 0x80000000
+        if v.strip() == '2**31': v = 2**31
         v = int(v)
         patharr.append(v)
     return patharr
+
+def bip44_descend(*args):
+    # 44'/COINTYPE'/ACCOUNT'/change/index
+    # either 5 args: masterkey, 
+    masterkey, coin, account, change, idx = args[0], args[1:]
+    path = '/'.join(map(st, ["44'", coin, account, change, idx]))
+    path = parse_bip32_path(path)
+    return bip32_descend(masterkey, path)
+
+def bip44_address(*args):
+    return privtoaddr(bip44_descend(args))
+	
+
