@@ -204,6 +204,7 @@ def decode_pubkey(pub, formt=None):
 
 def get_privkey_format(priv):
     if isinstance(priv, int_types): return 'decimal'
+    elif len(priv) == 30 and priv[0] == 'S': return 'mini'
     elif len(priv) == 32: return 'bin'
     elif len(priv) == 33: return 'bin_compressed'
     elif len(priv) == 64: return 'hex'
@@ -218,6 +219,7 @@ def encode_privkey(priv, formt, vbyte=0):
     if not isinstance(priv, int_types):
         return encode_privkey(decode_privkey(priv), formt, vbyte)
     if formt == 'decimal': return priv
+    elif formt == 'mini': raise Exception("Cannot decode to mini format!")
     elif formt == 'bin': return encode(priv, 256, 32)
     elif formt == 'bin_compressed': return encode(priv, 256, 32)+b'\x01'
     elif formt == 'hex': return encode(priv, 16, 64)
@@ -231,6 +233,7 @@ def encode_privkey(priv, formt, vbyte=0):
 def decode_privkey(priv,formt=None):
     if not formt: formt = get_privkey_format(priv)
     if formt == 'decimal': return priv
+    elif formt == 'mini': return sha256(priv)
     elif formt == 'bin': return decode(priv, 256)
     elif formt == 'bin_compressed': return decode(priv[:32], 256)
     elif formt == 'hex': return decode(priv, 16)
@@ -285,18 +288,9 @@ def privkey_to_pubkey(privkey):
     if privkey >= N:
         raise Exception("Invalid privkey")
     if f in ['bin', 'bin_compressed', 'hex', 'hex_compressed', 'decimal']:
-        try:
-            return encode_pubkey(fast_multiply(G, privkey), f)
-        except RuntimeError:
-            assert f is 'hex'
-            import bitcoin.ios as ios
-            return ios.privtopub(privkey)		
+        return encode_pubkey(fast_multiply(G, privkey), f)
     else:
-        try: return encode_pubkey(fast_multiply(G, privkey), f.replace('wif', 'hex'))
-        except RuntimeError:
-            assert f in ('hex', 'wif')
-            import bitcoin.ios as ios
-            return ios.privtopub(privkey)
+        return encode_pubkey(fast_multiply(G, privkey), f.replace('wif', 'hex'))
 
 privtopub = privkey_to_pubkey
 
@@ -587,3 +581,11 @@ def pbkdf2_hmac_sha512(password, salt):
 
 hmac_sha_256 = lambda k, s: hmac.new(k, s, hashlib.sha256)
 hmac_sha_512 = lambda k, s: hmac.new(k, s, hashlib.sha512)
+
+def random_mini_key():
+    charset = get_code_string(58)[1:]
+    while True:
+        key = "%s%s%s" % ('S', ''.join([charset[random.randrange(0,57)] for i in range(29)]), '?')
+        if bin_sha256(key)[0] != b'\x00': continue
+        if bin_sha256(key)[0] == b'\x00': break
+    return key[:-1]
