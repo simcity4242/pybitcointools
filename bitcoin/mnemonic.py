@@ -13,7 +13,6 @@ def _get_wordlists():
     try:
         from bitcoin._electrum1wordlist import ELECTRUM_WORDS as ELEC
         from bitcoin._bip39wordlist import BIP0039_WORDLIST as BIP39
-        #from bitcoin._bip39jap import BIP0039_WORDLIST as BIP39
     except ImportError:
         from bitcoin.bci import make_request
         ELEC, BIP39 = map(
@@ -39,19 +38,19 @@ def bip39_hex_to_mn(hexstr):
         raise Exception("32 < entropy < 992 bits only!")
 
     hexstr = safe_unhexlify(hexstr)
-    cs = hashlib.sha256(hexstr).hexdigest() # sha256 hexdigest
-    bstr = (changebase( safe_hexlify(hexstr), 16, 2, len(hexstr)*8) +
-            changebase( cs, 16, 2, 256)[ : len(hexstr) * 8 // 32])
-    return " ".join( [BIP39LIST[int(x, 2)] for x in
-                      [bstr[i:i+11] for i in range(0, len(bstr), 11)] ] )
+    cs = sha256(hexstr)     # sha256 hexdigest
+    bstr = (changebase(safe_hexlify(hexstr), 16, 2, len(hexstr)*8) +
+            changebase(cs, 16, 2, 256)[ : len(hexstr) * 8 // 32])
+    return " ".join([BIP39LIST[int(x, 2)] for x in
+                    [bstr[i:i+11] for i in range(0, len(bstr), 11)]])
 
 def bip39_mn_to_hex(mnemonic, saltpass=''):
     if isinstance(mnemonic, string_or_bytes_types):
-        mnemonic = st(mnemonic)
-        mn_wordlist = mnemonic.lower().strip().split(" ")
+        mnemonic = mnemonic
+        mn_wordlist = prepare_elec2_seed(mnemonic).split(" ")
     elif isinstance(mnemonic, list):
         mn_wordlist = list(map(st, mnemonic))
-    else:   raise TypeError("Enter a lower case, single-spaced mnemonic (or list)!!")
+    else: raise TypeError("Enter a lower case, single-spaced mnemonic (or list)!!")
 
     mn_input = ' '.join(mn_wordlist)
     assert bip39_check(mn_input)
@@ -59,16 +58,17 @@ def bip39_mn_to_hex(mnemonic, saltpass=''):
 
 def bip39_check(mnemonic):
     """Assert mnemonic is BIP39 standard"""
-    if isinstance(mnemonic, string_or_bytes_types):
-        mn_array = from_string_to_bytes(mnemonic).lower().strip().split(" ")
+    if isinstance(mnemonic, string_types):
+        mn_array = from_string_to_bytes(prepare_elec2_seed(mnemonic)).split(" ")
     elif isinstance(mnemonic, list):
         mn_array = mnemonic
-    else: raise TypeError
+    else:
+        raise TypeError
 
     assert len(mn_array) in range(3, 124, 3)
-    assert all(map(lambda x: x in BIP39LIST, mn_array)) # check all words are in list
+    assert all(map(lambda x: x in BIP39LIST, mn_array))  # check all words are in list
 
-    binstr = ''.join([ changebase(st(BIP39LIST.index(x)), 10, 2, 11) for x in mn_array])
+    binstr = ''.join([changebase(st(BIP39LIST.index(x)), 10, 2, 11) for x in mn_array])
     L = len(binstr)
     bd = binstr[:L // 33 * 32]
     cs = binstr[-L // 33:]
@@ -78,9 +78,10 @@ def bip39_check(mnemonic):
 
 def random_bip39_pair(bits=128):
     """Generates a tuple of (hex seed, mnemonic)"""
-    if bits%32 != 0: raise Exception('%d not divisible by 32! Try 128 bits' % bits)
+    if bits % 32 != 0:
+        raise Exception('%d not divisible by 32! Try 128 bits' % bits)
     hexseed = safe_hexlify(by(random_key()[:bits // 8]))       # CHECK FOR PY3
-    return (hexseed, bip39_hex_to_mn(hexseed))
+    return hexseed, bip39_hex_to_mn(hexseed)
 
 def random_bip39_seed(bits=128):
     return random_bip39_pair(bits)[0]
@@ -90,11 +91,10 @@ def random_bip39_mn(bits=128):
 
 def elec1_mn_decode(mnemonic):
     """Decodes Electrum 1.x mnemonic phrase to hex seed"""
-    if isinstance(mnemonic, string_or_bytes_types):
-        try: mn_wordlist = from_string_to_bytes(mnemonic).lower().strip().split(" ")
-        except: raise TypeError("Enter the Electrum 1.x mnemonic as a string")
+    if isinstance(mnemonic, string_types):
+        mn_wordlist = from_string_to_bytes(mnemonic).lower().strip().split(" ")
     elif isinstance(mnemonic, list):
-        mn_wordlist = mnemonic
+        mn_wordlist = mnemonic[:]
     else:   raise TypeError("Bad input: reqs mnemonic string")
     #   https://github.com/spesmilo/electrum/blob/1b6abf6e028cbabd5e125784cff6d4ada665e722/lib/old_mnemonic.py#L1672
     wlist, words, n = mn_wordlist, ELECWORDS, 1626
@@ -104,8 +104,8 @@ def elec1_mn_decode(mnemonic):
         w1 =  words.index(word1)
         w2 = (words.index(word2))%n
         w3 = (words.index(word3))%n
-        x = w1 +n*((w2-w1)%n) +n*n*((w3-w2)%n)
-        output += '%08x'%x
+        x = w1 + n*((w2-w1)%n) + n*n*((w3-w2)%n)
+        output += '%08x' % x
     return output
 
 def elec1_mn_encode(hexstr):
@@ -123,11 +123,8 @@ def elec1_mn_encode(hexstr):
         w1 = (x%n)
         w2 = ((x//n) + w1)%n
         w3 = ((x//n//n) + w2)%n
-        out += [ words[w1], words[w2], words[w3] ]
+        out += [words[w1], words[w2], words[w3]]
     return ' '.join(out)
-
-electrum1_mn_decode = elec1_mn_decode
-electrum1_mn_encode = elec1_mn_encode
 
 def elec2_seed(num_bits=128, prefix='01', custom_entropy=1):
     # TODO: https://github.com/spesmilo/electrum/blob/feature/newsync/lib/bitcoin.py#L155
@@ -147,14 +144,15 @@ def elec2_seed(num_bits=128, prefix='01', custom_entropy=1):
         if is_elec2_seed(mn_seed, prefix): break
     return mn_seed
 
-random_electrum2_seed = elec2_seed
+random_electrum2_seed = random_elec2_seed = elec2_seed
 
 def elec2_mn_encode(i):
+    """Encodes int, i, as Electrum 2 mnemonic"""
     n = len(BIP39LIST)
     words = []
     while i:
         x = i%n
-        i = i//n
+        i //= n
         words.append(BIP39LIST[x])
     return ' '.join(words)
 
@@ -175,6 +173,7 @@ def elec2_check_seed(mn_seed, custom_entropy=1):
     return i % custom_entropy == 0
 
 def is_elec2_seed(seed, prefix='01'):
+    assert prefix in ('01', '101')
     hmac_sha_512 = lambda x, y: hmac.new(x, y, hashlib.sha512).hexdigest()
     s = hmac_sha_512('Seed version', seed)
     return s.startswith(prefix)
@@ -199,7 +198,8 @@ def prepare_elec2_seed(seed):
         CJK_INTERVALS = [(0x4E00, 0x9FFF, 'CJK Unified Ideographs'), (0x3400, 0x4DBF, 'CJK Unified Ideographs Extension A'), (0x20000, 0x2A6DF, 'CJK Unified Ideographs Extension B'), (0x2A700, 0x2B73F, 'CJK Unified Ideographs Extension C'), (0x2B740, 0x2B81F, 'CJK Unified Ideographs Extension D'), (0xF900, 0xFAFF, 'CJK Compatibility Ideographs'), (0x2F800, 0x2FA1D, 'CJK Compatibility Ideographs Supplement'), (0x3190, 0x319F , 'Kanbun'), (0x2E80, 0x2EFF, 'CJK Radicals Supplement'), (0x2F00, 0x2FDF, 'CJK Radicals'), (0x31C0, 0x31EF, 'CJK Strokes'), (0x2FF0, 0x2FFF, 'Ideographic Description Characters'), (0xE0100, 0xE01EF, 'Variation Selectors Supplement'), (0x3100, 0x312F, 'Bopomofo'), (0x31A0, 0x31BF, 'Bopomofo Extended'), (0xFF00, 0xFFEF, 'Halfwidth and Fullwidth Forms'), (0x3040, 0x309F, 'Hiragana'), (0x30A0, 0x30FF, 'Katakana'), (0x31F0, 0x31FF, 'Katakana Phonetic Extensions'), (0x1B000, 0x1B0FF, 'Kana Supplement'), (0xAC00, 0xD7AF, 'Hangul Syllables'), (0x1100, 0x11FF, 'Hangul Jamo'), (0xA960, 0xA97F, 'Hangul Jamo Extended A'), (0xD7B0, 0xD7FF, 'Hangul Jamo Extended B'), (0x3130, 0x318F, 'Hangul Compatibility Jamo'), (0xA4D0, 0xA4FF, 'Lisu'), (0x16F00, 0x16F9F, 'Miao'), (0xA000, 0xA48F, 'Yi Syllables'), (0xA490, 0xA4CF, 'Yi Radicals'),]
         n = ord(c)
         for i_min, i_max, name in CJK_INTERVALS:
-            if n >= i_min and n <= i_max: return True
+            if i_max >= n >= i_min:
+                return True
         return False
     # normalize
     seed = unicodedata.normalize('NFKD', unicode(seed)) \
@@ -207,5 +207,7 @@ def prepare_elec2_seed(seed):
     seed = seed.lower()         # lower
     seed = u''.join([c for c in seed if not unicodedata.combining(c)])  # remove accents
     seed = u' '.join(seed.split())          # normalize whitespaces
-    seed = u''.join([seed[i] for i in range(len(seed)) if not (seed[i] in string.whitespace and is_CJK(seed[i-1]) and is_CJK(seed[i+1]))])
+    seed = u''.join([seed[i] for i in range(len(seed))
+                    if not (seed[i] in string.whitespace and
+                    is_CJK(seed[i-1]) and is_CJK(seed[i+1]))])
     return seed
