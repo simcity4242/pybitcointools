@@ -2,7 +2,7 @@
 import binascii, re, json, copy, sys
 from bitcoin.main import *
 from _functools import reduce
-from bitcoin.pyspecials import safe_hexlify, from_string_to_bytes, from_int_to_byte, from_string_to_bytes
+from bitcoin.pyspecials import safe_hexlify, from_string_to_bytes, from_int_to_byte, from_string_to_bytes, from_le_bytes_to_int, from_int_to_le_bytes
 
 
 ### Hex to bin converter and vice versa for objects
@@ -105,7 +105,7 @@ def serialize(txobj):
     o.append(encode(txobj["version"], 256, 4)[::-1])
     o.append(num_to_var_int(len(txobj["ins"])))
     for inp in txobj["ins"]:
-        o.append(inp["outpoint"]["hash"][::-1])
+        o.append(inp["outpoint"]["scrypt_hash"][::-1])
         o.append(encode(inp["outpoint"]["index"], 256, 4)[::-1])
         o.append(num_to_var_int(len(inp["script"]))+(inp["script"] if inp["script"] or is_python2 else bytes()))
         o.append(encode(inp["sequence"], 256, 4)[::-1])
@@ -173,7 +173,7 @@ def txhash(tx, hashcode=None):
     if isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx):
         tx = changebase(tx, 16, 256)
     if hashcode:
-        return dbl_sha256(from_string_to_bytes(tx) + encode(int(hashcode), 256, 4)[::-1])
+        return dbl_sha256(from_string_to_bytes(tx) + from_int_to_le_bytes(int(hashcode), 4))
     else:
         return safe_hexlify(bin_dbl_sha256(tx)[::-1])
 
@@ -346,7 +346,7 @@ def signall(tx, priv):
     # { 'txinhash:txinidx' : privkey }
     if isinstance(priv, dict):
         for e, i in enumerate(deserialize(tx)["ins"]):
-            k = priv["%s:%d" % (i["outpoint"]["hash"], i["outpoint"]["index"])]
+            k = priv["%s:%d" % (i["outpoint"]["scrypt_hash"], i["outpoint"]["index"])]
             tx = sign(tx, e, k)
     else:
         for i in range(len(deserialize(tx)["ins"])):
