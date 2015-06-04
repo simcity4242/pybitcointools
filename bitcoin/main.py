@@ -45,7 +45,10 @@ def inv(a, n):
         lm, low, hm, high = nm, new, lm, low
     return lm % n
 
-
+def contains_point(x, y):
+    """Is the point (x,y) on this curve?"""
+    x, y = map(int, x,y)
+    return (y*y - (x*x*x + A*x+P)) % P == 0
 
 # JSON access (for pybtctool convenience)
 
@@ -328,8 +331,9 @@ def subtract_privkeys(p1, p2):
 def bin_hash160(string):
     intermed = hashlib.sha256(string).digest()
     digest = ''
-    try:    digest = hashlib.new('ripemd160', intermed).digest()
-    except: digest = RIPEMD160(intermed).digest()
+    if not hasattr(hashlib, 'ripemd160'):
+        hashlib.ripemd160 = RIPEMD160
+    digest = hashlib.ripemd160(intermed).digest()
     return digest
 
 
@@ -341,15 +345,15 @@ def bin_sha256(string):
     binary_data = string if isinstance(string, bytes) else by(string)
     return hashlib.sha256(binary_data).digest()
 
+
 def sha256(string):
     return safe_hexlify(bin_sha256(string))
 
 
 def bin_ripemd160(string):
-    try:
-        digest = hashlib.new('ripemd160', string).digest()
-    except:
-        digest = RIPEMD160(string).digest()
+    if not hasattr(hashlib, 'ripemd160'):
+        hashlib.ripemd160 = RIPEMD160
+    digest = hashlib.ripemd160(string).digest()
     return digest
 
 
@@ -358,7 +362,7 @@ def ripemd160(string):
 
 
 def bin_dbl_sha256(s):
-    bytes_to_hash = from_string_to_bytes(s)
+    bytes_to_hash = from_str_to_bytes(s)
     return hashlib.sha256(hashlib.sha256(bytes_to_hash).digest()).digest()
 
 
@@ -367,7 +371,7 @@ def dbl_sha256(string):
 
 
 def bin_slowsha(string):
-    string = from_string_to_bytes(string)
+    string = from_str_to_bytes(string)
     orig_input = string
     for i in range(100000):
         string = hashlib.sha256(string + orig_input).digest()
@@ -420,13 +424,13 @@ def wrap_script(hexdata):
 
 # WTF, Electrum?
 def electrum_sig_hash(message):
-    padded = b"\x18Bitcoin Signed Message:\n" + num_to_var_int(len(message)) + from_string_to_bytes(message)
+    padded = b"\x18Bitcoin Signed Message:\n" + num_to_var_int(len(message)) + from_str_to_bytes(message)
     return bin_dbl_sha256(padded)
 
 
 def random_key():
     # Gotta be secure after that java.SecureRandom fiasco...
-    entropy = from_string_to_bytes(
+    entropy = from_str_to_bytes(
         random_string(32) + str(random.randrange(2**256)) \
         + str(int(time.time() * 1000000)))
     return sha256(entropy)
@@ -571,21 +575,22 @@ def bin_pbkdf2_hmac(hashname, password, salt, rounds, dklen=None):
     return bytes(key[:dklen])
 
 def pbkdf2_hmac_sha512(password, salt):
-    password, salt = map(from_string_to_bytes, (password, salt))
-    try:
-        from hashlib import pbkdf2_hmac
-        b = pbkdf2_hmac('sha512', password, salt, 2048, 64)
-    except ImportError:
+    password, salt = map(from_str_to_bytes, (password, salt))
+    if hasattr(hashlib, 'pbkdf2_hmac'):
+        b = hashlib.pbkdf2_hmac('sha512', password, salt, 2048, 64)
+    else:
         b = bin_pbkdf2_hmac('sha512', password, salt, 2048, 64)
     return safe_hexlify(b)
 
 hmac_sha_256 = lambda k, s: hmac.new(k, s, hashlib.sha256)
 hmac_sha_512 = lambda k, s: hmac.new(k, s, hashlib.sha512)
 
+
 def random_mini_key():
-    charset = get_code_string(58)[1:]
+    charset = get_code_string(58)[1:]   # Base58 without the 1
     while True:
-        key = "%s%s%s" % ('S', ''.join([charset[random.randrange(0,57)] for i in range(29)]), '?')
-        if bin_sha256(key)[0] != b'\x00': continue
-        if bin_sha256(key)[0] == b'\x00': break
+        randstr = ''.join([charset[random.randrange(57)] for i in xrange(29)])
+        key = "%s%s%s" % ('S', randstr, '?')
+        if bin_sha256(key)[0] != b'\0': continue
+        if bin_sha256(key)[0] == b'\0': break
     return key[:-1]

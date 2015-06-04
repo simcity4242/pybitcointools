@@ -5,6 +5,7 @@ import unittest
 
 import bitcoin.ripemd as ripemd
 from bitcoin import *
+from bitcoin.pyspecials import safe_hexlify, safe_unhexlify
 
 
 class TestECCArithmetic(unittest.TestCase):
@@ -298,7 +299,7 @@ class TestBIP0032(unittest.TestCase):
             [[2**31, 1, 2**31 + 2, 'pub', 2, 1000000000], 'xpub6H1LXWLaKsWFhvm6RVpEL9P4KfRZSW7abD2ttkWP3SSQvnyA8FSVqNTEcYFgJS2UaFcxupHiYkro49S8yGasTvXEYBVPamhGW6cFJodrTHy']
         ]
 
-        mk = bip32_master_key(safe_from_hex('000102030405060708090a0b0c0d0e0f'))
+        mk = bip32_master_key(safe_unhexlify('000102030405060708090a0b0c0d0e0f'))
 
         for tv in test_vectors:
             left, right = self._full_derive(mk, tv[0]), tv[1]
@@ -322,7 +323,7 @@ class TestBIP0032(unittest.TestCase):
             [[2**31, 1, 2**31 + 2, 'pub', 2, 1000000000], 'tpubDHNy3kAG39ThyiwwsgoKY4iRenXDRtce8qdCFJZXPMCJg5dsCUHayp84raLTpvyiNA9sXPob5rgqkKvkN8S7MMyXbnEhGJMW64Cf4vFAoaF']
         ]
 
-        mk = bip32_master_key(safe_from_hex('000102030405060708090a0b0c0d0e0f'), TESTNET_PRIVATE)
+        mk = bip32_master_key(safe_unhexlify('000102030405060708090a0b0c0d0e0f'), TESTNET_PRIVATE)
 
         for tv in test_vectors:
             left, right = self._full_derive(mk, tv[0]), tv[1]
@@ -338,7 +339,7 @@ class TestBIP0032(unittest.TestCase):
             )
 
     def test_extra(self):
-        master = bip32_master_key(safe_from_hex("000102030405060708090a0b0c0d0e0f"))
+        master = bip32_master_key(safe_unhexlify("000102030405060708090a0b0c0d0e0f"))
 
         # m/0
         assert bip32_ckd(master, "0") == "xprv9uHRZZhbkedL37eZEnyrNsQPFZYRAvjy5rt6M1nbEkLSo378x1CQQLo2xxBvREwiK6kqf7GRNvsNEchwibzXaV6i5GcsgyjBeRguXhKsi4R"
@@ -442,8 +443,8 @@ class TestRipeMD160PythonBackup(unittest.TestCase):
             hash160digest = ripemd.RIPEMD160(bin_sha256(s)).digest()
             self.assertEqual(bytes_to_hex_string(digest), target[i])
             self.assertEqual(bytes_to_hex_string(hash160digest), hash160target[i])
-            self.assertEqual(bytes_to_hex_string(bin_hash160(from_string_to_bytes(s))), hash160target[i])
-            self.assertEqual(hash160(from_string_to_bytes(s)), hash160target[i])
+            self.assertEqual(bytes_to_hex_string(bin_hash160(from_str_to_bytes(s))), hash160target[i])
+            self.assertEqual(hash160(from_str_to_bytes(s)), hash160target[i])
 
 
 class TestScriptVsAddressOutputs(unittest.TestCase):

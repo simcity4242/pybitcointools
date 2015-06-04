@@ -13,7 +13,7 @@ def serialize_header(inp):
         encode(inp['bits'], 256, 4)[::-1] + \
         encode(inp['nonce'], 256, 4)[::-1]
     h = safe_hexlify(bin_sha256(bin_sha256(o))[::-1])
-    assert h == inp['hash'], (sha256(o), inp['hash'])
+    assert h == inp['scrypt_hash'], (sha256(o), inp['scrypt_hash'])
     return safe_hexlify(o)
 
 

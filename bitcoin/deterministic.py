@@ -2,7 +2,7 @@ from bitcoin.main import *
 import hmac
 import hashlib
 from binascii import hexlify
-from bitcoin.pyspecials import st, by, string_types, from_string_to_bytes, from_bytes_to_string, safe_hexlify, safe_unhexlify
+from bitcoin.pyspecials import st, by, string_types, from_str_to_bytes, from_bytes_to_str, safe_hexlify, safe_unhexlify
 from bitcoin.mnemonic import prepare_elec2_seed, is_elec1_seed, is_elec2_seed
 
 # TODO: detect Elec 1, 2 & BIP39
@@ -16,8 +16,8 @@ def bin_electrum_extract_seed(mn_seed, password=''):
         mn_seed = prepare_elec2_seed(' '.join(mn_seed).lower().strip())
     else: raise Exception("mnemonic string req")
 
-    mn_seed = from_string_to_bytes(mn_seed)
-    password = from_string_to_bytes("electrum{}".format(password))
+    mn_seed = from_str_to_bytes(mn_seed)
+    password = from_str_to_bytes("electrum{}".format(password))
     rootseed = safe_unhexlify(pbkdf2_hmac_sha512(mn_seed, password))
     assert len(rootseed) == 64
     return rootseed
@@ -30,11 +30,11 @@ def electrum_mprvk(mnemonic, password=''):
 
 def electrum_keystretch(seed, password=None):
     if isinstance(seed, string_types) and re.match('^[0-9a-fA-F]*$', seed):
-        seed = from_string_to_bytes(seed)
+        seed = from_str_to_bytes(seed)
     if is_elec1_seed(seed):
         return slowsha(seed)
     elif is_elec2_seed(seed):
-        password = from_string_to_bytes(password) if password is not None else None
+        password = from_str_to_bytes(password) if password is not None else None
         return electrum_extract_seed(seed, password)
     else:
         return seed
@@ -52,7 +52,7 @@ def electrum_privkey(seed, n, for_change=0):
     if len(seed) == 32:
         seed = electrum_keystretch(seed)
     mpk = electrum_mpubk(seed)
-    offset = bin_dbl_sha256(from_string_to_bytes("{}:{}:{}".format(n, for_change, binascii.unhexlify(mpk))))
+    offset = bin_dbl_sha256(from_str_to_bytes("{}:{}:{}".format(n, for_change, binascii.unhexlify(mpk))))
     return add_privkeys(seed, offset)
 
 # Accepts (seed or stretched seed or master pubkey), index and secondary index
@@ -65,7 +65,7 @@ def electrum_pubkey(masterkey, n, for_change=0):
     else:
         mpk = masterkey
     bin_mpk = encode_pubkey(mpk, 'bin_electrum')
-    offset = bin_dbl_sha256(from_string_to_bytes("{}:{}:{}".format(n, for_change, bin_mpk)))
+    offset = bin_dbl_sha256(from_str_to_bytes("{}:{}:{}".format(n, for_change, bin_mpk)))
     return add_pubkeys('04'+mpk, privtopub(offset))
 
 # seed/stretched seed/pubkey -> address (convenience method)
@@ -150,7 +150,7 @@ def bip32_ckd(data, i):
 
 
 def bip32_master_key(seed, vbytes=MAINNET_PRIVATE):
-    I = hmac_sha_512(from_string_to_bytes("Bitcoin seed"), seed).digest()
+    I = hmac_sha_512(from_str_to_bytes("Bitcoin seed"), seed).digest()
     return bip32_serialize((vbytes, 0, b'\x00'*4, 0, I[32:], I[:32]+b'\x01'))
 
 

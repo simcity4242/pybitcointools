@@ -101,7 +101,7 @@ def inspect(tx, **kwargs):
     isum = 0
     ins = {}
     for _in in d['ins']:
-        h = _in['outpoint']['hash']
+        h = _in['outpoint']['scrypt_hash']
         i = _in['outpoint']['index']
         prevout = deserialize(fetchtx(h, **kwargs))['outs'][i]
         isum += prevout['value']

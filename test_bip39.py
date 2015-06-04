@@ -5,7 +5,7 @@ import unittest
 
 import bitcoin.mnemonic as mnemonic
 from bitcoin import *
-from bitcoin.pyspecials import from_string_to_bytes, from_bytes_to_string
+from bitcoin.pyspecials import from_str_to_bytes, from_bytes_to_str
 
 class TestBIP39(unittest.TestCase):
 

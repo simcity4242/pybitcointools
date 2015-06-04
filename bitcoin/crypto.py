@@ -1,7 +1,8 @@
 import hashlib, hmac, struct
 import os, binascii, struct, base64
+import numbers
 from bitcoin import *
-from bitcoin.pyspecials import safe_unhexlify, safe_hexlify, from_bytes_to_string, from_string_to_bytes
+from bitcoin.pyspecials import safe_unhexlify, safe_hexlify, from_bytes_to_str, from_str_to_bytes
 
 def pbkdf2_hmac(name, password, salt, rounds, dklen=None):
     """Returns the result of the Password-Based Key Derivation Function 2"""
@@ -37,17 +38,13 @@ def pbkdf2_hmac(name, password, salt, rounds, dklen=None):
 
 """Common constants and functions used by scrypt implementations"""
 
-import numbers
-
 
 SCRYPT_MCF_PREFIX_7 = b'$7$'
 SCRYPT_MCF_PREFIX_s1 = b'$s1$'
 SCRYPT_MCF_PREFIX_DEFAULT = b'$s1$'
 SCRYPT_MCF_PREFIX_ANY = None
 
-SCRYPT_N = 1<<14
-SCRYPT_r = 8
-SCRYPT_p = 1
+SCRYPT_N, SCRYPT_r, SCRYPT_p = 1<<14, 8, 1
 
 # The last one differs from libscrypt defaults, but matches the 'interactive'
 # work factor from the original paper. For long term storage where runtime of
@@ -69,41 +66,15 @@ def check_args(password, salt, N, r, p, olen=64):
         raise TypeError('p must be an integer')
     if not isinstance(olen, numbers.Integral):
         raise TypeError('length must be an integer')
-    if N > 2**63:
-        raise ValueError('N cannot be larger than 2**63')
-    if (N & (N - 1)) or N < 2:
-        raise ValueError('N must be a power of two larger than 1')
-    if r <= 0:
-        raise ValueError('r must be positive')
-    if p <= 0:
-        raise ValueError('p must be positive')
+    if N > 2**63 or (N & (N - 1)) or N < 2:
+        raise ValueError('2**63 > N > 1 where N is a power of 2')
+    if r <= 0 or p <= 0 or olen <= 0:
+        raise ValueError('r/p/olen must be positive')
     if r * p >= 2**30:
         raise ValueError('r * p must be less than 2 ** 30')
-    if olen <= 0:
-        raise ValueError('length must be positive')
+
 
 # Automatically generated file, see inline.py
-
-# Copyright (c) 2014 Richard Moore
-# Copyright (c) 2014-2015 Jan Varho
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy
-# of this software and associated documentation files (the "Software"), to deal
-# in the Software without restriction, including without limitation the rights
-# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-# copies of the Software, and to permit persons to whom the Software is
-# furnished to do so, subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in
-# all copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-# THE SOFTWARE.
 
 """Python implementation of Scrypt password-based key derivation function"""
 
@@ -128,8 +99,7 @@ import struct
 if 'pbkdf2_hmac' in dir(hashlib):
     _pbkdf2 = hashlib.pbkdf2_hmac
 else:
-    # but fall back to Python implementation in < 3.4
-    from pbkdf2 import pbkdf2_hmac as _pbkdf2
+    _pbkdf2 = pbkdf2_hmac         # but fall back to Python implementation in < 3.4
 
 
 def blockxor(source, s_start, dest, d_start, length):
@@ -277,8 +247,9 @@ def scrypt(password, salt, N=SCRYPT_N, r=SCRYPT_r, p=SCRYPT_p, olen=64):
     key derivation is not a problem, you could use 16 as in libscrypt or better
     yet increase N if memory is plentiful.
     """
+    # TODO: ==> https://github.com/ricmoo/nightminer/blob/master/nightminer.py
 
-    check_args(password, salt, N, r, p, olen)
+    ####  check_args(password, salt, N, r, p, olen)
 
     # Everything is lists of 32-bit uints for all but pbkdf2
     try:
