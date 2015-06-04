@@ -6,6 +6,7 @@ from bitcoin.main import *
 from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, by, st
 
 # https://gist.github.com/b22e178cff75c4b432a8
+# https://gist.githubusercontent.com/simcity4242/99f4d672ade5d73afb9d/raw/573e487f1344578b8872e50873ad5ca9f36d8b33/ios.py
 
 # Returns byte string value, not hex string
 def varint(n):
