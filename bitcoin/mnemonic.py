@@ -1,247 +1,279 @@
+#!/usr/bin/python
+
 from bitcoin.main import *
-import hmac
-import hashlib
-from binascii import hexlify
-from bitcoin.pyspecials import st, by, string_types, from_string_to_bytes, from_bytes_to_string, safe_hexlify, safe_unhexlify
-from bitcoin.mnemonic import prepare_elec2_seed, is_elec1_seed, is_elec2_seed
+from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, from_str_to_bytes, st, by, changebase
+import string, unicodedata, random, hmac, re
+from bitcoin._electrum1wordlist import ELECTRUM_WORDS as ELECWORDS
+from bitcoin._bip39wordlist import BIP39ENG
+from bitcoin._bip39japanese import BIP39JAP
 
-# TODO: detect Elec 1, 2 & BIP39
+global ELECWORDS, BIP39ENG, BIP39JAP
 
-# Electrum wallets
-def bin_electrum_extract_seed(mn_seed, password=''):
-    assert len(mn_seed) == 1
-    if isinstance(mn_seed, string_types):
-        mn_seed = prepare_elec2_seed(mn_seed)
-    elif isinstance(mn_seed, list):
-        mn_seed = prepare_elec2_seed(' '.join(mn_seed).lower().strip())
-    else: raise Exception("mnemonic string req")
+def _get_directory():
+    return os.path.join(os.path.dirname(__file__), 'wordlist')
 
-    mn_seed = from_string_to_bytes(mn_seed)
-    password = from_string_to_bytes("electrum{}".format(password))
-    rootseed = safe_unhexlify(pbkdf2_hmac_sha512(mn_seed, password))
-    assert len(rootseed) == 64
-    return rootseed
+def _get_wordlists(listname=None):
+    # def _get_wordlists(listtype=None, language=None):
+    # TODO: add foreign languages for BIP39ENG, https://github.com/bitcoin/bips/blob/master/bip-0039/bip-0039-wordlists.md
+    # Try to access local lists, otherwise download text lists
+    # if any((listtype, language)):
+    #     listtype, language = 'BIP39ENG', 'English'
+    try:
+        from bitcoin._electrum1wordlist import ELECTRUM_WORDS as ELEC
+        from bitcoin._bip39wordlist import BIP39ENG as BIP39
+        from bitcoin._bip39japanese import BIP39JAP
+    except ImportError:
+        from bitcoin.bci import make_request
+        ELEC, BIP39ENG, BIP39JAP, BIP39SPAN, BIP39CHIN1, BIP39CHIN2, BIP39FRE = map(
+            lambda u: make_request(u).strip().split(),
+            ("https://gist.githubusercontent.com/anonymous/f58f57780245db3cafc4/raw/" \
+             + "1b5a9e81c0a356373e9e13aa720baef89d8fa856/electrum1_english_words",
+             "https://github.com/bitcoin/bips/blob/master/bip-0039/english.txt",
+             'https://github.com/bitcoin/bips/blob/master/bip-0039/japanese.txt',
+             "https://github.com/bitcoin/bips/raw/master/bip-0039/spanish.txt",
+             "https://github.com/bitcoin/bips/blob/master/bip-0039/chinese_simplified.txt",
+             "https://github.com/bitcoin/bips/blob/master/bip-0039/chinese_traditional.txt",
+             "https://github.com/bitcoin/bips/blob/master/bip-0039/french.txt"))
+    finally:
+        assert (len(BIP39ENG)==2048 and len(BIP39JAP)==2048) and len(ELEC) == 1626
+    return ELEC, BIP39, BIP39JAP
 
-def electrum_extract_seed(mn_seed, password=''):
-    return safe_hexlify(bin_electrum_extract_seed(mn_seed, password))
 
-def electrum_mprvk(mnemonic, password=''):
-    return bip32_master_key(bin_electrum_extract_seed(mnemonic, password))
-
-def electrum_keystretch(seed, password=None):
-    if isinstance(seed, string_types) and re.match('^[0-9a-fA-F]*$', seed):
-        seed = from_string_to_bytes(seed)
-    if is_elec1_seed(seed):
-        return slowsha(seed)
-    elif is_elec2_seed(seed):
-        password = from_string_to_bytes(password) if password is not None else None
-        return electrum_extract_seed(seed, password)
+def bip39_hex_to_mn(hexstr, lang='English'):
+    if isinstance(hexstr, string_or_bytes_types) and re.match('^[0-9a-fA-F]*$', hexstr):
+        hexstr = from_str_to_bytes(hexstr)
     else:
-        return seed
+        raise TypeError("Enter a hex string!")
 
-# Accepts seed or stretched seed, returns master public key
-def electrum_mpubk(seed):
-    # TODO: add electrum_seed function to return mpk for both Elec1/2
-    if len(seed) == 32 and not is_elec2_seed(seed):
-        seed = electrum_keystretch(seed)
-    return privkey_to_pubkey(seed)[2:]
+    if len(hexstr) not in xrange(4, 125, 4):
+        raise Exception("32 < entropy < 992 bits only!")
 
-# Accepts (seed or stretched seed), index and secondary index
-# (conventionally 0 for ordinary addresses, 1 for change) , returns privkey
-def electrum_privkey(seed, n, for_change=0):
-    if len(seed) == 32:
-        seed = electrum_keystretch(seed)
-    mpk = electrum_mpubk(seed)
-    offset = bin_dbl_sha256(from_string_to_bytes("{}:{}:{}".format(n, for_change, binascii.unhexlify(mpk))))
-    return add_privkeys(seed, offset)
+    if lang == 'English': BIP39 = BIP39ENG
+    elif lang == 'Japanese': BIP39 = BIP39JAP
 
-# Accepts (seed or stretched seed or master pubkey), index and secondary index
-# (conventionally 0 for ordinary addresses, 1 for change) , returns pubkey
-def electrum_pubkey(masterkey, n, for_change=0):
-    if len(masterkey) == 32:
-        mpk = electrum_mpubk(electrum_keystretch(masterkey))
-    elif len(masterkey) == 64:
-        mpk = electrum_mpubk(masterkey)
+    hexstr = safe_unhexlify(hexstr)
+    cs = sha256(hexstr)     # sha256 hexdigest
+    bstr = (changebase(safe_hexlify(hexstr), 16, 2, len(hexstr)*8) +
+            changebase(cs, 16, 2, 256)[ : len(hexstr) * 8 // 32])
+    return u" ".join([BIP39[int(x, 2)] for x in [bstr[i:i + 11] for i in range(0, len(bstr), 11)]])
+
+def bip39_mn_to_hex(mnemonic, saltpass='', lang='English'):
+    if isinstance(mnemonic, list):
+        mnemonic = u' '.join(mnemonic)
+
+    if lang in ('English', 'Eng'): BIP39 = BIP39ENG
+    elif lang == ('Japanese', 'JAP', 'Jap'): BIP39 = BIP39JAP
+
+    norm = lambda d: u' '.join(unicodedata.normalize('NFKD', unicode(d)).split())
+    mn_norm_str = norm(mnemonic)
+    saltpass = norm(saltpass)
+
+    assert bip39_check(mn_norm_str, lang=lang)
+    return pbkdf2_hmac_sha512(mn_norm_str.encode('utf-8'), 'mnemonic'+saltpass.encode('utf-8'))
+
+def bip39_check(mnem_phrase, lang='English'):
+    """Assert mnemonic is BIP39ENG standard"""
+    if isinstance(mnem_phrase, string_types):
+        mn_array = unicodedata.normalize('NFKD', unicode(mnem_phrase)).split()
+    elif isinstance(mnem_phrase, list):
+        mn_array = mnem_phrase
     else:
-        mpk = masterkey
-    bin_mpk = encode_pubkey(mpk, 'bin_electrum')
-    offset = bin_dbl_sha256(from_string_to_bytes("{}:{}:{}".format(n, for_change, bin_mpk)))
-    return add_pubkeys('04'+mpk, privtopub(offset))
+        raise TypeError
+    if lang == 'English': BIP39 = BIP39ENG
+    elif lang == 'Japanese': BIP39 = BIP39JAP
 
-# seed/stretched seed/pubkey -> address (convenience method)
-def electrum_address(masterkey, n, for_change=0, version=0):
-    return pubkey_to_address(electrum_pubkey(masterkey, n, for_change), version)
+    assert len(mn_array) in range(3, 124, 3)
 
-# Given a master public key, a private key from that wallet and its index,
-# cracks the secret exponent which can be used to generate all other private
-# keys in the wallet
-def crack_electrum_wallet(mpk, pk, n, for_change=0):
-    bin_mpk = encode_pubkey(mpk, 'bin_electrum')
-    offset = dbl_sha256(str(n)+':'+str(for_change)+':'+bin_mpk)
-    return subtract_privkeys(pk, offset)
+    binstr = ''.join([changebase(st(BIP39.index(x)), 10, 2, 11) for x in mn_array])
+    L = len(binstr)
+    bd = binstr[:L // 33 * 32]
+    cs = binstr[-L // 33:]
+    hexd = safe_unhexlify(changebase(bd, 2, 16, L // 33 * 8))
+    hexd_cs = changebase(hashlib.sha256(hexd).hexdigest(), 16, 2, 256)[:L // 33]
+    return cs == hexd_cs
 
-# Below code ASSUMES binary inputs and compressed pubkeys
-MAINNET_PRIVATE, MAINNET_PUBLIC = b'\x04\x88\xAD\xE4', b'\x04\x88\xB2\x1E'
-TESTNET_PRIVATE, TESTNET_PUBLIC = b'\x04\x35\x83\x94', b'\x04\x35\x87\xCF'
-PRIVATE, PUBLIC = [MAINNET_PRIVATE, TESTNET_PRIVATE], [MAINNET_PUBLIC, TESTNET_PUBLIC]
+def random_bip39_pair(bits=128, lang=None):
+    """Generates a tuple of (hex seed, mnemonic)"""
+    if lang is None: lang = 'English'
+    if bits % 32 != 0:
+        raise Exception('%d not divisible by 32! Try 128 bits' % bits)
+    hexseed = safe_hexlify(by(safe_unhexlify(random_key())[:bits // 8]))       # CHECK FOR PY3
+    return hexseed, bip39_hex_to_mn(hexseed, lang=lang)
 
-# BIP32 child key derivation
-def raw_bip32_ckd(rawtuple, i):
-    vbytes, depth, fingerprint, oldi, chaincode, key = rawtuple
-    i = int(i)
+def random_bip39_seed(bits=128):
+    return random_bip39_pair(bits)[0]
 
-    if vbytes in PRIVATE:
-        priv = key
-        pub = privtopub(key)
+def random_bip39_mn(bits=128, lang=None):
+    if lang is None: lang = 'English'
+    return random_bip39_pair(bits, lang)[-1]
+
+def elec1_mn_decode(mnemonic):
+    """Decodes Electrum 1.x mnemonic phrase to hex seed"""
+    if isinstance(mnemonic, string_types):
+        mn_wordlist = from_str_to_bytes(mnemonic).lower().strip().split(" ")
+    elif isinstance(mnemonic, list):
+        mn_wordlist = mnemonic[:]
+
+    wlist, words, n = mn_wordlist, ELECWORDS, 1626
+    output = ''
+    for i in range(len(wlist)//3):
+        word1, word2, word3 = wlist[3*i:3*i+3]
+        w1 =  words.index(word1)
+        w2 = (words.index(word2))%n
+        w3 = (words.index(word3))%n
+        x = w1 + n*((w2-w1)%n) + n*n*((w3-w2)%n)
+        output += '%08x' % x
+    return output
+
+def elec1_mn_encode(hexstr):
+    if isinstance(hexstr, string_types) and re.match('^[0-9a-fA-F]*$', hexstr):
+        hexstr = from_str_to_bytes(hexstr)
     else:
-        pub = key
+        raise TypeError("Bad input: hex string req!")
 
-    if i >= 2**31:
-        if vbytes in PUBLIC:
-            raise Exception("Can't do private derivation on public key!")
-        I = hmac_sha_512(chaincode, b'\x00'+priv[:32]+encode(i, 256, 4)).digest()
-    else:
-        I = hmac_sha_512(chaincode, pub+encode(i, 256, 4)).digest()
+    message, words, n = hexstr, ELECWORDS, 1626
+    assert len(message) % 8 == 0
+    out = []
+    for i in range(len(message)//8):
+        word = message[8*i:8*i+8]
+        x = int(word, 16)
+        w1 = (x%n)
+        w2 = ((x//n) + w1)%n
+        w3 = ((x//n//n) + w2)%n
+        out += [words[w1], words[w2], words[w3]]
+    return ' '.join(out)
 
-    if vbytes in PRIVATE:
-        newkey = add_privkeys(I[:32] + b'\x01', priv)
-        fingerprint = bin_hash160(privtopub(key))[:4]
-    if vbytes in PUBLIC:
-        newkey = add_pubkeys(compress(privtopub(I[:32])), key)
-        fingerprint = bin_hash160(key)[:4]
+def generate_elec2_seed(num_bits=128, prefix='01', custom_entropy=1):
+    # TODO: https://github.com/spesmilo/electrum/blob/feature/newsync/lib/bitcoin.py#L155
+    import random, math
+    n = int(math.ceil(math.log(custom_entropy, 2)))
+    k = len(prefix)*4                            # amount of lost entropy from '01' req
+    n_added = max(16, k + num_bits - n)          # 136 - lost = 128 bits entropy
+    entropy = random.randrange(pow(2, n_added))  # decode(os.urandom((1+len("%x"%pow(2,n_added))//2)),256)
 
-    return (vbytes, depth + 1, fingerprint, i, I[32:], newkey)
+    nonce = 0
+    while True:     # cycle thru values until HMAC == 0x01...cdef ...
+        nonce += 1
+        i = custom_entropy * (entropy + nonce)
+        mn_seed = elec2_mn_encode(i)
+        assert i == elec2_mn_decode(mn_seed)
+        if is_elec1_seed(mn_seed): continue         # ensure seed NOT elec1 compatible
+        if is_elec2_seed(mn_seed, prefix): break
+    return mn_seed
 
+random_electrum2_seed = random_elec2_seed = generate_elec2_seed
 
-def bip32_serialize(rawtuple):
-    vbytes, depth, fingerprint, i, chaincode, key = rawtuple
-    i = encode(i, 256, 4)
-    chaincode = encode(hash_to_int(chaincode), 256, 32)
-    keydata = b'\x00'+key[:-1] if vbytes in PRIVATE else key
-    bindata = vbytes + from_int_to_byte(depth % 256) + fingerprint + i + chaincode + keydata
-    return changebase(bindata+bin_dbl_sha256(bindata)[:4], 256, 58)
+def elec2_mn_encode(i):
+    """Encodes int, i, as Electrum 2 mnemonic"""
+    n = len(BIP39ENG)
+    words = []
+    while i:
+        x = i%n
+        i //= n
+        words.append(BIP39ENG[x])
+    return ' '.join(words)
 
+def elec2_mn_decode(mn_seed, lang=None):
+    words = prepare_elec2_seed(mn_seed).split()
+    wordlist = BIP39ENG if not lang else BIP39JAP
+    n = 2048
+    i = 0
+    while words:
+        w = words.pop()
+        k = wordlist.index(w)
+        i = i*n + k
+    return i
 
-def bip32_deserialize(data):
-    dbin = changebase(data, 58, 256)
-    if bin_dbl_sha256(dbin[:-4])[:4] != dbin[-4:]:
-        raise Exception("Invalid checksum")
-    vbytes = dbin[0:4]
-    depth = from_byte_to_int(dbin[4])
-    fingerprint = dbin[5:9]
-    i = decode(dbin[9:13], 256)
-    chaincode = dbin[13:45]
-    key = dbin[46:78]+b'\x01' if vbytes in PRIVATE else dbin[45:78]
-    return (vbytes, depth, fingerprint, i, chaincode, key)
+def elec2_check_seed(mn_seed, custom_entropy=1):
+    assert is_elec2_seed(mn_seed)
+    i = elec2_mn_decode(mn_seed)
+    return i % custom_entropy == 0
 
+def is_elec2_seed(seed, prefix='01'):
+    assert prefix in ('01', '101')
+    hmac_sha_512 = lambda x, y: hmac.new(x, y, hashlib.sha512).hexdigest()
+    s = hmac_sha_512('Seed version', seed)
+    return s.startswith(prefix)
 
-def raw_bip32_privtopub(rawtuple):
-    vbytes, depth, fingerprint, i, chaincode, key = rawtuple
-    newvbytes = MAINNET_PUBLIC if vbytes == MAINNET_PRIVATE else TESTNET_PUBLIC
-    return (newvbytes, depth, fingerprint, i, chaincode, privtopub(key))
+def is_elec1_seed(seed):
+    words = seed.strip().split()
+    try:
+        elec1_mn_decode(words)
+        uses_electrum_words = True
+    except Exception:
+        uses_electrum_words = False
+    try:
+        safe_unhexlify(seed)
+        is_hex = (len(seed) == 32 or len(seed) == 64)
+    except Exception:
+        is_hex = False
+    return is_hex or (uses_electrum_words and (len(words) == 12 or len(words) == 24))
 
+def prepare_seed(seed):
+    # normalize
+    seed = unicodedata.normalize('NFKD', unicode(seed))
+    # lower
+    seed = seed.lower()
+    # remove accents
+    seed = u''.join([c for c in seed if not unicodedata.combining(c)])
+    # normalize whitespaces
+    seed = u' '.join(seed.split())
+    # remove whitespaces between CJK
+    seed = u''.join([seed[i] for i in range(len(seed)) if not (seed[i] in string.whitespace and is_CJK(seed[i-1]) and is_CJK(seed[i+1]))])
+    return seed
 
-def bip32_privtopub(data):
-    return bip32_serialize(raw_bip32_privtopub(bip32_deserialize(data)))
+prepare_elec2_seed = prepare_seed
 
+    # # normalize
+    # seed = unicodedata.normalize('NFKD', unicode(seed)) \
+    #     if is_python2 else unicodedata.normalize('NFKD', seed)
+    # seed = seed.lower()         # lower
+    # seed = u''.join([c for c in seed if not unicodedata.combining(c)])  # remove accents
+    # seed = u' '.join(seed.split())          # normalize whitespaces
+    # seed = u''.join([seed[i] for i in range(len(seed))
+    #                 if not (seed[i] in string.whitespace and
+    #                 is_CJK(seed[i-1]) and is_CJK(seed[i+1]))])
+    # return seed
 
-def bip32_ckd(data, i):
-    return bip32_serialize(raw_bip32_ckd(bip32_deserialize(data), i))
+CJK_INTERVALS = [
+    (0x4E00, 0x9FFF, 'CJK Unified Ideographs'),
+    (0x3400, 0x4DBF, 'CJK Unified Ideographs Extension A'),
+    (0x20000, 0x2A6DF, 'CJK Unified Ideographs Extension B'),
+    (0x2A700, 0x2B73F, 'CJK Unified Ideographs Extension C'),
+    (0x2B740, 0x2B81F, 'CJK Unified Ideographs Extension D'),
+    (0xF900, 0xFAFF, 'CJK Compatibility Ideographs'),
+    (0x2F800, 0x2FA1D, 'CJK Compatibility Ideographs Supplement'),
+    (0x3190, 0x319F , 'Kanbun'),
+    (0x2E80, 0x2EFF, 'CJK Radicals Supplement'),
+    (0x2F00, 0x2FDF, 'CJK Radicals'),
+    (0x31C0, 0x31EF, 'CJK Strokes'),
+    (0x2FF0, 0x2FFF, 'Ideographic Description Characters'),
+    (0xE0100, 0xE01EF, 'Variation Selectors Supplement'),
+    (0x3100, 0x312F, 'Bopomofo'),
+    (0x31A0, 0x31BF, 'Bopomofo Extended'),
+    (0xFF00, 0xFFEF, 'Halfwidth and Fullwidth Forms'),
+    (0x3040, 0x309F, 'Hiragana'),
+    (0x30A0, 0x30FF, 'Katakana'),
+    (0x31F0, 0x31FF, 'Katakana Phonetic Extensions'),
+    (0x1B000, 0x1B0FF, 'Kana Supplement'),
+    (0xAC00, 0xD7AF, 'Hangul Syllables'),
+    (0x1100, 0x11FF, 'Hangul Jamo'),
+    (0xA960, 0xA97F, 'Hangul Jamo Extended A'),
+    (0xD7B0, 0xD7FF, 'Hangul Jamo Extended B'),
+    (0x3130, 0x318F, 'Hangul Compatibility Jamo'),
+    (0xA4D0, 0xA4FF, 'Lisu'),
+    (0x16F00, 0x16F9F, 'Miao'),
+    (0xA000, 0xA48F, 'Yi Syllables'),
+    (0xA490, 0xA4CF, 'Yi Radicals'),
+]
 
+def is_CJK(c):
+    # http://www.asahi-net.or.jp/~ax2s-kmtn/ref/unicode/e_asia.html
+    n = ord(c)
+    for i_min, i_max, name in CJK_INTERVALS:
+        if i_max >= n >= i_min:
+            return True
+    return False
 
-def bip32_master_key(seed, vbytes=MAINNET_PRIVATE):
-    I = hmac_sha_512(from_string_to_bytes("Bitcoin seed"), seed).digest()
-    return bip32_serialize((vbytes, 0, b'\x00'*4, 0, I[32:], I[:32]+b'\x01'))
-
-
-def bip32_bin_extract_key(data):
-    return bip32_deserialize(data)[-1]
-
-
-def bip32_extract_key(data):
-    return safe_hexlify(bip32_deserialize(data)[-1])
-
-# Exploits the same vulnerability as above in Electrum wallets
-# Takes a BIP32 pubkey and one of the child privkeys of its corresponding
-# privkey and returns the BIP32 privkey associated with that pubkey
-def raw_crack_bip32_privkey(parent_pub, priv):
-    vbytes, depth, fingerprint, i, chaincode, key = priv
-    pvbytes, pdepth, pfingerprint, pi, pchaincode, pkey = parent_pub
-    i = int(i)
-
-    if i >= 2**31: raise Exception("Can't crack private derivation!")
-
-    I = hmac_sha_512(pchaincode, pkey+encode(i, 256, 4)).digest()
-
-    pprivkey = subtract_privkeys(key, I[:32]+b'\x01')
-
-    newvbytes = MAINNET_PRIVATE if vbytes == MAINNET_PUBLIC else TESTNET_PRIVATE
-    return (newvbytes, pdepth, pfingerprint, pi, pchaincode, pprivkey)
-
-
-def crack_bip32_privkey(parent_pub, priv):
-    dsppub = bip32_deserialize(parent_pub)
-    dspriv = bip32_deserialize(priv)
-    return bip32_serialize(raw_crack_bip32_privkey(dsppub, dspriv))
-
-
-def coinvault_pub_to_bip32(*args):
-    if len(args) == 1:
-        args = args[0].split(' ')
-    vals = map(int, args[34:])
-    I1 = ''.join(map(chr, vals[:33]))
-    I2 = ''.join(map(chr, vals[35:67]))
-    return bip32_serialize((MAINNET_PUBLIC, 0, b'\x00'*4, 0, I2, I1))
-
-
-def coinvault_priv_to_bip32(*args):
-    if len(args) == 1:
-        args = args[0].split(' ')
-    vals = map(int, args[34:])
-    I2 = ''.join(map(chr, vals[35:67]))
-    I3 = ''.join(map(chr, vals[72:104]))
-    return bip32_serialize((MAINNET_PRIVATE, 0, b'\x00'*4, 0, I2, I3+b'\x01'))
-
-
-def bip32_descend(*args):
-    if len(args) == 2 and isinstance(args[1], list):
-        key, path = args
-    else:
-        key, path = args[0], args[1:]
-    try: path = parse_bip32_path(path)
-    except: pass
-    for p in path:
-        key = bip32_ckd(key, p)
-    return bip32_extract_key(key)
-
-def parse_bip32_path(*args):
-    """Takes bip32 path as string "m/0'/2H" or 0' """
-    if len(args)==1:
-        if isinstance(args[0], list):
-            return args[0]
-        path = st(args[0])
-    else:
-        path = '/'.join(map(st, args))
-
-    if path.startswith('m/'): path = path[2:]
-    patharr = []
-    for v in path.split('/'):
-        if v[-1] in ("'H"):
-            v = int(v[:-1]) + 0x80000000
-        if v.strip() == '2**31': v = 2**31
-        v = int(v)
-        patharr.append(v)
-    return patharr
-
-def bip44_descend(*args):
-    # 44'/COINTYPE'/ACCOUNT'/change/index
-    # either 5 args: masterkey, 
-    masterkey, coin, account, change, idx = args[0], args[1:]
-    path = '/'.join(map(st, ["44'", coin, account, change, idx]))
-    path = parse_bip32_path(path)
-    return bip32_descend(masterkey, path)
-
-def bip44_address(*args):
-    return privtoaddr(bip44_descend(args))
-	
-
+def is_CJK_mnem(mn_str):
+    return any([is_CJK(c) for c in mn_str])
