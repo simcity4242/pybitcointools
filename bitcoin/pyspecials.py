@@ -127,7 +127,9 @@ if is_python2:
         return st(a)
 
     from_bytestring_to_str = from_bytes_to_str
-    
+    from_string_to_bytes = from_str_to_bytes
+    from_bytes_to_string = from_bytes_to_str
+
     def short_hex(hexstr):
         if not re.match('^[0-9a-fA-F]*$', hexstr):
             return hexstr
@@ -242,6 +244,8 @@ elif sys.version_info.major == 3:
         return st(a)
 
     from_bytestring_to_str = from_bytes_to_str
+    from_string_to_bytes = from_str_to_bytes
+    from_bytes_to_string = from_bytes_to_str
 
     def short_hex(hexstr):
         if len(hexstr) < 11 or not re.match('^[0-9a-fA-F]*$', hexstr):
