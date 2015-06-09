@@ -1,19 +1,22 @@
+# -*- coding: utf-8 -*-
 import json
 import os
 import random
 import unittest
+import unicodedata
 
-import bitcoin.mnemonic as mnemonic
 from bitcoin import *
-from bitcoin.pyspecials import from_string_to_bytes, from_bytes_to_string
+from bitcoin.mnemonic import bip39_check, bip39_hex_to_mn, bip39_mn_to_hex
+from bitcoin.pyspecials import from_str_to_bytes, from_bytes_to_str, by, st
+from bitcoin.deterministic import bip32_master_key
 
-class TestBIP39(unittest.TestCase):
+class TestBIP39ENG(unittest.TestCase):
 
     # bip39 test vectors (from mnemonic-trezor). Uses password 'TREZOR
 
     @classmethod
     def setUpClass(cls):
-        print('Testing BIP39')
+        print('Testing BIP39ENG')
 
     def test_all(self):
         seed_strs = [
@@ -102,6 +105,24 @@ class TestBIP39(unittest.TestCase):
             self.assertEqual(mnemonic.bip39_hex_to_mn(seed), mnem)
             self.assertEqual(mnemonic.bip39_check(mnem), True)
             self.assertEqual(mnemonic.bip39_mn_to_hex(mnem, 'TREZOR'), target)
+
+
+class TestBIP39JAP(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        print('Accessing \t test_JP_BIP39.json\t ...')
+
+    def test_all(self):
+
+        fo = open("test_JP_BIP39.json", "r").read()
+        BIP39_VECTORS = json.loads(fo)
+
+        for v in BIP39_VECTORS:
+            self.assertTrue(bip39_check(v['mnemonic'], lang='Japanese'))        # check mnemonic valid bip39
+            self.assertEqual(bip39_hex_to_mn(v['entropy'], lang='Japanese'), u' '.join(v['mnemonic'].split()))
+            self.assertEqual(bip39_mn_to_hex(v['mnemonic'], v['passphrase'], lang='Japanese'), v['seed'])
+            self.assertEqual(bip32_master_key(safe_unhexlify(v['seed'])), v['bip32_xprv'])
 
 if __name__ == '__main__':
     unittest.main()
