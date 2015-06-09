@@ -120,13 +120,13 @@ if is_python2:
     #         v = v - (1 << (8*len(bytes)))
     #     return v
 
-    def from_string_to_bytes(a):
+    def from_str_to_bytes(a):
         return by(a)
 
-    def from_bytes_to_string(a):
+    def from_bytes_to_str(a):
         return st(a)
 
-    from_bytestring_to_string = from_bytes_to_string
+    from_bytestring_to_str = from_bytes_to_str
     
     def short_hex(hexstr):
         if not re.match('^[0-9a-fA-F]*$', hexstr):
@@ -235,13 +235,13 @@ elif sys.version_info.major == 3:
     def from_le_bytes_to_int(bstr):
         return int.from_bytes(bstr, 'little')
 
-    def from_string_to_bytes(a):
+    def from_str_to_bytes(a):
         return by(a)
 
-    def from_bytes_to_string(a):
+    def from_bytes_to_str(a):
         return st(a)
 
-    from_bytestring_to_string = from_bytes_to_string
+    from_bytestring_to_str = from_bytes_to_str
 
     def short_hex(hexstr):
         if len(hexstr) < 11 or not re.match('^[0-9a-fA-F]*$', hexstr):
