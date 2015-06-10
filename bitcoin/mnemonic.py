@@ -2,44 +2,49 @@
 
 from bitcoin.main import *
 from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, from_str_to_bytes, st, by, changebase
-import string, unicodedata, random, hmac, re
-from bitcoin._electrum1wordlist import ELECTRUM_WORDS as ELECWORDS
-from bitcoin._bip39wordlist import BIP39ENG
-from bitcoin._bip39japanese import BIP39JAP
-
-global ELECWORDS, BIP39ENG, BIP39JAP
+import string, unicodedata, random, hmac, re, itertools
 
 def _get_directory():
     return os.path.join(os.path.dirname(__file__), 'wordlist')
 
-def _get_wordlists(listname=None):
-    # def _get_wordlists(listtype=None, language=None):
-    # TODO: add foreign languages for BIP39ENG, https://github.com/bitcoin/bips/blob/master/bip-0039/bip-0039-wordlists.md
+def _get_wordlists(language=None):
     # Try to access local lists, otherwise download text lists
     # if any((listtype, language)):
     #     listtype, language = 'BIP39ENG', 'English'
     try:
-        from bitcoin._electrum1wordlist import ELECTRUM_WORDS as ELEC
-        from bitcoin._bip39wordlist import BIP39ENG as BIP39
-        from bitcoin._bip39japanese import BIP39JAP
+        from bitcoin._wordlists import WORDS
     except ImportError:
         from bitcoin.bci import make_request
-        ELEC, BIP39ENG, BIP39JAP, BIP39SPAN, BIP39CHIN1, BIP39CHIN2, BIP39FRE = map(
+        WORDS = {}
+        bips_url = "https://github.com/bitcoin/bips/raw/master/bip-0039/%s.txt"
+        WORDS['electrum1'], WORDS['english'], WORDS['japanese'], WORDS['spanish'], \
+        WORDS['chinese_simplified'], WORDS['chinese_traditional'], WORDS['french'] = map(
             lambda u: make_request(u).strip().split(),
-            ("https://gist.githubusercontent.com/anonymous/f58f57780245db3cafc4/raw/" \
-             + "1b5a9e81c0a356373e9e13aa720baef89d8fa856/electrum1_english_words",
-             "https://github.com/bitcoin/bips/blob/master/bip-0039/english.txt",
-             'https://github.com/bitcoin/bips/blob/master/bip-0039/japanese.txt',
-             "https://github.com/bitcoin/bips/raw/master/bip-0039/spanish.txt",
-             "https://github.com/bitcoin/bips/blob/master/bip-0039/chinese_simplified.txt",
-             "https://github.com/bitcoin/bips/blob/master/bip-0039/chinese_traditional.txt",
-             "https://github.com/bitcoin/bips/blob/master/bip-0039/french.txt"))
-    finally:
-        assert (len(BIP39ENG)==2048 and len(BIP39JAP)==2048) and len(ELEC) == 1626
-    return ELEC, BIP39, BIP39JAP
+            ("http://tinyurl.com/electrum1words",
+             bips_url % 'english',
+             bips_url % 'japanese',
+             bips_url % 'spanish',
+             bips_url % 'chinese_simplified',
+             bips_url % 'chinese_traditional',
+             bips_url % 'french'))
+    assert map(lambda d: isinstance(d, list) and len(d), WORDS.values()).count(2048) == 6
+    global WORDS
+    return WORDS if language is None else WORDS[language.lower()]
 
+WORDS = _get_wordlists()
+ELECWORDS, BIP39ENG, BIP39JAP = WORDS['electrum1'], WORDS['english'], WORDS['japanese']
 
-def bip39_hex_to_mn(hexstr, lang='English'):
+def bip39_detect_language(mnem_str):
+    first = mnem_str.split()[0]
+    languages = set(WORDS.keys())
+    languages.remove('electrum1')
+    languages = list(languages)
+    for lang in languages:
+        if first in WORDS[lang]:
+            return lang
+    raise Exception("Could not detect language")
+
+def bip39_to_mn(hexstr, lang=None):
     if isinstance(hexstr, string_or_bytes_types) and re.match('^[0-9a-fA-F]*$', hexstr):
         hexstr = from_str_to_bytes(hexstr)
     else:
@@ -48,39 +53,75 @@ def bip39_hex_to_mn(hexstr, lang='English'):
     if len(hexstr) not in xrange(4, 125, 4):
         raise Exception("32 < entropy < 992 bits only!")
 
-    if lang == 'English': BIP39 = BIP39ENG
-    elif lang == 'Japanese': BIP39 = BIP39JAP
+    lang = 'english' if lang is None else str(lang)
+    BIP39 = WORDS[lang.lower()]
 
     hexstr = safe_unhexlify(hexstr)
     cs = sha256(hexstr)     # sha256 hexdigest
     bstr = (changebase(safe_hexlify(hexstr), 16, 2, len(hexstr)*8) +
             changebase(cs, 16, 2, 256)[ : len(hexstr) * 8 // 32])
-    return u" ".join([BIP39[int(x, 2)] for x in [bstr[i:i + 11] for i in range(0, len(bstr), 11)]])
+    ret = u" ".join([BIP39[int(x, 2)] for x in [bstr[i:i + 11] for i in range(0, len(bstr), 11)]])
+    if lang.lower() == 'japanese' or bip39_detect_language(ret) == 'japanese':
+        return u"\u3000".join(ret.split())      # '\xe3\x80\x80'
+    return ret
 
-def bip39_mn_to_hex(mnemonic, saltpass='', lang='English'):
+def bip39_to_seed(mnemonic, saltpass=b''):
     if isinstance(mnemonic, list):
         mnemonic = u' '.join(mnemonic)
 
-    if lang in ('English', 'Eng'): BIP39 = BIP39ENG
-    elif lang == ('Japanese', 'JAP', 'Jap'): BIP39 = BIP39JAP
+    #lang = bip39_detect_language(mnemonic)
+    #BIP39 = WORDS[lang]
 
-    norm = lambda d: u' '.join(unicodedata.normalize('NFKD', unicode(d)).split())
+    norm = lambda d: ' '.join(unicodedata.normalize('NFKD', unicode(d)).split())
     mn_norm_str = norm(mnemonic)
     saltpass = norm(saltpass)
 
-    assert bip39_check(mn_norm_str, lang=lang)
+    assert bip39_check(mn_norm_str)
     return pbkdf2_hmac_sha512(mn_norm_str.encode('utf-8'), 'mnemonic'+saltpass.encode('utf-8'))
 
-def bip39_check(mnem_phrase, lang='English'):
-    """Assert mnemonic is BIP39ENG standard"""
+def bip39_to_entropy(mnem_str):
+    mnem_arr = mnem_str.split()
+    lang = bip39_detect_language(mnem_str)
+    BIP39 = WORDS[lang.lower()]
+    assert len(mnem_arr) % 3 == 0
+
+    concatLenBits = len(mnem_arr) * 11
+    concatBits = [False] * concatLenBits
+    wordindex = 0
+    for word in mnem_arr:
+        ndx = BIP39.index(word)
+        for ii in range(11):
+            concatBits[(wordindex * 11) + ii] = (ndx & (1 << (10 - ii))) != 0
+        wordindex += 1
+    checksumLengthBits = concatLenBits // 33
+    entropyLengthBits = concatLenBits - checksumLengthBits
+
+    entropy = bytearray(entropyLengthBits // 8)
+    for ii in range(len(entropy)):
+        for jj in range(8):
+            if concatBits[(ii * 8) + jj]:
+                entropy[ii] |= 1 << (7 - jj)
+
+    hashBytes = hashlib.sha256(entropy).digest()
+    hashBits = list(itertools.chain.from_iterable(( [ ord(c) & (1 << (7 - i)) != 0 for i in range(8) ] for c in hashBytes )))
+
+    for i in range(checksumLengthBits):
+        if concatBits[entropyLengthBits + i] != hashBits[i]:
+            raise ValueError('Failed Checksum')
+    return safe_hexlify(bytes(entropy))
+
+
+def bip39_check(mnem_phrase):
+    """Assert mnemonic is BIP39 standard"""
     if isinstance(mnem_phrase, string_types):
         mn_array = unicodedata.normalize('NFKD', unicode(mnem_phrase)).split()
     elif isinstance(mnem_phrase, list):
         mn_array = mnem_phrase
     else:
         raise TypeError
-    if lang == 'English': BIP39 = BIP39ENG
-    elif lang == 'Japanese': BIP39 = BIP39JAP
+
+    lang = bip39_detect_language(mnem_phrase)
+    BIP39 = WORDS[lang.lower()]
 
     assert len(mn_array) in range(3, 124, 3)
 
@@ -94,17 +135,17 @@ def bip39_check(mnem_phrase, lang='English'):
 
 def random_bip39_pair(bits=128, lang=None):
     """Generates a tuple of (hex seed, mnemonic)"""
-    if lang is None: lang = 'English'
+    if lang is None: lang = 'english'
     if bits % 32 != 0:
         raise Exception('%d not divisible by 32! Try 128 bits' % bits)
-    hexseed = safe_hexlify(by(safe_unhexlify(random_key())[:bits // 8]))       # CHECK FOR PY3
-    return hexseed, bip39_hex_to_mn(hexseed, lang=lang)
+    hexseed = safe_hexlify(by(safe_unhexlify(random_key()+random_key())[:bits // 8]))
+    return hexseed, bip39_to_mn(hexseed, lang=lang)
 
 def random_bip39_seed(bits=128):
     return random_bip39_pair(bits)[0]
 
 def random_bip39_mn(bits=128, lang=None):
-    if lang is None: lang = 'English'
+    if lang is None: lang = 'english'
     return random_bip39_pair(bits, lang)[-1]
 
 def elec1_mn_decode(mnemonic):
@@ -114,7 +155,7 @@ def elec1_mn_decode(mnemonic):
     elif isinstance(mnemonic, list):
         mn_wordlist = mnemonic[:]
 
-    wlist, words, n = mn_wordlist, ELECWORDS, 1626
+    wlist, words, n = mn_wordlist, WORDS['electrum1'], 1626
     output = ''
     for i in range(len(wlist)//3):
         word1, word2, word3 = wlist[3*i:3*i+3]
@@ -131,7 +172,7 @@ def elec1_mn_encode(hexstr):
     else:
         raise TypeError("Bad input: hex string req!")
 
-    message, words, n = hexstr, ELECWORDS, 1626
+    message, words, n = hexstr, WORDS['electrum1'], 1626
     assert len(message) % 8 == 0
     out = []
     for i in range(len(message)//8):
@@ -175,7 +216,7 @@ def elec2_mn_encode(i):
 
 def elec2_mn_decode(mn_seed, lang=None):
     words = prepare_elec2_seed(mn_seed).split()
-    wordlist = BIP39ENG if not lang else BIP39JAP
+    wordlist = WORDS['english'] if not lang else WORDS[lang.lower()]
     n = 2048
     i = 0
     while words:
@@ -274,6 +315,3 @@ def is_CJK(c):
         if i_max >= n >= i_min:
             return True
     return False
-
-def is_CJK_mnem(mn_str):
-    return any([is_CJK(c) for c in mn_str])
