@@ -6,7 +6,6 @@ from bitcoin.main import *
 from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, by, st
 
 # https://gist.github.com/b22e178cff75c4b432a8
-# https://gist.githubusercontent.com/simcity4242/99f4d672ade5d73afb9d/raw/573e487f1344578b8872e50873ad5ca9f36d8b33/ios.py
 
 # Returns byte string value, not hex string
 def varint(n):
@@ -15,7 +14,7 @@ def varint(n):
     elif n < 0xffff:
         return struct.pack('<cH', '\xfd', n)
     elif n < 0xffffffff:
-        return struct.pack('<cL', '\xfe', n)
+        return struct.pack('<cI', '\xfe', n)
     else:
         return struct.pack('<cQ', '\xff', n)
 
@@ -27,7 +26,8 @@ def privtopubkey(s, compressed=False):
     # accepts hex encoded (sec) key, returns hex pubkey
     sk = ecdsa.SigningKey.from_string(safe_unhexlify(s), curve=ecdsa.SECP256k1)
     if compressed:
-        return ('02' if int(safe_hexlify(sk.verifying_key.to_string()),16) % 2 == 0  else '03') + safe_hexlify(sk.verifying_key.to_string())
+        return '%02x'% (2+(int(safe_hexlify(sk.verifying_key.to_string()),16) & 1)) \
+               + safe_hexlify(sk.verifying_key.to_string())
     return "04" + safe_hexlify(sk.verifying_key.to_string())		
 
 
@@ -54,7 +54,7 @@ def signTx(rawtx, privkey, scriptpubkey, hashcode=1):
     s256 = hashlib.sha256(hashlib.sha256(rawtx.decode('hex')).digest()).digest()
     sk = ecdsa.SigningKey.from_string(privkey.decode('hex'), curve=ecdsa.SECP256k1)
     sig = sk.sign_digest(s256, sigencode=ecdsa.util.sigencode_der) + '\01' # 01 is hashtype
-    pubKey = priv2pub(privkey)
+    pubKey = privtopubkey(privkey)
     scriptSig = safe_hexlify(varstr(sig)) + safe_hexlify(varstr(safe_unhexlify(pubKey)))
     return scriptSig
 
