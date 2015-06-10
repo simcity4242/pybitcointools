@@ -107,16 +107,29 @@ Fun stuff with json:
 
 * random_key           : () -> privkey
 * random_electrum_seed : () -> electrum seed
+* random_elec2_seed    : () -> electrum seed
+* random_bip39_seed    :
+* random_bip39_mn      :
+* random_mini_key      :
+
 
 * electrum_stretch     : (seed) -> secret exponent
 * electrum_privkey     : (seed or secret exponent, i, type) -> privkey
 * electrum_mpk         : (seed or secret exponent) -> master public key
 * electrum_pubkey      : (seed or secexp or mpk) -> pubkey
+* elec1_mn_decode      :
+* elec1_mn_encode      :
+* elec2_mn_decode      :
+* elec2_mn_encode      :
 
 * bip32_master_key     : (seed) -> bip32 master key
 * bip32_ckd            : (private or public bip32 key, i) -> child key
 * bip32_privtopub      : (private bip32 key) -> public bip32 key
 * bip32_extract_key    : (private or public bip32_key) -> privkey or pubkey
+
+* bip39_hex_to_mn      :
+* bip39_check          :
+* bip39_mn_to_hex      :
 
 * deserialize          : (hex or bin transaction) -> JSON tx
 * serialize            : (JSON tx) -> hex or bin tx
@@ -140,3 +153,7 @@ Fun stuff with json:
 * slice                : (json list, start, end) -> given slice of the list
 * count                : (json list) -> number of elements
 * sum                  : (json list) -> sum of all values
+
+* get_block_coinbase   : Return block's coinbase field (if any)
+* encode_file          : encode binary file into blockchain
+* bip44_address
