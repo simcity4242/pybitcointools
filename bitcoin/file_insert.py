@@ -1,4 +1,4 @@
-import io, struct, os, sys
+import io, struct, os, sys, math
 from binascii import crc32, unhexlify, hexlify
 from bitcoin.main import *
 from bitcoin.bci import unspent, blockr_unspent, blockr_pushtx, blockr_fetchtx, eligius_pushtx, helloblock_unspent, bci_unspent
@@ -36,16 +36,13 @@ def mk_txouts(fo, value=None, jsonfmt=1):
     return ''.join([(safe_hexlify(struct.pack('<Q', value)) +
                      str(wrap_script(x['script']))) for x in txouts])
 
-def file_insert(filename, value=None, jsonfmt=1):
-    """Encode filename into the blockchain using multisig addresses"""
-    # TODO: sum (outsputs*547) + (10000*kBytes)
-    try:
-        fileobj = open(filename, 'rb').read()
-    except:
-        raise Exception("can't find file!")
+def mk_binary_txouts(filename, value=None, jsonfmt=1):
+    """Encode file into the blockchain (with prepended file length, crc32) using multisig addresses"""
+    try: fileobj = open(filename, 'rb').read()
+    except: raise Exception("can't find file!")
 
-    data = struct.pack('<L', len(fileobj)) + \
-           struct.pack('<L', crc32(fileobj)) + fileobj
+    data = struct.pack('<I', len(fileobj)) + \
+           struct.pack('<I', crc32(fileobj) & 0xffffffff) + fileobj
     fd = io.BytesIO(data)
     TXOUTS = mk_txouts(fd, value, jsonfmt)
     if jsonfmt:
@@ -53,14 +50,21 @@ def file_insert(filename, value=None, jsonfmt=1):
     return wrap_varint(TXOUTS)
 
 def encode_file(filename, privkey, value=None, input_address=None, network=None):
-    network = 'testnet' if network is None else network
-    if input_address is not None:
-        u = blockr_unspent(input_address, 'testnet')
-    if not value: value = 547
-    OUTS = file_insert(filename, value)
-    TXFEE = int(1.1 * (10000*os.path.getsize(filename)/1000))
+    """Takes binary file, returns signed Tx"""
+    if not network:
+        network = 'testnet'
+
+    if input_address is None:
+        input_address = privtoaddr(privkey, 111) if network == 'testnet' else privtoaddr(privkey)
+
+    u = blockr_unspent(input_address, 'testnet') if network == 'testnet' else unspent(input_address)
+    value = 547 if value is None else int(value)
+
+    TXFEE = math.ceil(1.1 * (10000*os.path.getsize(filename)/1000))
+    OUTS = mk_binary_txouts(filename, value)
     TOTALFEE = TXFEE + int(value)*len(OUTS)
-    INS = select(u, TXFEE)
+    INS = select(u, TOTALFEE)
+
     rawtx = mksend(INS, OUTS, input_address, TXFEE)
     signedtx = sign(rawtx, 0, privkey, 1)
     return signedtx
@@ -68,7 +72,7 @@ def encode_file(filename, privkey, value=None, input_address=None, network=None)
 # if __name__ == '__main__':
 #     import sys, os
 #     if len(sys.argv) < 2: 
-#         print("file_insert.py FILENAME OUTPUT_VALUE [INPUT_ADDRESS]")
+#         print("mk_binary_txouts.py FILENAME OUTPUT_VALUE [INPUT_ADDRESS]")
 #     elif len(sys.argv) == 3:
 #         filename = sys.argv[-1]     # TODO: check file exists
 #     elif len(sys.argv) == 4:
