@@ -6,7 +6,7 @@ import unittest
 import unicodedata
 
 from bitcoin import *
-from bitcoin.mnemonic import bip39_check, bip39_hex_to_mn, bip39_mn_to_hex
+from bitcoin.mnemonic import bip39_check, bip39_to_mn, bip39_to_seed
 from bitcoin.pyspecials import from_str_to_bytes, from_bytes_to_str, by, st
 from bitcoin.deterministic import bip32_master_key
 
@@ -102,10 +102,27 @@ class TestBIP39ENG(unittest.TestCase):
 
         for v in zip(seed_strs, mnem_strs, target_strs):
             seed, mnem, target = v
-            self.assertEqual(mnemonic.bip39_hex_to_mn(seed), mnem)
-            self.assertEqual(mnemonic.bip39_check(mnem), True)
-            self.assertEqual(mnemonic.bip39_mn_to_hex(mnem, 'TREZOR'), target)
+            self.assertEqual(mnemonic.bip39_to_mn(seed), mnem)
+            self.assertTrue(mnemonic.bip39_check(mnem))
+            self.assertEqual(mnemonic.bip39_to_seed(mnem, 'TREZOR'), target)
 
+
+class TestBIP39English(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        print('Accessing \t test_EN_BIP39.json\t ...')
+
+    def test_all(self):
+
+        fo = open("test_EN_BIP39.json", "r").read()
+        BIP39_VECTORS = json.loads(fo)
+
+        for v in BIP39_VECTORS:
+            self.assertTrue(bip39_check(v['mnemonic']))
+            self.assertEqual(bip39_to_mn(v['entropy'], lang='English'), v['mnemonic'])
+            self.assertEqual(bip39_to_seed(v['mnemonic'], v['passphrase']), v['seed'])
+            self.assertEqual(bip32_master_key(safe_unhexlify(v['seed'])), v['bip32_xprv'])
 
 class TestBIP39JAP(unittest.TestCase):
 
@@ -119,9 +136,9 @@ class TestBIP39JAP(unittest.TestCase):
         BIP39_VECTORS = json.loads(fo)
 
         for v in BIP39_VECTORS:
-            self.assertTrue(bip39_check(v['mnemonic'], lang='Japanese'))        # check mnemonic valid bip39
-            self.assertEqual(bip39_hex_to_mn(v['entropy'], lang='Japanese'), u' '.join(v['mnemonic'].split()))
-            self.assertEqual(bip39_mn_to_hex(v['mnemonic'], v['passphrase'], lang='Japanese'), v['seed'])
+            self.assertTrue(bip39_check(v['mnemonic']))        # check mnemonic valid bip39
+            self.assertEqual(bip39_to_mn(v['entropy'], lang='Japanese'), v['mnemonic'])
+            self.assertEqual(bip39_to_seed(v['mnemonic'], v['passphrase']), v['seed'])
             self.assertEqual(bip32_master_key(safe_unhexlify(v['seed'])), v['bip32_xprv'])
 
 if __name__ == '__main__':
