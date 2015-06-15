@@ -5,6 +5,9 @@ import struct
 from bitcoin.main import *
 from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, by, st
 
+# 
+# PLEASE NOTE THIS CODE IS UNFINISHED AND IS ONLY MEANT FOR PYTHONISTA ON IOS
+# 
 # https://gist.github.com/b22e178cff75c4b432a8
 
 # Returns byte string value, not hex string
