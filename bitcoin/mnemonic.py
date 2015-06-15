@@ -2,19 +2,19 @@
 
 from bitcoin.main import *
 from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, from_str_to_bytes, st, by, changebase
-import string, unicodedata, random, hmac, re, itertools
+import string, unicodedata, random, hmac, re
 try:
     from bitcoin._wordlists import WORDS
 except ImportError:
-    WORDS = _get_wordlists()
+    raise Exception # WORDS = _get_wordlists()  #ERROR UNRESOLVED
 
 def _get_directory():
     return os.path.join(os.path.dirname(__file__), 'wordlist')
 
-def _get_wordlists(language=None):
+def _get_wordlists(lang=None):
     # Try to access local lists, otherwise download text lists
-    # if any((listtype, language)):
-    #     listtype, language = 'BIP39ENG', 'English'
+    # if any((listtype, lang)):
+    #     listtype, lang = 'BIP39ENG', 'English'
     from bitcoin.bci import make_request
     global WORDS
     WORDS = {}
@@ -29,17 +29,17 @@ def _get_wordlists(language=None):
          bips_url % 'chinese_simplified',
          bips_url % 'chinese_traditional',
          bips_url % 'french'))
-    assert map(lambda d: isinstance(d, list) and len(d), WORDS.values()).count(2048) == 6
-    return WORDS if language is None else WORDS[language.lower()]
+    assert map(lambda d: isinstance(d, list) and len(d), WORDS.values()).count(2048) == len(WORDS.keys()) - 1
+    return WORDS if lang is None else WORDS[lang.lower()]
 
 #WORDS = _get_wordlists()
 #ELECWORDS, BIP39ENG, BIP39JAP = WORDS['electrum1'], WORDS['english'], WORDS['japanese']
 
-def bip39_detect_language(mnem_str):
+def bip39_detect_lang(mnem_str):
     # TODO: add Electrum1?
-    # FIX FRENCH FUCK-UPS
     if isinstance(mnem_str, list):
         mnem_str = u' '.join(mnem_str)
+    # need to check >1 words since French shares ~100 words w/ English (wtf?!)
     first, last = mnem_str.split()[0], mnem_str.split()[-1]
     languages = set(WORDS.keys())
     languages.remove('electrum1')
@@ -64,17 +64,21 @@ def bip39_to_mn(hexstr, lang=None):
     cs = sha256(hexstr)     # sha256 hexdigest
     bstr = (changebase(safe_hexlify(hexstr), 16, 2, len(hexstr)*8) +
             changebase(cs, 16, 2, 256)[ : len(hexstr) * 8 // 32])
-    ret = u" ".join([BIP39[int(x, 2)] for x in [bstr[i:i + 11] for i in range(0, len(bstr), 11)]])
-    if lang.lower() == 'japanese' or bip39_detect_language(ret) == 'japanese':
-        return u"\u3000".join(ret.split())      # '\xe3\x80\x80'
-    return ret
+    #ret = u" ".join([BIP39[int(x, 2)] for x in [bstr[i:i + 11] for i in range(0, len(bstr), 11)]])
+    wordarr = []
+    for i in range(0, len(bstr), 11):
+        wordarr.append( BIP39[ int(bstr[i:i+11], 2)] )
+    return u'\u3000'.join(wordarr) if lang == 'japanese' else u' '.join(wordarr)
+    #if lang.lower() == 'japanese' or bip39_detect_lang(ret) == 'japanese':
+    #    return u"\u3000".join(ret.split())      # '\xe3\x80\x80'
+    #return ret
 
 def bip39_to_seed(mnemonic, saltpass=b''):
     """BIP39 mnemonic (& optional password) to seed"""
     if isinstance(mnemonic, list):
         mnemonic = u' '.join(mnemonic)
 
-    #lang = bip39_detect_language(mnemonic)
+    #lang = bip39_detect_lang(mnemonic)
     #BIP39 = WORDS[lang]
 
     norm = lambda d: ' '.join(unicodedata.normalize('NFKD', unicode(d)).split())
@@ -86,37 +90,25 @@ def bip39_to_seed(mnemonic, saltpass=b''):
 
 def bip39_to_entropy(mnem_str):
     """BIP39 mnemonic back to entropy"""
+    # https://gist.github.com/simcity4242/034fd84230864d91e146 = Java inspired code
+    # changebase(''.join(map(lambda d: changebase(str(d), 10, 2, 11), [WORDS['english'].index(w) for w in mnem_str.split()]))[:128], 2, 16)
     mnem_arr = mnem_str.split()
-    lang = bip39_detect_language(mnem_str)
+    lang = bip39_detect_lang(mnem_str)
     BIP39 = WORDS[lang.lower()]
     assert len(mnem_arr) % 3 == 0
-
-    concatLenBits = len(mnem_arr) * 11
-    concatBits = [False] * concatLenBits
-    wordindex = 0
-    for word in mnem_arr:
-        ndx = BIP39.index(word)
-        # Set the next 11 bits to the value of the index.
-        for ii in range(11):
-            concatBits[(wordindex * 11) + ii] = (ndx & (1 << (10 - ii))) != 0
-        wordindex += 1
-    checksumLengthBits = concatLenBits // 33
-    entropyLengthBits = concatLenBits - checksumLengthBits
-
-    entropy = bytearray(entropyLengthBits // 8)
-    for ii in range(len(entropy)):
-        for jj in range(8):
-            if concatBits[(ii * 8) + jj]:
-                entropy[ii] |= 1 << (7 - jj)
-
-    hashBytes = hashlib.sha256(entropy).digest()
-    hashBits = list(itertools.chain.from_iterable(( [ ord(c) & (1 << (7 - i)) != 0 for i in range(8) ] for c in hashBytes )))
-
-    for i in range(checksumLengthBits):
-        if concatBits[entropyLengthBits + i] != hashBits[i]:
-            raise ValueError('Failed Checksum')
-    return safe_hexlify(bytes(entropy))
-
+    
+    L = len(mnem_arr) * 11
+    indexes = [BIP39.index(w) for w in mnem_arr]	# word indexes (int)
+    bindexes = map(lambda d: changebase(st(d), 10, 2, 11), indexes)
+    binstr = ''.join(bindexes)
+    
+    bd = binstr[:L // 33 * 32]
+    cs = binstr[-L // 33:]
+    hexd = safe_unhexlify(changebase(bd, 2, 16, L // 33 * 8))
+    hexd_cs = changebase(sha256(hexd), 16, 2, 256)[:L // 33]
+    if hexd_cs == cs:
+        return safe_hexlify(hexd)
+    raise Exception("Checksums don't match!!")
 
 def bip39_check(mnem_phrase):
     """Assert mnemonic is BIP39 standard"""
@@ -127,7 +119,7 @@ def bip39_check(mnem_phrase):
     else:
         raise TypeError
 
-    lang = bip39_detect_language(mnem_phrase)
+    lang = bip39_detect_lang(mnem_phrase)
     BIP39 = WORDS[lang.lower()]
 
     assert len(mn_array) in range(3, 124, 3)
@@ -143,9 +135,10 @@ def bip39_check(mnem_phrase):
 def random_bip39_pair(bits=128, lang=None):
     """Generates a tuple of (entropy, mnemonic)"""
     lang = 'english' if lang is None else str(lang)
-    if bits % 32 != 0:
+    if int(bits) % 32 != 0:
         raise Exception('%d not divisible by 32! Try 128 bits' % bits)
-    hexseed = safe_hexlify(by(safe_unhexlify(random_key()+random_key())[:bits // 8]))
+    hexseed = safe_hexlify(by(safe_unhexlify(
+                            random_key()+random_key())[:bits // 8]))
     return hexseed, bip39_to_mn(hexseed, lang=lang)
 
 def random_bip39_seed(bits=128):
@@ -162,7 +155,7 @@ def elec1_mn_decode(mnemonic):
     elif isinstance(mnemonic, list):
         mn_wordlist = mnemonic[:]
 
-    wlist, words, n = mn_wordlist, WORDS['electrum1'], 1626
+    wlist, words, n = mn_wordlist, WORDS['electrum1'], len(WORDS['electrum1'])
     output = ''
     for i in range(len(wlist)//3):
         word1, word2, word3 = wlist[3*i:3*i+3]
@@ -174,13 +167,11 @@ def elec1_mn_decode(mnemonic):
     return output
 
 def elec1_mn_encode(hexstr):
-    if isinstance(hexstr, string_types) and re.match('^[0-9a-fA-F]*$', hexstr):
-        hexstr = from_str_to_bytes(hexstr)
-    else:
+    if not isinstance(hexstr, string_types) or not re.match('^[0-9a-fA-F]*$', hexstr):
         raise TypeError("Bad input: hex string req!")
-
-    message, words, n = hexstr, WORDS['electrum1'], 1626
-    assert len(message) % 8 == 0
+    hexstr = from_str_to_bytes(hexstr)
+    message, words, n = hexstr, WORDS['electrum1'], len(WORDS['electrum1'])
+    assert len(message) % 8 == 0 and n == 1626
     out = []
     for i in range(len(message)//8):
         word = message[8*i:8*i+8]
@@ -191,6 +182,7 @@ def elec1_mn_encode(hexstr):
         out += [words[w1], words[w2], words[w3]]
     return ' '.join(out)
 
+# https://gist.github.com/simcity4242/94a5c32b66e52834ae71
 def generate_elec2_seed(num_bits=128, prefix='01', custom_entropy=1):
     # TODO: https://github.com/spesmilo/electrum/blob/feature/newsync/lib/bitcoin.py#L155
     import random, math
@@ -213,12 +205,12 @@ random_electrum2_seed = random_elec2_seed = generate_elec2_seed
 
 def elec2_mn_encode(i):
     """Encodes int, i, as Electrum 2 mnemonic"""
-    n = len(BIP39ENG)
+    n = len(WORDS['english'])
     words = []
     while i:
         x = i%n
         i //= n
-        words.append(BIP39ENG[x])
+        words.append(WORDS['english'][x])
     return ' '.join(words)
 
 def elec2_mn_decode(mn_seed, lang=None):
