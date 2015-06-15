@@ -112,7 +112,6 @@ Fun stuff with json:
 * random_bip39_mn      :
 * random_mini_key      :
 
-
 * electrum_stretch     : (seed) -> secret exponent
 * electrum_privkey     : (seed or secret exponent, i, type) -> privkey
 * electrum_mpk         : (seed or secret exponent) -> master public key
@@ -121,15 +120,19 @@ Fun stuff with json:
 * elec1_mn_encode      :
 * elec2_mn_decode      :
 * elec2_mn_encode      :
+* random_elec2_seed    :
 
 * bip32_master_key     : (seed) -> bip32 master key
 * bip32_ckd            : (private or public bip32 key, i) -> child key
 * bip32_privtopub      : (private bip32 key) -> public bip32 key
 * bip32_extract_key    : (private or public bip32_key) -> privkey or pubkey
 
-* bip39_hex_to_mn      :
+* bip39_to_mn          :
+* bip39_to_seed        :
+* bip39_to_entropy     :
 * bip39_check          :
-* bip39_mn_to_hex      :
+* bip39_detect_lang    :
+* random_bip39_mn      :
 
 * deserialize          : (hex or bin transaction) -> JSON tx
 * serialize            : (JSON tx) -> hex or bin tx
@@ -156,4 +159,5 @@ Fun stuff with json:
 
 * get_block_coinbase   : Return block's coinbase field (if any)
 * encode_file          : encode binary file into blockchain
-* bip44_address
+* bip44_address        :
+* mk_opreturn          :
