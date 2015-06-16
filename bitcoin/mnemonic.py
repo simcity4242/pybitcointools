@@ -8,8 +8,8 @@ try:
 except ImportError:
     raise Exception # WORDS = _get_wordlists()  #ERROR UNRESOLVED
 
-def _get_directory():
-    return os.path.join(os.path.dirname(__file__), 'wordlist')
+#def _get_directory():
+#    return os.path.join(os.path.dirname(__file__), 'wordlist')
 
 def _get_wordlists(lang=None):
     # Try to access local lists, otherwise download text lists
@@ -47,7 +47,7 @@ def bip39_detect_lang(mnem_str):
     for lang in languages:
         if (first in WORDS[lang]) and (last in WORDS[lang]):
             return lang
-    raise Exception("Could not detect language")
+    return None 	#raise Exception("Could not detect language")
 
 def bip39_to_mn(hexstr, lang=None):
     """BIP39 entropy to mnemonic (language optional)"""
@@ -64,14 +64,10 @@ def bip39_to_mn(hexstr, lang=None):
     cs = sha256(hexstr)     # sha256 hexdigest
     bstr = (changebase(safe_hexlify(hexstr), 16, 2, len(hexstr)*8) +
             changebase(cs, 16, 2, 256)[ : len(hexstr) * 8 // 32])
-    #ret = u" ".join([BIP39[int(x, 2)] for x in [bstr[i:i + 11] for i in range(0, len(bstr), 11)]])
     wordarr = []
     for i in range(0, len(bstr), 11):
         wordarr.append( BIP39[ int(bstr[i:i+11], 2)] )
     return u'\u3000'.join(wordarr) if lang == 'japanese' else u' '.join(wordarr)
-    #if lang.lower() == 'japanese' or bip39_detect_lang(ret) == 'japanese':
-    #    return u"\u3000".join(ret.split())      # '\xe3\x80\x80'
-    #return ret
 
 def bip39_to_seed(mnemonic, saltpass=b''):
     """BIP39 mnemonic (& optional password) to seed"""
@@ -110,7 +106,7 @@ def bip39_to_entropy(mnem_str):
         return safe_hexlify(hexd)
     raise Exception("Checksums don't match!!")
 
-def bip39_check(mnem_phrase):
+def bip39_check(mnem_phrase, lang=None):
     """Assert mnemonic is BIP39 standard"""
     if isinstance(mnem_phrase, string_types):
         mn_array = unicodedata.normalize('NFKD', unicode(mnem_phrase)).split()
@@ -120,6 +116,7 @@ def bip39_check(mnem_phrase):
         raise TypeError
 
     lang = bip39_detect_lang(mnem_phrase)
+    lang = 'english' if lang is None else str(lang)
     BIP39 = WORDS[lang.lower()]
 
     assert len(mn_array) in range(3, 124, 3)
@@ -264,16 +261,6 @@ def prepare_seed(seed):
 
 prepare_elec2_seed = prepare_seed
 
-    # # normalize
-    # seed = unicodedata.normalize('NFKD', unicode(seed)) \
-    #     if is_python2 else unicodedata.normalize('NFKD', seed)
-    # seed = seed.lower()         # lower
-    # seed = u''.join([c for c in seed if not unicodedata.combining(c)])  # remove accents
-    # seed = u' '.join(seed.split())          # normalize whitespaces
-    # seed = u''.join([seed[i] for i in range(len(seed))
-    #                 if not (seed[i] in string.whitespace and
-    #                 is_CJK(seed[i-1]) and is_CJK(seed[i+1]))])
-    # return seed
 
 CJK_INTERVALS = [
     (0x4E00, 0x9FFF, 'CJK Unified Ideographs'),
