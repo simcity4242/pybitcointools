@@ -1,10 +1,16 @@
+# -*- coding: utf-8 -*-
+
 import json
 import os
 import random
 import unittest
+import unicodedata
 
-import bitcoin.ripemd as ripemd
 from bitcoin import *
+import bitcoin.ripemd as ripemd
+from bitcoin.mnemonic import bip39_check, bip39_to_mn, bip39_to_seed
+from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, st, by, from_str_to_bytes, from_bytes_to_str
+from bitcoin.deterministic import electrum_mpubk, bip32_master_key
 
 
 class TestECCArithmetic(unittest.TestCase):
@@ -85,7 +91,7 @@ class TestElectrumWalletInternalConsistency(unittest.TestCase):
     def test_all(self):
         for i in range(3):
             seed = sha256(str(random.randrange(2**40)))[:32]
-            mpk = electrum_mpk(seed)
+            mpk = electrum_mpubk(seed)
             for i in range(5):
                 pk = electrum_privkey(seed, i)
                 pub = electrum_pubkey((mpk, seed)[i % 2], i)
@@ -99,58 +105,58 @@ class TestElectrumWalletInternalConsistency(unittest.TestCase):
                 )
 
 
-class TestElectrumSignVerify(unittest.TestCase):
-    """Requires Electrum."""
-
-    @classmethod
-    def setUpClass(cls):
-        cls.wallet = "/tmp/tempwallet_" + str(random.randrange(2**40))
-        print("Starting wallet tests with: " + cls.wallet)
-        os.popen('echo "\n\n\n\n\n\n" | electrum -w %s create' % cls.wallet).read()
-        cls.seed = str(json.loads(os.popen("electrum -w %s getseed" % cls.wallet).read())['seed'])
-        cls.addies = json.loads(os.popen("electrum -w %s listaddresses" % cls.wallet).read())
-
-    def test_address(self):
-        for i in range(5):
-            self.assertEqual(
-                self.addies[i],
-                electrum_address(self.seed, i, 0),
-                "Address does not match! Details:\nseed %s, i: %d" % (self.seed, i)
-            )
-
-    def test_sign_verify(self):
-        print("Electrum-style signing and verification tests, against actual Electrum")
-        alphabet = "1234567890qwertyuiopasdfghjklzxcvbnm"
-        for i in range(8):
-            msg = ''.join([random.choice(alphabet) for i in range(random.randrange(20, 200))])
-            addy = random.choice(self.addies)
-            wif = os.popen('electrum -w %s dumpprivkey %s' % (self.wallet, addy)).readlines()[-2].replace('"', '').strip()
-            priv = b58check_to_hex(wif)
-            pub = privtopub(priv)
-
-            sig = os.popen('electrum -w %s signmessage %s %s' % (self.wallet, addy, msg)).readlines()[-1].strip()
-            self.assertTrue(
-                ecdsa_verify(msg, sig, pub),
-                "Verification error. Details:\nmsg: %s\nsig: %s\npriv: %s\naddy: %s\npub: %s" % (
-                    msg, sig, priv, addy, pub
-                )
-            )
-
-            rec = ecdsa_recover(msg, sig)
-            self.assertEqual(
-                pub,
-                rec,
-                "Recovery error. Details:\nmsg: %s\nsig: %s\npriv: %s\naddy: %s\noriginal pub: %s, %s\nrecovered pub: %s" % (
-                    msg, sig, priv, addy, pub, decode_pubkey(pub, 'hex')[1], rec
-                )
-            )
-
-            mysig = ecdsa_sign(msg, priv)
-            self.assertEqual(
-                os.popen('electrum -w %s verifymessage %s %s %s' % (self.wallet, addy, mysig, msg)).read().strip(),
-                "true",
-                "Electrum verify message does not match"
-            )
+# class TestElectrumSignVerify(unittest.TestCase):
+#     """Requires Electrum."""
+#
+#     @classmethod
+#     def setUpClass(cls):
+#         cls.wallet = "/tmp/tempwallet_" + str(random.randrange(2**40))
+#         print("Starting wallet tests with: " + cls.wallet)
+#         os.popen('echo "\n\n\n\n\n\n" | electrum -w %s create' % cls.wallet).read()
+#         cls.seed = str(json.loads(os.popen("electrum -w %s getseed" % cls.wallet).read())['seed'])
+#         cls.addies = json.loads(os.popen("electrum -w %s listaddresses" % cls.wallet).read())
+#
+#     def test_address(self):
+#         for i in range(5):
+#             self.assertEqual(
+#                 self.addies[i],
+#                 electrum_address(self.seed, i, 0),
+#                 "Address does not match! Details:\nseed %s, i: %d" % (self.seed, i)
+#             )
+#
+#     def test_sign_verify(self):
+#         print("Electrum-style signing and verification tests, against actual Electrum")
+#         alphabet = "1234567890qwertyuiopasdfghjklzxcvbnm"
+#         for i in range(8):
+#             msg = ''.join([random.choice(alphabet) for i in range(random.randrange(20, 200))])
+#             addy = random.choice(self.addies)
+#             wif = os.popen('electrum -w %s dumpprivkey %s' % (self.wallet, addy)).readlines()[-2].replace('"', '').strip()
+#             priv = b58check_to_hex(wif)
+#             pub = privtopub(priv)
+#
+#             sig = os.popen('electrum -w %s signmessage %s %s' % (self.wallet, addy, msg)).readlines()[-1].strip()
+#             self.assertTrue(
+#                 ecdsa_verify(msg, sig, pub),
+#                 "Verification error. Details:\nmsg: %s\nsig: %s\npriv: %s\naddy: %s\npub: %s" % (
+#                     msg, sig, priv, addy, pub
+#                 )
+#             )
+#
+#             rec = ecdsa_recover(msg, sig)
+#             self.assertEqual(
+#                 pub,
+#                 rec,
+#                 "Recovery error. Details:\nmsg: %s\nsig: %s\npriv: %s\naddy: %s\noriginal pub: %s, %s\nrecovered pub: %s" % (
+#                     msg, sig, priv, addy, pub, decode_pubkey(pub, 'hex')[1], rec
+#                 )
+#             )
+#
+#             mysig = ecdsa_sign(msg, priv)
+#             self.assertEqual(
+#                 os.popen('electrum -w %s verifymessage %s %s %s' % (self.wallet, addy, mysig, msg)).read().strip(),
+#                 "true",
+#                 "Electrum verify message does not match"
+#             )
 
 
 class TestTransactionSignVerify(unittest.TestCase):
@@ -298,7 +304,7 @@ class TestBIP0032(unittest.TestCase):
             [[2**31, 1, 2**31 + 2, 'pub', 2, 1000000000], 'xpub6H1LXWLaKsWFhvm6RVpEL9P4KfRZSW7abD2ttkWP3SSQvnyA8FSVqNTEcYFgJS2UaFcxupHiYkro49S8yGasTvXEYBVPamhGW6cFJodrTHy']
         ]
 
-        mk = bip32_master_key(safe_from_hex('000102030405060708090a0b0c0d0e0f'))
+        mk = bip32_master_key(safe_unhexlify('000102030405060708090a0b0c0d0e0f'))
 
         for tv in test_vectors:
             left, right = self._full_derive(mk, tv[0]), tv[1]
@@ -322,7 +328,7 @@ class TestBIP0032(unittest.TestCase):
             [[2**31, 1, 2**31 + 2, 'pub', 2, 1000000000], 'tpubDHNy3kAG39ThyiwwsgoKY4iRenXDRtce8qdCFJZXPMCJg5dsCUHayp84raLTpvyiNA9sXPob5rgqkKvkN8S7MMyXbnEhGJMW64Cf4vFAoaF']
         ]
 
-        mk = bip32_master_key(safe_from_hex('000102030405060708090a0b0c0d0e0f'), TESTNET_PRIVATE)
+        mk = bip32_master_key(safe_unhexlify('000102030405060708090a0b0c0d0e0f'), TESTNET_PRIVATE)
 
         for tv in test_vectors:
             left, right = self._full_derive(mk, tv[0]), tv[1]
@@ -338,7 +344,7 @@ class TestBIP0032(unittest.TestCase):
             )
 
     def test_extra(self):
-        master = bip32_master_key(safe_from_hex("000102030405060708090a0b0c0d0e0f"))
+        master = bip32_master_key(safe_unhexlify("000102030405060708090a0b0c0d0e0f"))
 
         # m/0
         assert bip32_ckd(master, "0") == "xprv9uHRZZhbkedL37eZEnyrNsQPFZYRAvjy5rt6M1nbEkLSo378x1CQQLo2xxBvREwiK6kqf7GRNvsNEchwibzXaV6i5GcsgyjBeRguXhKsi4R"
@@ -440,10 +446,10 @@ class TestRipeMD160PythonBackup(unittest.TestCase):
         for i, s in enumerate(strvec):
             digest = ripemd.RIPEMD160(s).digest()
             hash160digest = ripemd.RIPEMD160(bin_sha256(s)).digest()
-            self.assertEqual(bytes_to_hex_string(digest), target[i])
-            self.assertEqual(bytes_to_hex_string(hash160digest), hash160target[i])
-            self.assertEqual(bytes_to_hex_string(bin_hash160(from_string_to_bytes(s))), hash160target[i])
-            self.assertEqual(hash160(from_string_to_bytes(s)), hash160target[i])
+            self.assertEqual(safe_hexlify(digest), target[i])
+            self.assertEqual(safe_hexlify(hash160digest), hash160target[i])
+            self.assertEqual(safe_hexlify(bin_hash160(from_str_to_bytes(s))), hash160target[i])
+            self.assertEqual(hash160(from_str_to_bytes(s)), hash160target[i])
 
 
 class TestScriptVsAddressOutputs(unittest.TestCase):
@@ -529,20 +535,40 @@ class TestConversions(unittest.TestCase):
             )
         )
 
+class TestBIP39English(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        print('Testing BIP39 ENGLISH vectors')
+
+    def test_all(self):
+
+        fo = open("test_EN_BIP39.json", "r").read()
+        BIP39_VECTORS = json.loads(fo)
+
+        for v in BIP39_VECTORS:
+            self.assertTrue(bip39_check(v['mnemonic']))
+            self.assertEqual(bip39_to_mn(v['entropy']), v['mnemonic'])
+            self.assertEqual(bip39_to_seed(v['mnemonic'], v['passphrase']), v['seed'])
+            self.assertEqual(bip32_master_key(safe_unhexlify(v['seed'])), v['bip32_xprv'])
+
+class TestBIP39JAP(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        print('Testing BIP39 JAPANESE vectors')
+
+    def test_all(self):
+
+        fo = open("test_JP_BIP39.json", "r").read()
+        BIP39_VECTORS = json.loads(fo)
+
+        for v in BIP39_VECTORS:
+            self.assertTrue(bip39_check(v['mnemonic']))        # check mnemonic valid bip39
+            self.assertEqual(bip39_to_mn(v['entropy'], lang='japanese'), v['mnemonic'])
+            self.assertEqual(bip39_to_seed(v['mnemonic'], v['passphrase']), v['seed'])
+            self.assertEqual(bip32_master_key(safe_unhexlify(v['seed'])), v['bip32_xprv'])
+
 
 if __name__ == '__main__':
     unittest.main()
-
-
-# def bip39_mn_to_hex(mnemonic, saltpass=''):
-#     """
-#     >>>bip39_mn_to_hex("board flee heavy tunnel powder denial science ski answer betray cargo cat")
-#     '18ab19a9f54a9274f03e5209a2ac8a91'
-#     """
-
-# def bip39_hex_to_mn(hexstr):
-#     """
-#     >>> bip39_hex_to_mn('eaebabb2383351fd31d703840b32e9e2')
-#     'turtle front uncle idea crush write shrug there lottery flower risk shell'
-#     """
-
