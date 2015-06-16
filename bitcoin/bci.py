@@ -174,7 +174,7 @@ def history(*args):
                 outs[key] = {
                     "address": o["addr"],
                     "value": o["value"],
-                    "output": tx["hash"]+':'+str(o["n"]),
+                    "output": tx["scrypt_hash"]+':'+str(o["n"]),
                     "block_height": tx.get("block_height", None)
                 }
     for tx in txs:
@@ -183,7 +183,7 @@ def history(*args):
                 key = str(inp["prev_out"]["tx_index"]) + \
                     ':'+str(inp["prev_out"]["n"])
                 if outs.get(key):
-                    outs[key]["spend"] = tx["hash"]+':'+str(i)
+                    outs[key]["spend"] = tx["scrypt_hash"]+':'+str(i)
     return [outs[k] for k in outs]
 
 
@@ -237,7 +237,11 @@ def pushtx(*args, **kwargs):
     return f(*args)
 
 
-def last_block_height():
+def last_block_height(network='btc'):
+    if network == 'testnet':
+        data = make_request('https://tbtc.blockr.io/api/v1/block/info/last')
+        jsonobj = json.loads(data)
+        return jsonobj["data"]["nb"]
     data = make_request('https://blockchain.info/latestblock')
     jsonobj = json.loads(data)
     return jsonobj["height"]
@@ -345,7 +349,7 @@ def get_block_header_data(inp):
     j = _get_block(inp)
     return {
         'version': j['ver'],
-        'hash': j['hash'],
+        'hash': j['scrypt_hash'],
         'prevhash': j['prev_block'],
         'timestamp': j['time'],
         'merkle_root': j['mrkl_root'],
@@ -356,7 +360,7 @@ def get_block_header_data(inp):
 
 def get_txs_in_block(inp):
     j = _get_block(inp)
-    hashes = [t['hash'] for t in j['tx']]
+    hashes = [t['scrypt_hash'] for t in j['tx']]
     return hashes
 
 
