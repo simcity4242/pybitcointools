@@ -2,14 +2,14 @@
 
 from bitcoin.main import *
 from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, from_str_to_bytes, st, by, changebase
-import string, unicodedata, random, hmac, re
+import string, unicodedata, random, hmac, re, math
 try:
     from bitcoin._wordlists import WORDS
 except ImportError:
     raise Exception # WORDS = _get_wordlists()  #ERROR UNRESOLVED
 
-#def _get_directory():
-#    return os.path.join(os.path.dirname(__file__), 'wordlist')
+def _get_directory():
+    return os.path.join(os.path.dirname(__file__), 'wordlist')
 
 def _get_wordlists(lang=None):
     # Try to access local lists, otherwise download text lists
@@ -38,16 +38,18 @@ def _get_wordlists(lang=None):
 def bip39_detect_lang(mnem_str):
     # TODO: add Electrum1?
     if isinstance(mnem_str, list):
-        mnem_str = u' '.join(mnem_str)
-    # need to check >1 words since French shares ~100 words w/ English (wtf?!)
-    first, last = mnem_str.split()[0], mnem_str.split()[-1]
+        mnem_arr = mnem_str
+    mnem_arr = mnem_str.split()
+    sme = set(mnem_arr)
+    # French & English share 100 words (Seriously? WTF?!)
+    if sme < (frozenset(set(WORDS["english"]) & set(WORDS["french"]))):
+        raise Exception("Could be English and/or French!")
     languages = set(WORDS.keys())
     languages.remove('electrum1')
-    languages = list(languages)
-    for lang in languages:
-        if (first in WORDS[lang]) and (last in WORDS[lang]):
+    for lang in list(languages):
+        if sme < set(WORDS[lang]):
             return lang
-    return None 	#raise Exception("Could not detect language")
+    return "english" 	#raise Exception("Could not detect language")
 
 def bip39_to_mn(hexstr, lang=None):
     """BIP39 entropy to mnemonic (language optional)"""
@@ -73,9 +75,6 @@ def bip39_to_seed(mnemonic, saltpass=b''):
     """BIP39 mnemonic (& optional password) to seed"""
     if isinstance(mnemonic, list):
         mnemonic = u' '.join(mnemonic)
-
-    #lang = bip39_detect_lang(mnemonic)
-    #BIP39 = WORDS[lang]
 
     norm = lambda d: ' '.join(unicodedata.normalize('NFKD', unicode(d)).split())
     mn_norm_str = norm(mnemonic)
@@ -145,14 +144,14 @@ def random_bip39_mn(bits=128, lang=None):
     lang = 'english' if lang is None else str(lang)
     return random_bip39_pair(bits, lang)[-1]
 
-def elec1_mn_decode(mnemonic):
-    """Decodes Electrum 1.x mnemonic phrase to hex seed"""
-    if isinstance(mnemonic, string_types):
-        mn_wordlist = from_str_to_bytes(mnemonic).lower().strip().split(" ")
-    elif isinstance(mnemonic, list):
-        mn_wordlist = mnemonic[:]
+def elec1_mn_decode(mnem):
+    """Decodes Electrum 1.x mnem phrase to hex seed"""
+    if isinstance(mnem, string_types):
+        mnem_list = from_str_to_bytes(mnem).lower().strip().split()
+    elif isinstance(mnem, list):
+        mnem_list = mnem
 
-    wlist, words, n = mn_wordlist, WORDS['electrum1'], len(WORDS['electrum1'])
+    wlist, words, n = mnem_list, WORDS['electrum1'], len(WORDS['electrum1'])
     output = ''
     for i in range(len(wlist)//3):
         word1, word2, word3 = wlist[3*i:3*i+3]
@@ -181,8 +180,6 @@ def elec1_mn_encode(hexstr):
 
 # https://gist.github.com/simcity4242/94a5c32b66e52834ae71
 def generate_elec2_seed(num_bits=128, prefix='01', custom_entropy=1):
-    # TODO: https://github.com/spesmilo/electrum/blob/feature/newsync/lib/bitcoin.py#L155
-    import random, math
     n = int(math.ceil(math.log(custom_entropy, 2)))
     k = len(prefix)*4                            # amount of lost entropy from '01' req
     n_added = max(16, k + num_bits - n)          # 136 - lost = 128 bits entropy
@@ -200,19 +197,21 @@ def generate_elec2_seed(num_bits=128, prefix='01', custom_entropy=1):
 
 random_electrum2_seed = random_elec2_seed = generate_elec2_seed
 
-def elec2_mn_encode(i):
+def elec2_mn_encode(i, lang='english'):
     """Encodes int, i, as Electrum 2 mnemonic"""
-    n = len(WORDS['english'])
+    assert lang in ('english', 'japanese', 'spanish')
+    n = 2048
     words = []
     while i:
         x = i%n
         i //= n
-        words.append(WORDS['english'][x])
+        words.append(WORDS[lang.lower()][x])
     return ' '.join(words)
 
-def elec2_mn_decode(mn_seed, lang=None):
+def elec2_mn_decode(mn_seed, lang='english'):
+    assert lang in ('english', 'japanese', 'spanish')
     words = prepare_elec2_seed(mn_seed).split()
-    wordlist = WORDS['english'] if not lang else WORDS[lang.lower()]
+    wordlist = WORDS[lang.lower()]
     n = 2048
     i = 0
     while words:
@@ -246,23 +245,8 @@ def is_elec1_seed(seed):
         is_hex = False
     return is_hex or (uses_electrum_words and (len(words) == 12 or len(words) == 24))
 
-def prepare_seed(seed):
-    # normalize
-    seed = unicodedata.normalize('NFKD', unicode(seed))
-    # lower
-    seed = seed.lower()
-    # remove accents
-    seed = u''.join([c for c in seed if not unicodedata.combining(c)])
-    # normalize whitespaces
-    seed = u' '.join(seed.split())
-    # remove whitespaces between CJK
-    seed = u''.join([seed[i] for i in range(len(seed)) if not (seed[i] in string.whitespace and is_CJK(seed[i-1]) and is_CJK(seed[i+1]))])
-    return seed
-
-prepare_elec2_seed = prepare_seed
-
-
-CJK_INTERVALS = [
+def _prepare_seed(seed):
+    CJK_INTERVALS = [
     (0x4E00, 0x9FFF, 'CJK Unified Ideographs'),
     (0x3400, 0x4DBF, 'CJK Unified Ideographs Extension A'),
     (0x20000, 0x2A6DF, 'CJK Unified Ideographs Extension B'),
@@ -293,11 +277,32 @@ CJK_INTERVALS = [
     (0xA000, 0xA48F, 'Yi Syllables'),
     (0xA490, 0xA4CF, 'Yi Radicals'),
 ]
+    def is_CJK(c):
+        # http://www.asahi-net.or.jp/~ax2s-kmtn/ref/unicode/e_asia.html
+        n = ord(c)
+        for i_min, i_max, name in CJK_INTERVALS:
+            if i_max >= n >= i_min:
+                return True
+        return False
 
-def is_CJK(c):
-    # http://www.asahi-net.or.jp/~ax2s-kmtn/ref/unicode/e_asia.html
-    n = ord(c)
-    for i_min, i_max, name in CJK_INTERVALS:
-        if i_max >= n >= i_min:
-            return True
-    return False
+    # normalize
+    seed = unicodedata.normalize('NFKD', unicode(seed))
+    # lower
+    seed = seed.lower()
+    # remove accents
+    seed = u''.join([c for c in seed if not unicodedata.combining(c)])
+    # normalize whitespaces
+    seed = u' '.join(seed.split())
+    # remove whitespaces between CJK
+    seed = u''.join([seed[i] for i in range(len(seed)) if not (seed[i] in string.whitespace and is_CJK(seed[i-1]) and is_CJK(seed[i+1]))])
+    return seed
+
+prepare_elec2_seed = _prepare_seed
+
+
+
+# https://github.com/spesmilo/electrum/tree/master/lib/wordlist
+# https://github.com/spesmilo/electrum/raw/master/lib/wordlist/portuguese.txt
+# https://github.com/spesmilo/electrum/raw/master/lib/wordlist/japanese.txt
+# https://github.com/spesmilo/electrum/raw/master/lib/wordlist/english.txt
+# https://github.com/spesmilo/electrum/raw/master/lib/wordlist/spanish.txt
