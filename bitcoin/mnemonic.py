@@ -36,12 +36,12 @@ def _get_wordlists(lang=None):
 #ELECWORDS, BIP39ENG, BIP39JAP = WORDS['electrum1'], WORDS['english'], WORDS['japanese']
 
 def bip39_detect_lang(mnem_str):
-    # TODO: add Electrum1?
+    # TODO: add Electrum1?, Chinese detect not possible?
     if isinstance(mnem_str, list):
         mnem_arr = mnem_str
     mnem_arr = mnem_str.split()
     sme = set(mnem_arr)
-    # French & English share 100 words (Seriously? WTF?!)
+    # French & English share 100 words
     if sme < (frozenset(set(WORDS["english"]) & set(WORDS["french"]))):
         raise Exception("Could be English and/or French!")
     languages = set(WORDS.keys())
