@@ -42,14 +42,28 @@ def bip39_detect_lang(mnem_str):
     mnem_arr = mnem_str.split()
     sme = set(mnem_arr)
     # French & English share 100 words
-    if sme < (frozenset(set(WORDS["english"]) & set(WORDS["french"]))):
-        raise Exception("Could be English and/or French!")
+    #if sme < (frozenset(set(WORDS["english"]) & set(WORDS["french"]))):
+    #    print Warning("Could be English OR French!\nUsing English as default")
+    #    return "english"
     languages = set(WORDS.keys())
     languages.remove('electrum1')
+    poss_langs = []
     for lang in list(languages):
         if sme < set(WORDS[lang]):
-            return lang
-    return "english" 	#raise Exception("Could not detect language")
+            poss_langs.append(lang)
+    if len(poss_langs) == 1:
+        return poss_langs[0]
+    elif len(poss_langs) == 2:		# 2 possible langauges
+        if poss_langs[0][:7] and poss_langs[1][:7] == 'chinese':
+            # TODO: perhaps count occurrences and return most probable 
+            print Warning("Cannot determine which Chinese wordlist to use!\nChinese traditional returned")
+            return 'chinese_traditional'
+        if poss_langs[0][:7] and poss_langs[1][:7] in ('french', 'english'):
+            print Warning("Cannot determine if English or French.\nEnglish returned")
+            return 'chinese_traditional'
+    else:
+        print Warning("Unable to determine language.\nReturning English")
+        return 'english'
 
 def bip39_to_mn(hexstr, lang=None):
     """BIP39 entropy to mnemonic (language optional)"""
