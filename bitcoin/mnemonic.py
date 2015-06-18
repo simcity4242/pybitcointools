@@ -289,8 +289,8 @@ def _prepare_seed(seed):
     (0xA4D0, 0xA4FF, 'Lisu'),
     (0x16F00, 0x16F9F, 'Miao'),
     (0xA000, 0xA48F, 'Yi Syllables'),
-    (0xA490, 0xA4CF, 'Yi Radicals'),
-]
+    (0xA490, 0xA4CF, 'Yi Radicals')]
+
     def is_CJK(c):
         # http://www.asahi-net.or.jp/~ax2s-kmtn/ref/unicode/e_asia.html
         n = ord(c)
