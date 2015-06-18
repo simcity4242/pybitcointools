@@ -60,7 +60,7 @@ def bip39_detect_lang(mnem_str):
             return 'chinese_traditional'
         if poss_langs[0][:7] and poss_langs[1][:7] in ('french', 'english'):
             print Warning("Cannot determine if English or French.\nEnglish returned")
-            return 'chinese_traditional'
+            return 'english '
     else:
         print Warning("Unable to determine language.\nReturning English")
         return 'english'
