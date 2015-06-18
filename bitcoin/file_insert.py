@@ -69,6 +69,29 @@ def encode_file(filename, privkey, value=None, input_address=None, network=None)
     signedtx = sign(rawtx, 0, privkey, 1)
     return signedtx
 
+
+def decode_file(txid, network='testnet'):
+    # TODO: check for 
+    rawtx = blockr_fetchtx(txid, network)
+    txo = deserialize(rawtx)
+    outs1 = map(deserialize_script, multiaccess(txo['outs'], 'script'))
+    
+    # get hex key data from multisig scripts
+    # TODO: need to check for non-p2sh outputs
+    outs2 = map(lambda l: l[1:int(l.index(174))-1], map(deserialize_script, multiaccess(txo['outs'], 'script')))
+
+    bdata = safe_unhexlify("".join(outs2))	# base 256 of encoded data
+    
+    # TODO: need to check if the length and crc32 are appended
+    length = struct.unpack('<I', bdata[0:4])[0]		# TODO: need to check length matches len(txo['outs'])
+    checksum = struct.unpack('<L', bdata[4:8])[0]
+    data = bdata[8:8+length]
+	
+    assert checksum == crc32(data) & 0xffffffff	 
+
+    # TODO: write return to file object
+    return safe_hexlify(data)
+	
 # if __name__ == '__main__':
 #     import sys, os
 #     if len(sys.argv) < 2: 
