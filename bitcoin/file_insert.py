@@ -70,27 +70,31 @@ def encode_file(filename, privkey, value=None, input_address=None, network=None)
     return signedtx
 
 
-def decode_file(txid, network='testnet'):
-    # TODO: check for 
+def decode_file(txid, network='btc'):
+    """Returns decoded blockchain binary file as bytes, ready to write to a file"""
+    # TODO: multiple TxIDs? verify encode_file output? 
+    assert network in ('btc', 'testnet')
+    
     rawtx = blockr_fetchtx(txid, network)
     txo = deserialize(rawtx)
     outs1 = map(deserialize_script, multiaccess(txo['outs'], 'script'))
     
     # get hex key data from multisig scripts
-    # TODO: need to check for non-p2sh outputs
-    outs2 = map(lambda l: l[1:int(l.index(174))-1], map(deserialize_script, multiaccess(txo['outs'], 'script')))
+    outs2 = filter(lambda l: l[-1] == 174, outs1)		# TODO: need to check for non-p2sh outputs
+    outs3 = map(lambda l: l[1:-2], outs2)
 
-    bdata = safe_unhexlify("".join(outs2))	# base 256 of encoded data
+    data = safe_unhexlify(''.join([item for sublist in outs3 for item in sublist]))	# base 256 of encoded data
     
     # TODO: need to check if the length and crc32 are appended
-    length = struct.unpack('<I', bdata[0:4])[0]		# TODO: need to check length matches len(txo['outs'])
-    checksum = struct.unpack('<L', bdata[4:8])[0]
-    data = bdata[8:8+length]
+    length = struct.unpack('<I', data[0:4])[0]		# TODO: need to check length matches filesize in bytes
+    checksum = struct.unpack('<I', data[4:8])[0]
 	
+    data = data[8:8+length]
+    
     assert checksum == crc32(data) & 0xffffffff	 
 
-    # TODO: write return to file object
-    return safe_hexlify(data)
+    # TODO: write return to file object?
+    return data
 	
 # if __name__ == '__main__':
 #     import sys, os
