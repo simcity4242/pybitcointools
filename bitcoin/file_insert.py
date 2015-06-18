@@ -95,6 +95,13 @@ def decode_file(txid, network='btc'):
 
     # TODO: write return to file object?
     return data
+
+def decode_files(txids, network='btc'):
+    if isinstance(txids, string_types):
+        return decode_file(txids, network)
+    elif isinstance(txids, list) and len(txid) == 1:
+        return decode_file(txids[0], network)
+    return ''.join([decode_file(x) for x in txids])
 	
 # if __name__ == '__main__':
 #     import sys, os
