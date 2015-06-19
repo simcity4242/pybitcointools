@@ -8,7 +8,3 @@ from bitcoin.stealth import *
 from bitcoin.blocks import *
 from bitcoin.mnemonic import *
 from bitcoin.file_insert import *
-try:
-  from bitcoin.ios import *
-except ImportError:
-  pass
