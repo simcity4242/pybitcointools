@@ -198,7 +198,7 @@ def decode_pubkey(pub, formt=None):
         return (x, y)
     elif formt == 'hex': return (decode(pub[2:66], 16), decode(pub[66:130], 16))
     elif formt == 'hex_compressed':
-        return decode_pubkey(safe_from_hex(pub), 'bin_compressed')
+        return decode_pubkey(safe_unhexlify(pub), 'bin_compressed')
     elif formt == 'bin_electrum':
         return (decode(pub[:32], 256), decode(pub[32:64], 256))
     elif formt == 'hex_electrum':
