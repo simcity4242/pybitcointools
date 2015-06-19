@@ -59,8 +59,7 @@ def encode_file(filename, privkey, value=None, input_address=None, network=None)
 
     u = blockr_unspent(input_address, 'testnet') if network == 'testnet' else unspent(input_address)
     value = 547 if value is None else int(value)
-
-    TXFEE = math.ceil(1.1 * (10000*os.path.getsize(filename)/1000))
+    TXFEE = int(math.ceil(1.1 * (10000*os.path.getsize(filename)/1000)))
     OUTS = mk_binary_txouts(filename, value)
     TOTALFEE = TXFEE + int(value)*len(OUTS)
     INS = select(u, TOTALFEE)
