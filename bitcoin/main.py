@@ -4,6 +4,7 @@ import binascii
 import hashlib
 import re
 import os
+import sys
 import base64
 import time
 import random
@@ -11,7 +12,8 @@ import hmac
 from bitcoin.ripemd import *
 
 
-#global is_python2
+# TODO: add reclimit to necc. functions for Pythonista
+ios = reclimit = lambda d: sys.setrecursionlimit(1000)	# for Pythonista iOS
 is_python2 = str == bytes
 
 # Elliptic curve parameters (secp256k1)
