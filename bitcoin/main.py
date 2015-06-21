@@ -4,17 +4,20 @@ import binascii
 import hashlib
 import re
 import os
-import sys
 import base64
 import time
 import random
 import hmac
 from bitcoin.ripemd import *
 
-
 # TODO: add reclimit to necc. functions for Pythonista
-ios = reclimit = lambda d: sys.setrecursionlimit(1000)	# for Pythonista iOS
+is_ios = "Pythonista" in os.environ.get("XPC_SERVICE_NAME")
+reclimit = sys.setrecursionlimit(1000)	# for Pythonista iOS
 is_python2 = str == bytes
+try:
+    sys.setrecursionlimit(1000)
+except:
+    print Warning("didn't work!")
 
 # Elliptic curve parameters (secp256k1)
 P = 2**256 - 2**32 - 977
@@ -299,6 +302,9 @@ def privkey_to_pubkey(privkey):
 
 privtopub = privkey_to_pubkey
 
+#privtopub = eval("""sys.setrecursionlimit(1000);privtopub = privkey_to_pubkey""") if is_ios else privkey_to_pubkey
+#if is_ios:
+    
 
 def privkey_to_address(priv, magicbyte=0):
     return pubkey_to_address(privkey_to_pubkey(priv), magicbyte)
