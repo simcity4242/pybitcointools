@@ -14,10 +14,10 @@ def _get_directory():
 def _get_wordlists(lang=None):
     # Try to access local lists, otherwise download text lists
     # if any((listtype, lang)):
-    #     listtype, lang = 'BIP39ENG', 'English'
     from bitcoin.bci import make_request
-    global WORDS
+
     WORDS = {}
+    global WORDS
     bips_url = "https://github.com/bitcoin/bips/raw/master/bip-0039/%s.txt"
     WORDS['electrum1'], WORDS['english'], WORDS['japanese'], WORDS['spanish'], \
     WORDS['chinese_simplified'], WORDS['chinese_traditional'], WORDS['french'] = map(
