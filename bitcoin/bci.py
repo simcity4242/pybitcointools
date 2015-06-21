@@ -42,12 +42,13 @@ def parse_addr_args(*args):
 
 
 # Gets the unspent outputs of one or more addresses
-def bci_unspent(*args):
+def bci_unspent(*args, **kwargs):
+    api_code = "?api=%s" % str(kwargs.get("api", None)) if "api" in kwargs else ""
     network, addrs = parse_addr_args(*args)
     u = []
     for a in addrs:
         try:
-            data = make_request('https://blockchain.info/unspent?address='+a)
+            data = make_request('https://blockchain.info/unspent?address=%s%s' % (a, api_code))
         except Exception as e:
             if str(e) == 'No free outputs to spend':
                 continue
@@ -124,67 +125,83 @@ def helloblock_unspent(*args):
                 })
     return o
 
+def webbtc_unspent(*args):
+    return None
 
 unspent_getters = {
     'bci': bci_unspent,
     'blockr': blockr_unspent,
-  # 'webbtc': webbtc_unspent,           #
+    'webbtc': webbtc_unspent,           #
     'helloblock': helloblock_unspent
 }
 
 
 def unspent(*args, **kwargs):
-    f = unspent_getters.get(kwargs.get('source', ''), bci_unspent)
+    """unspent(addr, "btc", source="blockr")"""
+    svc = kwargs.get('source', '')
+    f = unspent_getters.get(svc, bci_unspent)
     return f(*args)
 
 
 # Gets the transaction output history of a given set of addresses,
 # including whether or not they have been spent
 def history(*args):
-    # Valid input formats: history([addr1, addr2,addr3])
-    #                      history(addr1, addr2, addr3)
+    # Valid input formats: history([addr1, addr2,addr3], "btc")
+    #                      history(addr1, addr2, addr3, "testnet")
     if len(args) == 0:
         return []
-    elif isinstance(args[0], list):
-        addrs = args[0]
+    elif len(args) == 2 and isinstance(args[0], list):
+        addrs, network = args[0], args[-1]
+    elif len(args) > 2:
+        addrs, network = args[:-1], args[-1]
     else:
         addrs = args
+        network = "btc"
 
-    txs = []
-    for addr in addrs:
-        offset = 0
-        while 1:
-            data = make_request(
-                'https://blockchain.info/address/%s?format=json&offset=%s' %
-                (addr, offset))
-            try:
-                jsonobj = json.loads(data)
-            except:
-                raise Exception("Failed to decode data: "+data)
-            txs.extend(jsonobj["txs"])
-            if len(jsonobj["txs"]) < 50:
-                break
-            offset += 50
-            sys.stderr.write("Fetching more transactions... "+str(offset)+'\n')
-    outs = {}
-    for tx in txs:
-        for o in tx["out"]:
-            if o['addr'] in addrs:
-                key = str(tx["tx_index"])+':'+str(o["n"])
-                outs[key] = {
-                    "address": o["addr"],
-                    "value": o["value"],
-                    "output": tx["scrypt_hash"]+':'+str(o["n"]),
-                    "block_height": tx.get("block_height", None)
-                }
-    for tx in txs:
-        for i, inp in enumerate(tx["inputs"]):
-            if inp["prev_out"]["addr"] in addrs:
-                key = str(inp["prev_out"]["tx_index"]) + \
-                    ':'+str(inp["prev_out"]["n"])
-                if outs.get(key):
-                    outs[key]["spend"] = tx["scrypt_hash"]+':'+str(i)
-    return [outs[k] for k in outs]
+    if network == "testnet":
+#         txs = []
+#         for addr in addrs:
+#             data = make_request("http://test.webbtc.com/address/%s" % addr)
+#             jsonobj = json.loads(data)
+#             txs.extend(jsonobj["transactions"])
+#         for txo in txs:
+#             for tx in txo.values():pass
+    elif network == "btc":
+        txs = []
+        for addr in addrs:
+            offset = 0
+            while 1:
+                data = make_request(
+                    'https://blockchain.info/address/%s?format=json&offset=%s' %
+                    (addr, offset))
+                try:
+                    jsonobj = json.loads(data)
+                except:
+                    raise Exception("Failed to decode data: "+data)
+                txs.extend(jsonobj["txs"])
+                if len(jsonobj["txs"]) < 50:
+                    break
+                offset += 50
+                sys.stderr.write("Fetching more transactions... "+str(offset)+'\n')
+        outs = {}
+        for tx in txs:
+            for o in tx["out"]:
+                if o['addr'] in addrs:
+                    key = str(tx["tx_index"])+':'+str(o["n"])
+                    outs[key] = {
+                        "address": o["addr"],
+                        "value": o["value"],
+                        "output": tx["hash"]+':'+str(o["n"]),
+                        "block_height": tx.get("block_height", None)
+                    }
+        for tx in txs:
+            for i, inp in enumerate(tx["inputs"]):
+                if inp["prev_out"]["addr"] in addrs:
+                    key = str(inp["prev_out"]["tx_index"]) + \
+                        ':'+str(inp["prev_out"]["n"])
+                    if outs.get(key):
+                        outs[key]["spend"] = tx["hash"]+':'+str(i)
+        return [outs[k] for k in outs]
 
 
 # Pushes a transaction to the network using https://blockchain.info/pushtx
@@ -224,16 +241,26 @@ def helloblock_pushtx(tx):
     return make_request('https://mainnet.helloblock.io/v1/transactions',
                         'rawTxHex='+tx)
 
+def webbtc_pushtx(tx, network='btc'):
+    if network == 'testnet':
+        webbtc_url = 'http//test.webbtc.com/relay_tx'
+    elif network == 'btc':
+        webbtc_url = 'https://webbtc.com/relay_tx'
+    if not re.match('^[0-9a-fA-F]*$', tx):
+        tx = safe_hexlify(tx)
+    return make_request(webbtc_url, 'tx='+tx)
+
 pushtx_getters = {
     'bci': bci_pushtx,
     'blockr': blockr_pushtx,
-  # 'webbtc': webbtc_pushtx,        # POST to test.webbtc.com/relay_tx
+    'webbtc': webbtc_pushtx,        # POST to test.webbtc.com/relay_tx
     'helloblock': helloblock_pushtx
 }
 
 
 def pushtx(*args, **kwargs):
-    f = pushtx_getters.get(kwargs.get('source', ''), bci_pushtx)
+    svc = kwargs.get('source', '')
+    f = pushtx_getters.get(svc, bci_pushtx)
     return f(*args)
 
 
@@ -306,17 +333,30 @@ def helloblock_fetchtx(txhash, network='btc'):
     assert TXHASH(tx) == txhash
     return tx
 
+def webbtc_fetchtx(txhash, network='btc'):
+    if network == 'testnet':
+        webbtc_url = 'http://test.webbtc.com/tx/'
+    elif network == 'btc':
+        webbtc_url = 'http://webbtc.com/tx/'
+    else:
+        raise Exception(
+            'Unsupported network {0} for webbtc_fetchtx'.format(network))
+    if not re.match('^[0-9a-fA-F]*$', txhash):
+        txhash = safe_hexlify(txhash)
+    hexdata = make_request(webbtc_url + txhash + ".hex")
+    return st(hexdata)
 
 fetchtx_getters = {
     'bci': bci_fetchtx,
     'blockr': blockr_fetchtx,
-  # 'webbtc': webbtc_fetchtx,       #   http://test.webbtc.com/tx/txid.[hex,json, bin]
+    'webbtc': webbtc_fetchtx,       #   http://test.webbtc.com/tx/txid.[hex,json, bin]
     'helloblock': helloblock_fetchtx
 }
 
 
 def fetchtx(*args, **kwargs):
-    f = fetchtx_getters.get(kwargs.get('source', ''), bci_fetchtx)
+    svc = kwargs.get("source", "")
+    f = fetchtx_getters.get(svc, bci_fetchtx)
     return f(*args)
 
 
@@ -349,7 +389,7 @@ def get_block_header_data(inp):
     j = _get_block(inp)
     return {
         'version': j['ver'],
-        'hash': j['scrypt_hash'],
+        'hash': j['hash'],
         'prevhash': j['prev_block'],
         'timestamp': j['time'],
         'merkle_root': j['mrkl_root'],
@@ -360,7 +400,7 @@ def get_block_header_data(inp):
 
 def get_txs_in_block(inp):
     j = _get_block(inp)
-    hashes = [t['scrypt_hash'] for t in j['tx']]
+    hashes = [t['hash'] for t in j['tx']]
     return hashes
 
 
@@ -370,9 +410,9 @@ def get_block_height(txhash):
 
 
 def get_block_coinbase(txval):
-    # TODO: use translation table for coinbase fields 
+    # TODO: use translation table for coinbase fields
     j = _get_block(inp=txval)
     cb = safe_unhexlify(st(j['tx'][0]['inputs'][0]['script']))
-    alpha = ''.join(list(map(chr, list(range(32, 126)))))
+    alpha = set(map(chr, list(range(32, 126))))
     cbtext = ''.join(list(map(chr, filter(lambda x: chr(x) in alpha, bytearray(cb)))))
     return cbtext
