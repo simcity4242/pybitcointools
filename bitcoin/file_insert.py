@@ -5,27 +5,29 @@ from bitcoin.bci import *
 from bitcoin.transaction import *
 from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, st, by
 
+
 def mk_multisig_scriptpubkey(fo):
-    # takes file_object fo and returns scriptpubkey as hex
+    # make a single output's redeemScript
     data = fo.read(65*3)
 
     if not data:
         return None
-    
+
     script_pubkeys = []
     while data:
         chunk = data[:65]; data = data[65:]
         # pad right side with null bytes
-        if len(chunk) < 33:   chunk += b'\x00' * (33-len(chunk))
-        elif len(chunk) < 65: chunk += b'\x00' * (65-len(chunk))
+        if len(chunk) < 33:   chunk += by(bytearray(33-len(chunk)))
+        elif len(chunk) < 65: chunk += by(bytearray(33-len(chunk)))
         script_pubkeys.append(chunk)
 
     pubz = list(map(safe_hexlify, script_pubkeys))
     return mk_multisig_script(pubz, 1)
- 
+
 def mk_txouts(fo, value=None, jsonfmt=1):
     """Make Tx Outputs as json (or hex)"""
     value = 547 if not value else int(value)
+    hexval = safe_hexlify(struct.pack('<Q', value))	# make 8 byte LE value 
     txouts = []
     while True:
         scriptPubKey = mk_multisig_scriptpubkey(fo)
@@ -33,8 +35,7 @@ def mk_txouts(fo, value=None, jsonfmt=1):
         txouts.append( {'script': scriptPubKey, 'value': value} )
     if jsonfmt:
         return txouts
-    return ''.join([(safe_hexlify(struct.pack('<Q', value)) +
-                     str(wrap_script(x['script']))) for x in txouts])
+    return ''.join([(hexval + str(wrap_script(x['script']))) for x in txouts])
 
 def mk_binary_txouts(filename, value=None, jsonfmt=1):
     """Encode file into the blockchain (with prepended file length, crc32) using multisig addresses"""
@@ -59,6 +60,7 @@ def encode_file(filename, privkey, value=None, input_address=None, network=None)
 
     u = blockr_unspent(input_address, 'testnet') if network == 'testnet' else unspent(input_address)
     value = 547 if value is None else int(value)
+
     TXFEE = int(math.ceil(1.1 * (10000*os.path.getsize(filename)/1000)))
     OUTS = mk_binary_txouts(filename, value)
     TOTALFEE = TXFEE + int(value)*len(OUTS)
@@ -98,12 +100,11 @@ def decode_file(txid, network='btc'):
 def decode_files(txids, network='btc'):
     if isinstance(txids, string_types):
         return decode_file(txids, network)
-    elif isinstance(txids, list) and len(txid) == 1:
+    elif isinstance(txids, list) and len(txids) == 1:
         return decode_file(txids[0], network)
     return ''.join([decode_file(x) for x in txids])
 	
-# if __name__ == '__main__':
-#     import sys, os
+#if __name__ == '__main__':
 #     if len(sys.argv) < 2: 
 #         print("mk_binary_txouts.py FILENAME OUTPUT_VALUE [INPUT_ADDRESS]")
 #     elif len(sys.argv) == 3:
