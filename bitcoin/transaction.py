@@ -208,6 +208,23 @@ def mk_pubkey_script(addr):
 def mk_scripthash_script(addr):
     return 'a914' + b58check_to_hex(addr) + '87'
 
+def mk_opreturn(msg='', rawtx=None, jsonfmt=0):
+    # TODO: add *args for json format or separate function?
+    mlen = len(msg)
+    orhex = safe_hexlify(b'\x6a' + num_to_op_push(mlen) + msg)
+    orjson = {'script' : orhex, 'value' : 0}
+    if rawtx is not None:
+        try:    # TODO: accept json TxObjs
+            txo = deserialize(rawtx)
+            if 'outs' not in txo: raise Exception("OP_Return cannot be the sole output!")
+            txo['outs'].append(orjson)
+            newrawtx = serialize(txo)
+            return newrawtx
+        except:
+            raise Exception("Raw Tx Error!")
+    return orhex if not jsonfmt else orjson
+
+
 # Address representation to output script
 
 def address_to_script(addr):
@@ -304,7 +321,8 @@ else:
         return result
 
 
-def mk_multisig_script(*args):  # [pubs],k or pub1,pub2...pub[n],k
+def mk_multisig_script(*args):  
+    # [pubs],k or pub1,pub2...pub[n],k
     if isinstance(args[0], list):
         pubs, k = args[0], int(args[1])
     else:
@@ -475,19 +493,3 @@ def mksend(*args):
 
     return mktx(ins, outputs2)
 
-# returns
-def mk_opreturn(msg='', rawtx=None, jsonfmt=0):
-    # TODO: add *args for json format or separate function?
-    mlen = len(msg)
-    orhex = safe_hexlify(b'\x6a' + num_to_op_push(mlen) + msg)
-    orjson = {'script' : orhex, 'value' : 0}
-    if rawtx is not None:
-        try:    # TODO: accept json TxObjs
-            txo = deserialize(rawtx)
-            if 'outs' not in txo: raise Exception("OP_Return cannot be the sole output!")
-            txo['outs'].append(orjson)
-            newrawtx = serialize(txo)
-            return newrawtx
-        except:
-            raise Exception("Raw Tx Error!")
-    return orhex if not jsonfmt else orjson
