@@ -2,7 +2,7 @@
 import binascii, re, json, copy, sys
 from bitcoin.main import *
 from _functools import reduce
-from bitcoin.pyspecials import safe_hexlify, from_string_to_bytes, from_int_to_byte, from_string_to_bytes, from_le_bytes_to_int, from_int_to_le_bytes
+from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, from_int_to_byte, from_str_to_bytes, from_le_bytes_to_int, from_int_to_le_bytes
 
 
 ### Hex to bin converter and vice versa for objects
@@ -46,28 +46,30 @@ def json_changebase(obj, changer):
 def deserialize(tx):
     if isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx):
         #tx = bytes(bytearray.fromhex(tx))
-        return json_changebase(deserialize(binascii.unhexlify(tx)),
-                              lambda x: safe_hexlify(x))
+        return json_changebase(deserialize(safe_unhexlify(tx)),
+                               lambda x: safe_hexlify(x))
     # http://stackoverflow.com/questions/4851463/python-closure-write-to-variable-in-parent-scope
-    # Python's scoping rules are demented, requiring me to make pos an object
-    # so that it is call-by-reference
+    # Python's scoping rules are demented, requiring me to make pos an object so that it is call-by-reference
+    #
+    # ==> each function moves forward X pos'n, reads back X
     pos = [0]
 
-    def read_as_int(bytez):
-        pos[0] += bytez
-        return decode(tx[pos[0]-bytez:pos[0]][::-1], 256)
+    def read_as_int(num_of_bytez):
+        pos[0] += num_of_bytez
+        return decode(tx[pos[0]-num_of_bytez:pos[0]][::-1], 256)
 
     def read_var_int():
         pos[0] += 1
-        
+
         val = from_byte_to_int(tx[pos[0]-1])
-        if val < 253:
+        if val < 0xfd:
             return val
         return read_as_int(pow(2, val - 252))
 
-    def read_bytes(bytez):
-        pos[0] += bytez
-        return tx[pos[0]-bytez:pos[0]]
+    def read_bytes(num_of_bytez):
+        #
+        pos[0] += num_of_bytez                     # move pos'n
+        return tx[pos[0]-num_of_bytez:pos[0]]      # read back
 
     def read_var_string():
         size = read_var_int()
@@ -162,11 +164,14 @@ def der_encode_sig(v, r, s):
 
 
 def der_decode_sig(sig):
-    leftlen = decode(sig[6:8], 16)*2
-    left = sig[8:8+leftlen]
-    rightlen = decode(sig[10+leftlen:12+leftlen], 16)*2
-    right = sig[12+leftlen:12+leftlen+rightlen]
-    return (None, decode(left, 16), decode(right, 16))
+    sig = changebase(sig, 16, 256, 64)
+    leftlen = decode( sig[3:4], 256)
+    rightlen = decode( sig[5+leftlen : 6+leftlen], 256)
+	left =  sig[4 : 4+leftlen]
+    right = sig[6+leftlen : 6+leftlen+rightlen]
+	junklen = sum((3, 3, 1))	# 3 bytes each for r and s, plus hashcode
+	assert sum((leftlen, rightlen, junklen)) == len(sig)
+    return (None, decode(left, 256), decode(right, 256))
 
 
 def txhash(tx, hashcode=None):
@@ -306,8 +311,10 @@ def serialize_script_unit(unit):
 if is_python2:
     def serialize_script(script):
         if json_is_base(script, 16):
-            return binascii.hexlify(serialize_script(json_changebase(script,
-                                    lambda x: binascii.unhexlify(str(x)))))
+            return binascii.hexlify(
+                serialize_script(
+                    json_changebase(
+                        script, lambda x: binascii.unhexlify(str(x)))))
         return ''.join(map(serialize_script_unit, script))
 else:
     def serialize_script(script):
@@ -321,7 +328,7 @@ else:
         return result
 
 
-def mk_multisig_script(*args):  
+def mk_multisig_script(*args):
     # [pubs],k or pub1,pub2...pub[n],k
     if isinstance(args[0], list):
         pubs, k = args[0], int(args[1])
