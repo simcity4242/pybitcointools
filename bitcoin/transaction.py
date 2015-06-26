@@ -2,7 +2,7 @@
 import binascii, re, json, copy, sys
 from bitcoin.main import *
 from _functools import reduce
-from bitcoin.pyspecials import safe_hexlify, from_string_to_bytes, from_int_to_byte, from_string_to_bytes
+from bitcoin.pyspecials import st, by, safe_hexlify, safe_unhexlify, from_int_to_byte, from_str_to_bytes, from_bytes_to_int, from_int_to_bytes
 
 
 ### Hex to bin converter and vice versa for objects
@@ -46,8 +46,7 @@ def json_changebase(obj, changer):
 def deserialize(tx):
     if isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx):
         #tx = bytes(bytearray.fromhex(tx))
-        return json_changebase(deserialize(binascii.unhexlify(tx)),
-                              lambda x: safe_hexlify(x))
+        return json_changebase(deserialize(binascii.unhexlify(tx)), lambda x: safe_hexlify(x))
     # http://stackoverflow.com/questions/4851463/python-closure-write-to-variable-in-parent-scope
     # Python's scoping rules are demented, requiring me to make pos an object
     # so that it is call-by-reference
@@ -150,30 +149,51 @@ def signature_form(tx, i, script, hashcode=SIGHASH_ALL):
 
 # Making the actual signatures
 
+    # If the S value is above the order of the curve divided by two, its
+    # complement modulo the order could have been used instead, which is
+    # one byte shorter when encoded correctly.
 def der_encode_sig(v, r, s):
-    b1, b2 = safe_hexlify(encode(r, 256)), safe_hexlify(encode(s, 256))
+    """Takes (vbyte, r, s) as ints and returns hex der encode sig"""
+    s = (N-s) if der_is_bip66(s) else s
+    assert s < N//2
+    b1, b2 = encode(r, 256), encode(s, 256)
+    # TODO: check s < N // 2, otherwise s = complement (1 byte shorter)
+    # https://gist.github.com/3aea5d82b1c543dd1d3c
     if r >= 2**255:
-        b1 = '00' + b1
+        b1 = b'\x00' + b1
     if s >= 2**255:
-        b2 = '00' + b2
-    left = '02'+encode(len(b1)//2, 16, 2)+b1
-    right = '02'+encode(len(b2)//2, 16, 2)+b2
-    return '30'+encode(len(left+right)//2, 16, 2)+left+right
+        b2 = b'\x00' + b2
+    left = b'\x02' + encode(len(b1), 256, 1) + b1
+    right = b'\x02' + encode(len(b2), 256, 1) + b2
+    return safe_hexlify(b'x\30' + encode(len(left+right), 256, 1) + left + right)	# TODO: standard format
 
 
 def der_decode_sig(sig):
-    leftlen = decode(sig[6:8], 16)*2
-    left = sig[8:8+leftlen]
-    rightlen = decode(sig[10+leftlen:12+leftlen], 16)*2
-    right = sig[12+leftlen:12+leftlen+rightlen]
-    return (None, decode(left, 16), decode(right, 16))
+    """Takes hex der sig and returns (None, r, s) as ints"""
+    sig = safe_unhexlify(sig)
+    leftlen = decode(sig[3:4], 256)
+    left = sig[4:4+leftlen]
+    rightlen = decode(sig[5+leftlen:6+leftlen], 256)
+    right = sig[6+leftlen:6+leftlen+rightlen]
+    assert 3 + left + 3 + right + 1 == len(sig)		# check for new s code
+    return (None, decode(left, 256), decode(right, 256))
 
+def der_is_bip66(*args):
+    """s is BIP66 canonical signature"""
+    if len(args) == 3 and args[0] is None:
+        s = args[-1]
+    elif len(args) == 1 and isinstance(args[0], string_types) and args[0][:1] == b"\x30":
+        s = der_decode_sig(args[0])[-1]
+    elif len(args) == 1 and isinstance(args[0], (string_types, number_types)):
+        s = decode(s, 256) if isinstance(s, string_types) else s
+    else: raise TypeError("Must be either base")
+    return s < (N // 2) 
 
 def txhash(tx, hashcode=None):
     if isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx):
         tx = changebase(tx, 16, 256)
     if hashcode:
-        return dbl_sha256(from_string_to_bytes(tx) + encode(int(hashcode), 256, 4)[::-1])
+        return dbl_sha256(from_str_to_bytes(tx) + from_int_to_bytes(int(hashcode), 4))
     else:
         return safe_hexlify(bin_dbl_sha256(tx)[::-1])
 
@@ -207,6 +227,23 @@ def mk_pubkey_script(addr):
 
 def mk_scripthash_script(addr):
     return 'a914' + b58check_to_hex(addr) + '87'
+
+def mk_opreturn(msg='', rawtx=None, jsonfmt=0):
+    # TODO: add *args for json format or separate function?
+    mlen = len(msg)
+    orhex = safe_hexlify(b'\x6a' + num_to_op_push(mlen) + msg)
+    orjson = {'script' : orhex, 'value' : 0}
+    if rawtx is not None:
+        try:    # TODO: accept json TxObjs
+            txo = deserialize(rawtx)
+            if 'outs' not in txo: raise Exception("OP_Return cannot be the sole output!")
+            txo['outs'].append(orjson)
+            newrawtx = serialize(txo)
+            return newrawtx
+        except:
+            raise Exception("Raw Tx Error!")
+    return orhex if not jsonfmt else orjson
+
 
 # Address representation to output script
 
@@ -304,7 +341,8 @@ else:
         return result
 
 
-def mk_multisig_script(*args):  # [pubs],k or pub1,pub2...pub[n],k
+def mk_multisig_script(*args):  
+    # [pubs],k or pub1,pub2...pub[n],k
     if isinstance(args[0], list):
         pubs, k = args[0], int(args[1])
     else:
@@ -474,20 +512,3 @@ def mksend(*args):
         outputs2 += [{"address": change, "value": isum-osum-fee}]
 
     return mktx(ins, outputs2)
-
-# returns
-def mk_opreturn(msg='', rawtx=None, jsonfmt=0):
-    # TODO: add *args for json format or separate function?
-    mlen = len(msg)
-    orhex = safe_hexlify(b'\x6a' + num_to_op_push(mlen) + msg)
-    orjson = {'script' : orhex, 'value' : 0}
-    if rawtx is not None:
-        try:    # TODO: accept json TxObjs
-            txo = deserialize(rawtx)
-            if 'outs' not in txo: raise Exception("OP_Return cannot be the sole output!")
-            txo['outs'].append(orjson)
-            newrawtx = serialize(txo)
-            return newrawtx
-        except:
-            raise Exception("Raw Tx Error!")
-    return orhex if not jsonfmt else orjson
