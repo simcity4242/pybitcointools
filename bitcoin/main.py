@@ -10,22 +10,23 @@ import random
 import hmac
 from bitcoin.ripemd import *
 
-# TODO: add reclimit to necc. functions for Pythonista
+# TODO: add reclimit to necc. functions for Pythonista		FIXED! https://gist.github.com/341ee20a12b6a3babe8d
 is_ios = "Pythonista" in os.environ.get("XPC_SERVICE_NAME")
-reclimit = sys.setrecursionlimit(1000)	# for Pythonista iOS
+reclimit = lambda x: sys.setrecursionlimit(x)	# for Pythonista iOS
 is_python2 = str == bytes
-try:
-    sys.setrecursionlimit(1000)
-except:
-    print Warning("didn't work!")
+
 
 # Elliptic curve parameters (secp256k1)
 P = 2**256 - 2**32 - 977
+# fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f
 N = 115792089237316195423570985008687907852837564279074904382605163141518161494337
+# fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141
 A = 0
 B = 7
 Gx = 55066263022277343669578718895168534326250603453777594175500187360389116729240
+# 79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798
 Gy = 32670510020758816978083085130507043184471273380659243275938904335757337482424
+# 483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8
 G = (Gx, Gy)
 
 
@@ -52,8 +53,8 @@ def inv(a, n):
 
 def contains_point(x, y):
     """Is the point (x,y) on this curve?"""
-    x, y = map(int, x,y)
-    return (y*y - (x*x*x + A*x+P)) % P == 0
+    x, y = map(int, x, y)
+    return (y**2 - (x**3 + A* P )) % P == 0
 
 # JSON access (for pybtctool convenience)
 
@@ -134,11 +135,13 @@ def jacobian_add(p, q):
 
 
 def from_jacobian(p):
+    reclimit(512) 
     z = inv(p[2], P)
     return ((p[0] * z**2) % P, (p[1] * z**3) % P)
 
 
 def jacobian_multiply(a, n):
+    reclimit(512) 
     if a[1] == 0 or n == 0:
         return (0, 0, 1)
     if n == 1:
@@ -152,10 +155,12 @@ def jacobian_multiply(a, n):
 
 
 def fast_multiply(a, n):
+    reclimit(512) 
     return from_jacobian(jacobian_multiply(to_jacobian(a), n))
 
 
 def fast_add(a, b):
+    reclimit(512) 
     return from_jacobian(jacobian_add(to_jacobian(a), to_jacobian(b)))
 
 # TODO: check pubkey Electrum
@@ -177,6 +182,7 @@ def get_pubkey_format(pub):
 
 
 def encode_pubkey(pub, formt):
+    """Takes """
     if not isinstance(pub, (tuple, list)):
         pub = decode_pubkey(pub)
     if formt == 'decimal': return pub
@@ -192,7 +198,7 @@ def encode_pubkey(pub, formt):
 
 
 def decode_pubkey(pub, formt=None):
-    """"""
+    """takes pubkey, detects type, returns tuple of (x, y)"""
     if not formt: formt = get_pubkey_format(pub)
     if formt == 'decimal': return pub
     elif formt == 'bin': return (decode(pub[1:33], 256), decode(pub[33:65], 256))
@@ -252,15 +258,18 @@ def decode_privkey(priv,formt=None):
     else: raise Exception("WIF does not represent privkey")
 
 def add_pubkeys(p1, p2):
+    reclimit(512)
     f1, f2 = get_pubkey_format(p1), get_pubkey_format(p2)
     return encode_pubkey(fast_add(decode_pubkey(p1, f1), decode_pubkey(p2, f2)), f1)
 
 def add_privkeys(p1, p2):
+    reclimit(512)
     f1, f2 = get_privkey_format(p1), get_privkey_format(p2)
     return encode_privkey((decode_privkey(p1, f1) + decode_privkey(p2, f2)) % N, f1)
 
 
 def multiply(pubkey, privkey):
+    reclimit(512)
     f1, f2 = get_pubkey_format(pubkey), get_privkey_format(privkey)
     pubkey, privkey = decode_pubkey(pubkey, f1), decode_privkey(privkey, f2)
     # http://safecurves.cr.yp.to/twist.html
@@ -270,6 +279,7 @@ def multiply(pubkey, privkey):
 
 
 def divide(pubkey, privkey):
+    reclimit(512)
     factor = inv(decode_privkey(privkey), N)
     return multiply(pubkey, factor)
 
@@ -301,34 +311,36 @@ def privkey_to_pubkey(privkey):
         return encode_pubkey(fast_multiply(G, privkey), f.replace('wif', 'hex'))
 
 privtopub = privkey_to_pubkey
-
-#privtopub = eval("""sys.setrecursionlimit(1000);privtopub = privkey_to_pubkey""") if is_ios else privkey_to_pubkey
-#if is_ios:
     
 
 def privkey_to_address(priv, magicbyte=0):
-    return pubkey_to_address(privkey_to_pubkey(priv), magicbyte)
+    return pubkey_to_address(privkey_to_pubkey(priv), int(magicbyte))
+    
 privtoaddr = privkey_to_address
 
 
 def neg_pubkey(pubkey):
+    # pub' = P-pub
     f = get_pubkey_format(pubkey)
     pubkey = decode_pubkey(pubkey, f)
     return encode_pubkey((pubkey[0], (P-pubkey[1]) % P), f)
 
 
 def neg_privkey(privkey):
+    # priv' = N-priv     aka complement
     f = get_privkey_format(privkey)
     privkey = decode_privkey(privkey, f)
     return encode_privkey((N - privkey) % N, f)
 
 def subtract_pubkeys(p1, p2):
+    # pub1 + neg_pubkey(pub2)
     f1, f2 = get_pubkey_format(p1), get_pubkey_format(p2)
     k2 = decode_pubkey(p2, f2)
     return encode_pubkey(fast_add(decode_pubkey(p1, f1), (k2[0], (P - k2[1]) % P)), f1)
 
 
 def subtract_privkeys(p1, p2):
+    # simple int subtraction
     f1, f2 = get_privkey_format(p1), get_privkey_format(p2)
     k2 = decode_privkey(p2, f2)
     return encode_privkey((decode_privkey(p1, f1) - k2) % N, f1)
@@ -399,7 +411,7 @@ def hash_to_int(x):
 def num_to_var_int(x):
     # TODO: use num_to_op_push lambda below
     x = int(x)
-    pcfx = lambda pc, i, ln: from_int_to_byte(pc) + from_int_to_le_bytes(i, ln)
+    pcfx = lambda pc, i, ln: from_int_to_byte(pc) + from_int_to_bytes(i, ln)
     if x < 253:     return pcfx(0, x, 1)[1:]
     elif x < 2**16: return pcfx(253, x, 2)
     elif x < 2**32: return pcfx(254, x, 4)
@@ -409,7 +421,7 @@ def num_to_var_int(x):
 def num_to_op_push(x):
     # TODO: check x < 0xff is right, or is it x <= 0xff ?
     x = int(x)
-    pcfx = lambda pc, i, ln: from_int_to_byte(pc) + from_int_to_le_bytes(i, ln)
+    pcfx = lambda pc, i, ln: from_int_to_byte(pc) + from_int_to_bytes(i, ln)
     if x < 76:              return pcfx(0, x, 1)[1:]
     elif x < 0xff:          return pcfx(76, x, 1)
     elif x < 0xffff:        return pcfx(77, x, 2)
@@ -484,39 +496,47 @@ pubtoaddr = pubkey_to_address
 
 
 def encode_sig(v, r, s):
+    """Takes vbyte and (r,s) as ints, returns base64 string"""
     vb, rb, sb = from_int_to_byte(v), encode(r, 256), encode(s, 256)
-
-    result = base64.b64encode(vb+b'\x00'*(32-len(rb))+rb+b'\x00'*(32-len(sb))+sb)
-    return result if is_python2 else str(result, 'utf-8')
+    #result = base64.b64encode(vb + bytearray((32-len(rb)) + \
+    #                         rb + bytearray((32-len(sb)) + sb)
+    result = base64.b64encode(vb + b'\x00'*(32-len(rb)) + rb + b'\x00'*(32-len(sb)) + sb)
+    return st(result)
 
 
 def decode_sig(sig):
+    """takes Base64 sig string and returns (vbyte, r, s) in binary"""
     bytez = base64.b64decode(sig)
     return from_byte_to_int(bytez[0]), decode(bytez[1:33], 256), decode(bytez[33:], 256)
 
 # https://tools.ietf.org/html/rfc6979#section-3.2
 def deterministic_generate_k(msghash, priv):
     hmac_sha_256 = lambda k, s: hmac.new(k, s, hashlib.sha256)
-    v = b'\x01' * 32
-    k = b'\x00' * 32
-    priv = encode_privkey(priv, 'bin')
-    msghash = encode(hash_to_int(msghash), 256, 32)
-    k = hmac_sha_256(k, v + b'\x00' + priv + msghash).digest()
-    v = hmac_sha_256(k, v).digest()
+    v = bytearray([1]*32)	# b'\x01' * 32	
+    k = bytearray([0]*32)	# b'\x00' * 32  
+    priv = encode_privkey(priv, 'bin')					# binary private key
+    msghash = encode(hash_to_int(msghash), 256, 32)		# encode msg hash as 32 bytes
+    k = hmac_sha_256(bytearray([0]*32), \
+                     bytearray([1]*32 + [0]) + priv + msghash ).digest()
+    v = hmac_sha_256(k, bytearray(32)).digest()
+   #k = hmac_sha_256(k, v + b'\x00' + priv + msghash).digest()
+   #v = hmac_sha_256(k, v).digest()
     k = hmac_sha_256(k, v + b'\x01' + priv + msghash).digest()
     v = hmac_sha_256(k, v).digest()
-    return decode(hmac_sha_256(k, v).digest(), 256)
+    res = hmac_sha_256(k, v).digest()
+    return decode(by(res), 256)
+   #return decode(hmac_sha_256(k, v).digest(), 256)
 
 
 def ecdsa_raw_sign(msghash, priv):
-
+    """Deterministically sign ( k) msghash (z), returns (vbyte, r, s) as ints"""
     z = hash_to_int(msghash)
     k = deterministic_generate_k(msghash, priv)
 
     r, y = fast_multiply(G, k)
     s = inv(k, N) * (z + r*decode_privkey(priv)) % N
 
-    return 27+(y % 2), r, s
+    return 27+(y % 2), r, s		# vbyte, r, s
 
 
 def ecdsa_sign(msg, priv):
@@ -524,6 +544,7 @@ def ecdsa_sign(msg, priv):
 
 
 def ecdsa_raw_verify(msghash, vrs, pub):
+    """Takes msghash, tuple of (vbyte, r, s) and pubkey as hex"""
     v, r, s = vrs
 
     w = inv(s, N)
