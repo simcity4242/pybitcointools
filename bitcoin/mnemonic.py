@@ -16,7 +16,6 @@ def _get_wordlists(lang=None):
     # if any((listtype, lang)):
     from bitcoin.bci import make_request
 
-    WORDS = {}
     global WORDS
     bips_url = "https://github.com/bitcoin/bips/raw/master/bip-0039/%s.txt"
     WORDS['electrum1'], WORDS['english'], WORDS['japanese'], WORDS['spanish'], \
