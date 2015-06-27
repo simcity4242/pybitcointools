@@ -1,5 +1,6 @@
 #!/usr/bin/python
 from bitcoin.pyspecials import st, by, safe_hexlify, safe_unhexlify
+from bitcoin.main import access, multiaccess, slice, sum
 import json, re
 import random
 import sys
@@ -43,12 +44,12 @@ def parse_addr_args(*args):
 
 # Gets the unspent outputs of one or more addresses
 def bci_unspent(*args, **kwargs):
-    api_code = "?api=%s" % str(kwargs.get("api", None)) if "api" in kwargs else ""
+    api = "?api=%s" % str(kwargs.get("api", None)) if "api" in kwargs else ""
     network, addrs = parse_addr_args(*args)
     u = []
     for a in addrs:
         try:
-            data = make_request('https://blockchain.info/unspent?address=%s%s' % (a, api_code))
+            data = make_request('https://blockchain.info/unspent?address=%s%s' % (a, api))
         except Exception as e:
             if str(e) == 'No free outputs to spend':
                 continue
@@ -158,7 +159,7 @@ def history(*args):
         addrs = args
         network = "btc"
 
-    if network == "testnet":
+    if network == "testnet":pass
 #         txs = []
 #         for addr in addrs:
 #             data = make_request("http://test.webbtc.com/address/%s" % addr)
@@ -416,3 +417,23 @@ def get_block_coinbase(txval):
     alpha = set(map(chr, list(range(32, 126))))
     cbtext = ''.join(list(map(chr, filter(lambda x: chr(x) in alpha, bytearray(cb)))))
     return cbtext
+
+#  def rscan(*args, **kwargs):
+#      if len(args) == 1 and isinstance(args, str): 
+#          addr = args[0]
+#      if len(args) == 1 and isinstance(args, list):
+#          addrs = args
+#     urladdr = 'https://blockchain.info/address/%s?format=json&offset=%s'
+#  	
+#     addrdata = json.loads(make_request(urladdr % (addr, '0')))
+#     ntx = addrdata.get('n_tx', len(addrdata["txs"]))
+#     
+#     txs = []
+#     for i in range(0, ntx//50 + 1):
+#         sys.stderr.write("Fetching Txs from offset\t%s\n" % str(i*50))
+#         jdata = json.loads(make_request(urladdr % (addr, str(i*50))))
+#         txs.extend(jdata["txs"])
+#     
+#     inputs = multiaccess(txs, "inputs")				# get all Tx inputs
+#     ninps = tuple([len(x["inputs"]) for x in txs])	# number of inputs
+#     scripts = map(lambda x, y: 
