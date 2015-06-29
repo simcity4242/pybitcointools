@@ -66,30 +66,19 @@ if is_python2:
         return str(a)
 
     def from_int_to_le_bytes(i, length=1):
-        blen = len(encode(int(i), 256))
-        length = length if (blen <= length) else blen
-        lx = lambda x, v: struct.pack("<"+x, int(v))
-        if length == 1:
-            return lx('B', i)
-        elif length == 2:
-            return lx('H', i)
-        elif length == 4:
-            return lx('I', i)
-        elif length == 8:
-            return lx('L', i)
-        else: raise Exception("bad length or int value")
+        return from_int_to_bytes(i, length, 'little')
 
-    # def from_int_to_bytes(v, length=1, byteorder='little'):
-    #     blen = len(encode(int(v), 256))
-    #     length = length if (blen <= length) else blen
-    #     l = bytearray()
-    #     for i in range(length):
-    #         mod = v & 255
-    #         v >>= 8
-    #         l.append(mod)
-    #     if byteorder == 'big':
-    #         l.reverse()
-    #     return bytes(l)
+    def from_int_to_bytes(v, length=1, byteorder='little'):
+        blen = len(encode(int(v), 256))
+        length = length if (blen <= length) else blen
+        l = bytearray()
+        for i in range(length):
+            mod = v & 255
+            v >>= 8
+            l.append(mod)
+        if byteorder == 'big':
+            l.reverse()
+        return bytes(l)
 
     def from_int_to_byte(a):
         # return bytes([a])
@@ -100,25 +89,19 @@ if is_python2:
         return ord(a)
 
     def from_le_bytes_to_int(bstr):
-        lx = lambda x, v: struct.unpack('<'+x, bstr)[0]
-        blen = len(bstr)
-        if blen == 1:   return lx('B', bstr)
-        elif blen == 2: return lx('H', bstr)
-        elif blen == 4: return lx('I', bstr)
-        elif blen == 8: return lx('L', bstr)
-        else: raise Exception("Bad byte-string input")
+        return from_bytes_to_int(bstr, 'little', False)
 
-    # def from_bytes_to_int(bytes, byteorder='big', signed=False):
-    #     if byteorder != 'big':
-    #         bytes = reversed(bytes)
-    #     v = 0
-    #     bytes_to_ints = (lambda x: [ord(c) for c in x]) if bytes == str else lambda x: x
-    #     for c in bytes_to_ints(bytes):
-    #         v <<= 8
-    #         v += c
-    #     if signed and bytes[0] & 0x80:
-    #         v = v - (1 << (8*len(bytes)))
-    #     return v
+    def from_bytes_to_int(bytes, byteorder='big', signed=False):
+        if byteorder != 'big':
+            bytes = reversed(bytes)
+        v = 0
+        bytes_to_ints = (lambda x: [ord(c) for c in x]) if bytes == str else lambda x: x
+        for c in bytes_to_ints(bytes):
+            v <<= 8
+            v += c
+        if signed and bytes[0] & 0x80:
+            v = v - (1 << (8*len(bytes)))
+        return v
 
     def from_str_to_bytes(a):
         return by(a)

@@ -27,7 +27,6 @@ def pbkdf2_hmac(name, password, salt, rounds, dklen=None):
                 Ui = bytearray(hi.digest())
                 for j in xrange(hs.digest_size):
                     U[j] ^= Ui[j]
-
         blocks.extend(U)
 
     if last_size:

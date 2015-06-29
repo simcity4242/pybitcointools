@@ -2,7 +2,7 @@
 
 from bitcoin.main import *
 from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, from_str_to_bytes, st, by, changebase
-import string, unicodedata, random, hmac, re, math
+import string, unicodedata, random, hmac, re, math, bisect
 try:
     from bitcoin._wordlists import WORDS
 except ImportError:
@@ -31,7 +31,12 @@ def _get_wordlists(lang=None):
     assert map(lambda d: isinstance(d, list) and len(d), WORDS.values()).count(2048) == len(WORDS.keys()) - 1
     return WORDS if lang is None else WORDS[lang.lower()]
 
-#WORDS = _get_wordlists()
+def _binary_search(a, x, lo=0, hi=None):	# can't use a to specify default for hi
+    hi = hi if hi is not None else len(a)	# hi defaults to len(a)
+    pos = bisect.bisect_left(a, x, lo, hi)	# find insertion point
+    return (pos if pos != hi and a[pos] == x else -1)
+
+	#WORDS = _get_wordlists()
 #ELECWORDS, BIP39ENG, BIP39JAP = WORDS['electrum1'], WORDS['english'], WORDS['japanese']
 
 def bip39_detect_lang(mnem_str):
@@ -54,11 +59,10 @@ def bip39_detect_lang(mnem_str):
         return poss_langs[0]
     elif len(poss_langs) == 2:		# 2 possible langauges
         if poss_langs[0][:7] and poss_langs[1][:7] == 'chinese':
-            # TODO: perhaps count occurrences and return most probable 
-            print Warning("Cannot determine which Chinese wordlist to use!\nChinese traditional returned")
+            sys.stderr.write("Cannot determine which Chinese wordlist to use!\nChinese traditional returned")
             return 'chinese_traditional'
         if poss_langs[0][:7] and poss_langs[1][:7] in ('french', 'english'):
-            print Warning("Cannot determine if English or French.\nEnglish returned")
+            sys.stderr.write("Cannot determine if English or French.\nEnglish returned")
             return 'english '
     else:
         print Warning("Unable to determine language.\nReturning English")
@@ -106,7 +110,7 @@ def bip39_to_entropy(mnem_str):
     assert len(mnem_arr) % 3 == 0
     
     L = len(mnem_arr) * 11
-    indexes = [BIP39.index(w) for w in mnem_arr]	# word indexes (int)
+    indexes = [_binary_search(BIP39, w) for w in mnem_arr]	# word indexes (int)
     bindexes = map(lambda d: changebase(st(d), 10, 2, 11), indexes)
     binstr = ''.join(bindexes)
     
@@ -133,7 +137,7 @@ def bip39_check(mnem_phrase, lang=None):
 
     assert len(mn_array) in range(3, 124, 3)
 
-    binstr = ''.join([changebase(st(BIP39.index(x)), 10, 2, 11) for x in mn_array])
+    binstr = ''.join([changebase(st(_binary_search(BIP39, x)), 10, 2, 11) for x in mn_array])
     L = len(binstr)
     bd = binstr[:L // 33 * 32]
     cs = binstr[-L // 33:]
@@ -168,9 +172,9 @@ def elec1_mn_decode(mnem):
     output = ''
     for i in range(len(wlist)//3):
         word1, word2, word3 = wlist[3*i:3*i+3]
-        w1 =  words.index(word1)
-        w2 = (words.index(word2))%n
-        w3 = (words.index(word3))%n
+        w1 = _binary_search(words, word1) #w1 =  words.index(word1)
+        w2 = (_binary_search(words, word2))%n  #w2 = (words.index(word2))%n
+        w2 = (_binary_search(words, word3))%n  #w3 = (words.index(word3))%n
         x = w1 + n*((w2-w1)%n) + n*n*((w3-w2)%n)
         output += '%08x' % x
     return output
@@ -225,11 +229,11 @@ def elec2_mn_decode(mn_seed, lang='english'):
     assert lang in ('english', 'japanese', 'spanish')
     words = prepare_elec2_seed(mn_seed).split()
     wordlist = WORDS[lang.lower()]
-    n = 2048
+    n = len(wordlist)
     i = 0
     while words:
         w = words.pop()
-        k = wordlist.index(w)
+		k = _binary_search(wordlist, w, 0, n)	#k = wordlist.index(w)
         i = i*n + k
     return i
 

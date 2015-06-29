@@ -403,7 +403,7 @@ def slowsha(string):
 
 
 def hash_to_int(x):
-    if len(x) in [40, 64]:
+    if re.match('^[0-9a-fA-F]*$', x) and len(x) in [40, 64]:
         return decode(x, 16)
     return decode(x, 256)
 
@@ -459,6 +459,15 @@ def random_key():
 def random_electrum_seed():
     return random_key()[:32]
 
+def random_mini_key():
+    charset = get_code_string(58)[1:]   # Base58 without the 1
+    while True:
+        randstr = ''.join([charset[random.randrange(57)] for i in xrange(29)])
+        key = "%s%s%s" % ('S', randstr, '?')
+        if bin_sha256(key)[0] != b'\0': continue
+        if bin_sha256(key)[0] == b'\0': break
+    return key[:-1]
+
 # Encodings
 def b58check_to_bin(inp):
     leadingzbytes = len(re.match('^1*', inp).group(0))
@@ -498,8 +507,6 @@ pubtoaddr = pubkey_to_address
 def encode_sig(v, r, s):
     """Takes vbyte and (r,s) as ints, returns base64 string"""
     vb, rb, sb = from_int_to_byte(v), encode(r, 256), encode(s, 256)
-    #result = base64.b64encode(vb + bytearray((32-len(rb)) + \
-    #                         rb + bytearray((32-len(sb)) + sb)
     result = base64.b64encode(vb + b'\x00'*(32-len(rb)) + rb + b'\x00'*(32-len(sb)) + sb)
     return st(result)
 
@@ -512,30 +519,27 @@ def decode_sig(sig):
 # https://tools.ietf.org/html/rfc6979#section-3.2
 def deterministic_generate_k(msghash, priv):
     hmac_sha_256 = lambda k, s: hmac.new(k, s, hashlib.sha256)
-    v = bytearray([1]*32)	# b'\x01' * 32	
-    k = bytearray([0]*32)	# b'\x00' * 32  
+    v = bytearray([1]*32)	# b'\x01' * 32 
+    k = bytearray(32) 		# b'\x00' * 32 
     priv = encode_privkey(priv, 'bin')					# binary private key
     msghash = encode(hash_to_int(msghash), 256, 32)		# encode msg hash as 32 bytes
-    k = hmac_sha_256(bytearray([0]*32), \
-                     bytearray([1]*32 + [0]) + priv + msghash ).digest()
-    v = hmac_sha_256(k, bytearray(32)).digest()
-   #k = hmac_sha_256(k, v + b'\x00' + priv + msghash).digest()
-   #v = hmac_sha_256(k, v).digest()
+    k = hmac_sha_256(k, v + b'\x00' + priv + msghash).digest()
+    v = hmac_sha_256(k, v).digest()
     k = hmac_sha_256(k, v + b'\x01' + priv + msghash).digest()
     v = hmac_sha_256(k, v).digest()
     res = hmac_sha_256(k, v).digest()
     return decode(by(res), 256)
-   #return decode(hmac_sha_256(k, v).digest(), 256)
 
 
 def ecdsa_raw_sign(msghash, priv):
-    """Deterministically sign ( k) msghash (z), returns (vbyte, r, s) as ints"""
+    """Deterministically sign binary msghash (z) with k, returning (vbyte, r, s) as ints"""
     z = hash_to_int(msghash)
     k = deterministic_generate_k(msghash, priv)
 
     r, y = fast_multiply(G, k)
     s = inv(k, N) * (z + r*decode_privkey(priv)) % N
-
+	if s > N//2:				# as per BIP62, low s value
+		s = N - s
     return 27+(y % 2), r, s		# vbyte, r, s
 
 
@@ -544,7 +548,7 @@ def ecdsa_sign(msg, priv):
 
 
 def ecdsa_raw_verify(msghash, vrs, pub):
-    """Takes msghash, tuple of (vbyte, r, s) and pubkey as hex"""
+    """Takes msghash, tuple of (vbyte, r, s) and pubkey as hex, verifies signature"""
     v, r, s = vrs
 
     w = inv(s, N)
@@ -615,14 +619,7 @@ hmac_sha_256 = lambda k, s: hmac.new(k, s, hashlib.sha256)
 hmac_sha_512 = lambda k, s: hmac.new(k, s, hashlib.sha512)
 
 
-def random_mini_key():
-    charset = get_code_string(58)[1:]   # Base58 without the 1
-    while True:
-        randstr = ''.join([charset[random.randrange(57)] for i in xrange(29)])
-        key = "%s%s%s" % ('S', randstr, '?')
-        if bin_sha256(key)[0] != b'\0': continue
-        if bin_sha256(key)[0] == b'\0': break
-    return key[:-1]
+
 
 # PK = """3081d30201010420{0:064x}a081a53081a2020101302c06072a8648ce3d0101022100{1:064x}3006040100040107042102{2:064x}022100{3:064x}020101a124032200"""
 # PK.strip().format(rki, P, Gx, N)+ compress(privtopub(rk))
