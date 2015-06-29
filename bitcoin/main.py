@@ -10,8 +10,7 @@ import random
 import hmac
 from bitcoin.ripemd import *
 
-# TODO: add reclimit to necc. functions for Pythonista		FIXED! https://gist.github.com/341ee20a12b6a3babe8d
-is_ios = "Pythonista" in os.environ.get("XPC_SERVICE_NAME")
+is_ios = "Pythonista" in os.environ.get("XPC_SERVICE_NAME", "")
 reclimit = lambda x: sys.setrecursionlimit(x)	# for Pythonista iOS
 is_python2 = str == bytes
 
@@ -54,7 +53,7 @@ def inv(a, n):
 def contains_point(x, y):
     """Is the point (x,y) on this curve?"""
     x, y = map(int, x, y)
-    return (y**2 - (x**3 + A* P )) % P == 0
+    return (y**2 - (x**3 + A*P )) % P == 0
 
 # JSON access (for pybtctool convenience)
 

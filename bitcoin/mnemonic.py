@@ -233,7 +233,7 @@ def elec2_mn_decode(mn_seed, lang='english'):
     i = 0
     while words:
         w = words.pop()
-		k = _binary_search(wordlist, w, 0, n)	#k = wordlist.index(w)
+        k = _binary_search(wordlist, w, 0, n)	#k = wordlist.index(w)
         i = i*n + k
     return i
 
