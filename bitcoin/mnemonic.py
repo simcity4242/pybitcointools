@@ -31,7 +31,7 @@ def _get_wordlists(lang=None):
     assert map(lambda d: isinstance(d, list) and len(d), WORDS.values()).count(2048) == len(WORDS.keys()) - 1
     return WORDS if lang is None else WORDS[lang.lower()]
 
-def _binary_search(a, x, lo=0, hi=None):	# can't use a to specify default for hi
+def binary_search(a, x, lo=0, hi=None):	# can't use a to specify default for hi
     hi = hi if hi is not None else len(a)	# hi defaults to len(a)
     pos = bisect.bisect_left(a, x, lo, hi)	# find insertion point
     return (pos if pos != hi and a[pos] == x else -1)
@@ -110,7 +110,7 @@ def bip39_to_entropy(mnem_str):
     assert len(mnem_arr) % 3 == 0
     
     L = len(mnem_arr) * 11
-    indexes = [_binary_search(BIP39, w) for w in mnem_arr]	# word indexes (int)
+    indexes = [binary_search(BIP39, w) for w in mnem_arr]	# word indexes (int)
     bindexes = map(lambda d: changebase(st(d), 10, 2, 11), indexes)
     binstr = ''.join(bindexes)
     
@@ -137,7 +137,8 @@ def bip39_check(mnem_phrase, lang=None):
 
     assert len(mn_array) in range(3, 124, 3)
 
-    binstr = ''.join([changebase(st(_binary_search(BIP39, x)), 10, 2, 11) for x in mn_array])
+    #binstr = ''.join([changebase(st(binary_search(BIP39, x)), 10, 2, 11) for x in mn_array])
+    binstr = ''.join([changebase(st(BIP39.index(x)), 10, 2, 11) for x in mn_array])
     L = len(binstr)
     bd = binstr[:L // 33 * 32]
     cs = binstr[-L // 33:]
@@ -172,9 +173,9 @@ def elec1_mn_decode(mnem):
     output = ''
     for i in range(len(wlist)//3):
         word1, word2, word3 = wlist[3*i:3*i+3]
-        w1 = _binary_search(words, word1) #w1 =  words.index(word1)
-        w2 = (_binary_search(words, word2))%n  #w2 = (words.index(word2))%n
-        w2 = (_binary_search(words, word3))%n  #w3 = (words.index(word3))%n
+        w1 = binary_search(words, word1) #w1 =  words.index(word1)
+        w2 = (binary_search(words, word2))%n  #w2 = (words.index(word2))%n
+        w2 = (binary_search(words, word3))%n  #w3 = (words.index(word3))%n
         x = w1 + n*((w2-w1)%n) + n*n*((w3-w2)%n)
         output += '%08x' % x
     return output
@@ -233,7 +234,7 @@ def elec2_mn_decode(mn_seed, lang='english'):
     i = 0
     while words:
         w = words.pop()
-        k = _binary_search(wordlist, w, 0, n)	#k = wordlist.index(w)
+        k = binary_search(wordlist, w, 0, n)	#k = wordlist.index(w)
         i = i*n + k
     return i
 

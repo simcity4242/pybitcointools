@@ -154,8 +154,6 @@ def signature_form(tx, i, script, hashcode=SIGHASH_ALL):
     # one byte shorter when encoded correctly.
 def der_encode_sig(v, r, s):
     """Takes (vbyte, r, s) as ints and returns hex der encode sig"""
-    s = (N-s) if s > N//2 else s
-    assert s < N//2
     b1, b2 = encode(r, 256), encode(s, 256)
     # TODO: check s < N // 2, otherwise s = complement (1 byte shorter)
     # https://gist.github.com/3aea5d82b1c543dd1d3c
@@ -165,27 +163,26 @@ def der_encode_sig(v, r, s):
         b2 = b'\x00' + b2
     left = b'\x02' + encode(len(b1), 256, 1) + b1
     right = b'\x02' + encode(len(b2), 256, 1) + b2
-    sighex = safe_hexlify(b'x\30' + encode(len(left+right), 256, 1) + left + right)	# TODO: standard format
-    assert is_bip66(sighex)
+    sighex = safe_hexlify(b'\x30' + encode(len(left+right), 256, 1) + left + right)	# TODO: standard format
+    #assert is_bip66(sighex)
     return sighex
 
 
 def der_decode_sig(sig):
-    """Takes hex der sig and returns (None, r, s) as ints"""
+    """Takes hex der sig and returns (v=None, r, s) as ints"""
     sig = safe_unhexlify(sig)
     leftlen = decode(sig[3:4], 256)
     left = sig[4:4+leftlen]
     rightlen = decode(sig[5+leftlen:6+leftlen], 256)
     right = sig[6+leftlen:6+leftlen+rightlen]
-    assert 3 + left + 3 + right + 1 == len(sig)		# check for new s code
+    #assert 3 + leftlen + 3 + rightlen + 1 == len(sig)		# check for new s code
     return (None, decode(left, 256), decode(right, 256))
 
 def is_bip66(sig):
-    """Takes hex string sig"""
+    """Checks hex DER sig for BIP66 consistency"""
 
     #https://raw.githubusercontent.com/bitcoin/bips/master/bip-0066.mediawiki
     #0x30  [total-len]  0x02  [R-len]  [R]  0x02  [S-len]  [S]  [sighash]
-    #sig = changebase(sig, 16, 256) if IS_HEX else sig
     if isinstance(sig, string_types) and re.match('^[0-9a-fA-F]*$', sig):
         sig = bytearray.fromhex(sig)
     
@@ -221,6 +218,7 @@ def bin_txhash(tx, hashcode=None):
 
 
 def ecdsa_tx_sign(tx, priv, hashcode=SIGHASH_ALL):
+    """Takes rawTx with scriptPubKey inserted"""
     rawsig = ecdsa_raw_sign(bin_txhash(tx, hashcode), priv)
     return der_encode_sig(*rawsig)+encode(hashcode, 16, 2)
 
