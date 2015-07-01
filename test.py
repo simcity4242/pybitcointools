@@ -564,7 +564,7 @@ class TestBIP39JAP(unittest.TestCase):
         BIP39_VECTORS = json.loads(fo)
 
         for v in BIP39_VECTORS:
-            self.assertTrue(bip39_check(v['mnemonic']))        # check mnemonic valid bip39
+            self.assertTrue(bip39_check(v['mnemonic'], 'japanese'))        # check mnemonic valid bip39
             self.assertEqual(bip39_to_mn(v['entropy'], lang='japanese'), v['mnemonic'])
             self.assertEqual(bip39_to_seed(v['mnemonic'], v['passphrase']), v['seed'])
             self.assertEqual(bip32_master_key(safe_unhexlify(v['seed'])), v['bip32_xprv'])
