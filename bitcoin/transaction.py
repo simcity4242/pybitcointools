@@ -154,7 +154,8 @@ def signature_form(tx, i, script, hashcode=SIGHASH_ALL):
     # one byte shorter when encoded correctly.
 def der_encode_sig(v, r, s):
     """Takes (vbyte, r, s) as ints and returns hex der encode sig"""
-    b1, b2 = encode(r, 256), encode(s, 256)
+    s = N-s if s>N//2 else s
+	b1, b2 = encode(r, 256), encode(s, 256)
     # TODO: check s < N // 2, otherwise s = complement (1 byte shorter)
     # https://gist.github.com/3aea5d82b1c543dd1d3c
     if r >= 2**255:
@@ -164,7 +165,7 @@ def der_encode_sig(v, r, s):
     left = b'\x02' + encode(len(b1), 256, 1) + b1
     right = b'\x02' + encode(len(b2), 256, 1) + b2
     sighex = safe_hexlify(b'\x30' + encode(len(left+right), 256, 1) + left + right)	# TODO: standard format
-    #assert is_bip66(sighex)
+    assert is_bip66(sighex)
     return sighex
 
 
@@ -175,7 +176,7 @@ def der_decode_sig(sig):
     left = sig[4:4+leftlen]
     rightlen = decode(sig[5+leftlen:6+leftlen], 256)
     right = sig[6+leftlen:6+leftlen+rightlen]
-    #assert 3 + leftlen + 3 + rightlen + 1 == len(sig)		# check for new s code
+    assert 3 + leftlen + 3 + rightlen + 1 == len(sig)		# check for new s code
     return (None, decode(left, 256), decode(right, 256))
 
 def is_bip66(sig):

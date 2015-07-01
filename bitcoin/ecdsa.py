@@ -113,7 +113,6 @@ def signature_form(tx, i, script, hashcode=SIGHASH_ALL):
 def der_encode_sig(v, r, s):
     """Takes (vbyte, r, s) as ints and returns hex der encode sig"""
     s = (N-s) if s > N//2 else s
-    assert s < N//2
     b1, b2 = encode(r, 256), encode(s, 256)
     # TODO: check s < N // 2, otherwise s = complement (1 byte shorter)
     # https://gist.github.com/3aea5d82b1c543dd1d3c
@@ -123,7 +122,7 @@ def der_encode_sig(v, r, s):
         b2 = b'\x00' + b2
     left = b'\x02' + encode(len(b1), 256, 1) + b1
     right = b'\x02' + encode(len(b2), 256, 1) + b2
-    sighex = safe_hexlify(b'x\30' + encode(len(left+right), 256, 1) + left + right)	# TODO: standard format
+    sighex = safe_hexlify(b'\x30' + encode(len(left+right), 256, 1) + left + right)	# TODO: standard format
     assert is_bip66(sighex)
     return sighex
 
@@ -179,7 +178,7 @@ def bin_txhash(tx, hashcode=None):
 
 
 def ecdsa_tx_sign(tx, priv, hashcode=SIGHASH_ALL):
-    """Takes rawTx with scriptPubKey inserted"""
+    """Signs Tx input, returning DER sig + hashcode"""
     rawsig = ecdsa_raw_sign(bin_txhash(tx, hashcode), priv)
     return der_encode_sig(*rawsig)+encode(hashcode, 16, 2)
 
@@ -194,3 +193,7 @@ def ecdsa_tx_recover(tx, sig, hashcode=SIGHASH_ALL):
     left = ecdsa_raw_recover(z, (0, r, s))
     right = ecdsa_raw_recover(z, (1, r, s))
     return (encode_pubkey(left, 'hex'), encode_pubkey(right, 'hex'))
+	
+def electrum_sig_hash(message):
+    padded = b"\x18Bitcoin Signed Message:\n" + num_to_var_int(len(message)) + from_str_to_bytes(message)
+    return bin_dbl_sha256(padded)

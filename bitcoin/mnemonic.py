@@ -11,11 +11,10 @@ except ImportError:
 def _get_directory():
     return os.path.join(os.path.dirname(__file__), 'wordlist')
 
-def _get_wordlists(lang=None):
+def get_wordlists(lang=None):
     # Try to access local lists, otherwise download text lists
     # if any((listtype, lang)):
     from bitcoin.bci import make_request
-
     global WORDS
     bips_url = "https://github.com/bitcoin/bips/raw/master/bip-0039/%s.txt"
     WORDS['electrum1'], WORDS['english'], WORDS['japanese'], WORDS['spanish'], \
@@ -29,7 +28,9 @@ def _get_wordlists(lang=None):
          bips_url % 'chinese_traditional',
          bips_url % 'french'))
     assert map(lambda d: isinstance(d, list) and len(d), WORDS.values()).count(2048) == len(WORDS.keys()) - 1
-    return WORDS if lang is None else WORDS[lang.lower()]
+    if lang is not None:
+        return WORDS[lang.lower()]
+    return WORDS
 
 def binary_search(a, x, lo=0, hi=None):	# can't use a to specify default for hi
     hi = hi if hi is not None else len(a)	# hi defaults to len(a)
@@ -42,7 +43,7 @@ def binary_search(a, x, lo=0, hi=None):	# can't use a to specify default for hi
 def bip39_detect_lang(mnem_str):
     # TODO: add Electrum1?, Chinese detect not possible?
     if isinstance(mnem_str, list):
-        mnem_arr = mnem_str
+        mnem_str = u' '.join(mnem_str)
     mnem_arr = mnem_str.split()
     sme = set(mnem_arr)
     # French & English share 100 words
@@ -110,7 +111,7 @@ def bip39_to_entropy(mnem_str):
     assert len(mnem_arr) % 3 == 0
     
     L = len(mnem_arr) * 11
-    indexes = [binary_search(BIP39, w) for w in mnem_arr]	# word indexes (int)
+    indexes = [BIP39.index(w) for w in mnem_arr]	# word indexes (int)
     bindexes = map(lambda d: changebase(st(d), 10, 2, 11), indexes)
     binstr = ''.join(bindexes)
     
@@ -173,9 +174,9 @@ def elec1_mn_decode(mnem):
     output = ''
     for i in range(len(wlist)//3):
         word1, word2, word3 = wlist[3*i:3*i+3]
-        w1 = binary_search(words, word1) #w1 =  words.index(word1)
-        w2 = (binary_search(words, word2))%n  #w2 = (words.index(word2))%n
-        w2 = (binary_search(words, word3))%n  #w3 = (words.index(word3))%n
+        w1 =  words.index(word1)
+        w2 = (words.index(word2))%n
+        w3 = (words.index(word3))%n
         x = w1 + n*((w2-w1)%n) + n*n*((w3-w2)%n)
         output += '%08x' % x
     return output
@@ -234,7 +235,7 @@ def elec2_mn_decode(mn_seed, lang='english'):
     i = 0
     while words:
         w = words.pop()
-        k = binary_search(wordlist, w, 0, n)	#k = wordlist.index(w)
+        k = wordlist.index(w)
         i = i*n + k
     return i
 
