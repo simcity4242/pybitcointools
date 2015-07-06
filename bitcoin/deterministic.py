@@ -8,7 +8,7 @@ from bitcoin.mnemonic import prepare_elec2_seed, is_elec1_seed, is_elec2_seed
 # TODO: detect Elec 1, 2 & BIP39
 
 # Electrum wallets
-def bin_electrum_extract_seed(mn_seed, password=''):
+def bin_electrum_extract_seed(mn_seed, password=b''):
     assert len(mn_seed) == 1
     if isinstance(mn_seed, string_types):
         mn_seed = prepare_elec2_seed(mn_seed)
@@ -99,9 +99,9 @@ def raw_bip32_ckd(rawtuple, i):
     if i >= 2**31:
         if vbytes in PUBLIC:
             raise Exception("Can't do private derivation on public key!")
-        I = hmac_sha_512(chaincode, b'\x00'+priv[:32]+encode(i, 256, 4)).digest()
+        I = hmac_sha512(chaincode, b'\x00'+priv[:32]+encode(i, 256, 4)).digest()
     else:
-        I = hmac_sha_512(chaincode, pub+encode(i, 256, 4)).digest()
+        I = hmac_sha512(chaincode, pub+encode(i, 256, 4)).digest()
 
     if vbytes in PRIVATE:
         newkey = add_privkeys(I[:32] + b'\x01', priv)
@@ -150,7 +150,7 @@ def bip32_ckd(data, i):
 
 
 def bip32_master_key(seed, vbytes=MAINNET_PRIVATE):
-    I = hmac_sha_512(from_str_to_bytes("Bitcoin seed"), seed).digest()
+    I = hmac_sha512(from_str_to_bytes("Bitcoin seed"), seed).digest()
     return bip32_serialize((vbytes, 0, b'\x00'*4, 0, I[32:], I[:32]+b'\x01'))
 
 
@@ -171,7 +171,7 @@ def raw_crack_bip32_privkey(parent_pub, priv):
 
     if i >= 2**31: raise Exception("Can't crack private derivation!")
 
-    I = hmac_sha_512(pchaincode, pkey+encode(i, 256, 4)).digest()
+    I = hmac_sha512(pchaincode, pkey+encode(i, 256, 4)).digest()
 
     pprivkey = subtract_privkeys(key, I[:32]+b'\x01')
 
@@ -208,11 +208,24 @@ def bip32_descend(*args):
         key, path = args
     else:
         key, path = args[0], args[1:]
-    try: path = parse_bip32_path(path)
-    except: pass
+    try: 
+        path = parse_bip32_path(path)
+    except TypeError: 
+        pass
     for p in path:
         key = bip32_ckd(key, p)
     return bip32_extract_key(key)
+
+def bip32_path(*args):
+    """Same as bip32_descend but returns masterkey instead of hex privkey"""
+    if len(args) == 2:
+        key, path = args[0], args[1]
+    elif len(args) > 2:
+        key, path = args[0], args[1:]
+    pathlist = parse_bip32_path(path)
+    for p in pathlist:
+        key = bip32_ckd(key, p)
+    return key
 
 def parse_bip32_path(*args):
     """Takes bip32 path as string "m/0'/2H" or 0' """
@@ -228,7 +241,8 @@ def parse_bip32_path(*args):
     for v in path.split('/'):
         if v[-1] in ("'H"):
             v = int(v[:-1]) + 0x80000000
-        if v.strip() == '2**31': v = 2**31
+        #if isinstance(v, str) and v == '2**31': 
+        #    v = 2**31
         v = int(v)
         patharr.append(v)
     return patharr
@@ -236,7 +250,7 @@ def parse_bip32_path(*args):
 def bip44_descend(*args):
     # 44'/COINTYPE'/ACCOUNT'/change/index
     # either 5 args: masterkey, 
-    masterkey, coin, account, change, idx = args[0], args[1:]
+    masterkey, coin, account, change, idx = args[0], args[1], args[2], args[3], args[4]
     path = '/'.join(map(st, ["44'", coin, account, change, idx]))
     path = parse_bip32_path(path)
     return bip32_descend(masterkey, path)
