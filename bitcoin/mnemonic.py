@@ -2,11 +2,13 @@
 
 from bitcoin.main import *
 from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, from_str_to_bytes, st, by, changebase
-import string, unicodedata, random, hmac, re, math, bisect
+import string, unicodedata, random, hmac, re, math
 try:
     from bitcoin._wordlists import WORDS
 except ImportError:
-    raise Exception # WORDS = _get_wordlists()  #ERROR UNRESOLVED
+    WORDS={}
+
+LANGS = ["English", "Japanese", "Chinese_simplified", "Chinese_traditional", "Spanish", "French"]
 
 def _get_directory():
     return os.path.join(os.path.dirname(__file__), 'wordlist')
@@ -16,8 +18,11 @@ def get_wordlists(lang=None):
     # if any((listtype, lang)):
     from bitcoin.bci import make_request
     global WORDS
+    if 'electrum' in str(lang.lower()): 
+        WORDS['electrum1'] = make_request("http://tinyurl.com/electrum1words").strip().split()
+        return [(k, v.pop(k, "")) for k,v in WORDS]
     bips_url = "https://github.com/bitcoin/bips/raw/master/bip-0039/%s.txt"
-    WORDS['electrum1'], WORDS['english'], WORDS['japanese'], WORDS['spanish'], \
+    WORDS['electrum1'],        WORDS['english'], WORDS['japanese'], WORDS['spanish'], \
     WORDS['chinese_simplified'], WORDS['chinese_traditional'], WORDS['french'] = map(
         lambda u: make_request(u).strip().split(),
         ("http://tinyurl.com/electrum1words",
@@ -32,12 +37,11 @@ def get_wordlists(lang=None):
         return WORDS[lang.lower()]
     return WORDS
 
-def binary_search(a, x, lo=0, hi=None):	# can't use a to specify default for hi
-    hi = hi if hi is not None else len(a)	# hi defaults to len(a)
-    pos = bisect.bisect_left(a, x, lo, hi)	# find insertion point
-    return (pos if pos != hi and a[pos] == x else -1)
+#def binary_search(a, x, lo=0, hi=None):	# can't use a to specify default for hi
+#    hi = hi if hi is not None else len(a)	# hi defaults to len(a)
+#    pos = bisect.bisect_left(a, x, lo, hi)	# find insertion point
+#    return (pos if pos != hi and a[pos] == x else -1)
 
-	#WORDS = _get_wordlists()
 #ELECWORDS, BIP39ENG, BIP39JAP = WORDS['electrum1'], WORDS['english'], WORDS['japanese']
 
 def bip39_detect_lang(mnem_str):
