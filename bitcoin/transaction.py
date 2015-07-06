@@ -149,18 +149,16 @@ def signature_form(tx, i, script, hashcode=SIGHASH_ALL):
 
 # Making the actual signatures
 
-    # If the S value is above the order of the curve divided by two, its
-    # complement modulo the order could have been used instead, which is
-    # one byte shorter when encoded correctly.
+
 def der_encode_sig(v, r, s):
     """Takes (vbyte, r, s) as ints and returns hex der encode sig"""
-    s = N-s if s>N//2 else s
-	b1, b2 = encode(r, 256), encode(s, 256)
+    s = N-s if s>N//2 else s	# BIP62 low s
+    b1, b2 = encode(r, 256), encode(s, 256)
     # TODO: check s < N // 2, otherwise s = complement (1 byte shorter)
     # https://gist.github.com/3aea5d82b1c543dd1d3c
-    if r >= 2**255:
+    if bytearray(b1)[0] & 0x80:		# add null bytes if leading byte interpreted as negative
         b1 = b'\x00' + b1
-    if s >= 2**255:
+    if bytearray(b2)[0] & 0x80:
         b2 = b'\x00' + b2
     left = b'\x02' + encode(len(b1), 256, 1) + b1
     right = b'\x02' + encode(len(b2), 256, 1) + b2
@@ -171,13 +169,14 @@ def der_encode_sig(v, r, s):
 
 def der_decode_sig(sig):
     """Takes hex der sig and returns (v=None, r, s) as ints"""
-    sig = safe_unhexlify(sig)
-    leftlen = decode(sig[3:4], 256)
-    left = sig[4:4+leftlen]
-    rightlen = decode(sig[5+leftlen:6+leftlen], 256)
-    right = sig[6+leftlen:6+leftlen+rightlen]
-    assert 3 + leftlen + 3 + rightlen + 1 == len(sig)		# check for new s code
-    return (None, decode(left, 256), decode(right, 256))
+    #assert is_bip66(sig)
+    leftlen = decode(sig[6:8], 16)*2
+    left = sig[8:8+leftlen]
+    rightlen = decode(sig[10+leftlen:12+leftlen], 16)*2
+    right = sig[12+leftlen:12+leftlen+rightlen]
+    assert 3*2 + leftlen + 3*2 + rightlen + 1*2 == len(sig) 	# check for new s code
+    return (None, decode(left, 16), decode(right, 16))
+
 
 def is_bip66(sig):
     """Checks hex DER sig for BIP66 consistency"""
@@ -186,6 +185,7 @@ def is_bip66(sig):
     #0x30  [total-len]  0x02  [R-len]  [R]  0x02  [S-len]  [S]  [sighash]
     if isinstance(sig, string_types) and re.match('^[0-9a-fA-F]*$', sig):
         sig = bytearray.fromhex(sig)
+        sig.append(b"\x01")		# add SIGHASH for BIP66 check
     
     if len(sig) < 9 or len(sig) > 73: return False
     if (sig[0] != 0x30): return False
@@ -446,7 +446,7 @@ def is_inp(arg):
     return len(arg) > 64 or "output" in arg or "outpoint" in arg
 
 
-def mktx(*args):
+def mktx(*args, **kwargs):
     # [in0, in1...],[out0, out1...] or in0, in1 ... out0 out1 ...
     ins, outs = [], []
     for arg in args:
@@ -455,7 +455,7 @@ def mktx(*args):
         else:
             (ins if is_inp(arg) else outs).append(arg)
 
-    txobj = {"locktime": 0, "version": 1, "ins": [], "outs": []}
+    txobj = {"locktime": kwargs.get("locktime", 0), "version": 1, "ins": [], "outs": []}
     for i in ins:
         if isinstance(i, dict) and "outpoint" in i:
             txobj["ins"].append(i)
@@ -508,7 +508,7 @@ def select(unspent, value):
     return low[:i]
 
 # Only takes inputs of the form { "output": blah, "value": foo }
-def mksend(*args):
+def mksend(*args, **kwargs):
     argz, change, fee = args[:-2], args[-2], int(args[-1])
     ins, outs = [], []
     for arg in argz:
@@ -536,4 +536,4 @@ def mksend(*args):
     elif isum > osum+fee+5430:
         outputs2 += [{"address": change, "value": isum-osum-fee}]
 
-    return mktx(ins, outputs2)
+    return mktx(ins, outputs2, **kwargs)
