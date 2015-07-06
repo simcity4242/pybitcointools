@@ -50,13 +50,12 @@ def inv(a, n):
         lm, low, hm, high = nm, new, lm, low
     return lm % n
 
-def contains_point(x, y):
-    """Is the point (x,y) on this curve?"""
-    x, y = map(int, x, y)
-    return (y**2 - (x**3 + A*P )) % P == 0
+def is_point(x, y):
+    """Is point (x,y) on SECO256k1 curve?"""
+    x, y = int(x), int(y)
+    return (y**2 - (x**3 + A*x + B )) % P == 0
 
 # JSON access (for pybtctool convenience)
-
 
 def access(obj, prop):
     if isinstance(obj, dict):
@@ -129,18 +128,17 @@ def jacobian_add(p, q):
     U1H2 = (U1 * H2) % P
     nx = (R ** 2 - H3 - 2 * U1H2) % P
     ny = (R * (U1H2 - nx) - S1 * H3) % P
-    nz = H * p[2] * q[2]
+    nz = (H * p[2] * q[2]) % P
     return (nx, ny, nz)
 
 
 def from_jacobian(p):
-    reclimit(512) 
     z = inv(p[2], P)
     return ((p[0] * z**2) % P, (p[1] * z**3) % P)
 
 
 def jacobian_multiply(a, n):
-    reclimit(512) 
+    if is_ios: reclimit(1000)
     if a[1] == 0 or n == 0:
         return (0, 0, 1)
     if n == 1:
@@ -154,12 +152,12 @@ def jacobian_multiply(a, n):
 
 
 def fast_multiply(a, n):
-    reclimit(512) 
+    if is_ios: reclimit(1000)
     return from_jacobian(jacobian_multiply(to_jacobian(a), n))
 
 
 def fast_add(a, b):
-    reclimit(512) 
+    if is_ios: reclimit(1000)
     return from_jacobian(jacobian_add(to_jacobian(a), to_jacobian(b)))
 
 # TODO: check pubkey Electrum
@@ -500,13 +498,16 @@ def pubkey_to_address(pubkey, magicbyte=0):
 
 pubtoaddr = pubkey_to_address
 
+
 # EDCSA
 
 
 def encode_sig(v, r, s):
     """Takes vbyte and (r,s) as ints, returns base64 string"""
     vb, rb, sb = from_int_to_byte(v), encode(r, 256), encode(s, 256)
-    result = base64.b64encode(vb + b'\x00'*(32-len(rb)) + rb + b'\x00'*(32-len(sb)) + sb)
+    result = base64.b64encode(vb + 
+                              b'\x00'*(32-len(rb)) + rb + \
+                              b'\x00'*(32-len(sb)) + sb)
     return st(result)
 
 
@@ -517,18 +518,19 @@ def decode_sig(sig):
 
 # https://tools.ietf.org/html/rfc6979#section-3.2
 def deterministic_generate_k(msghash, priv):
-    hmac_sha_256 = lambda k, s: hmac.new(k, s, hashlib.sha256)
+    hmac_sha256 = lambda k, s: hmac.new(k, s, hashlib.sha256)
     v = bytearray([1]*32)	# b'\x01' * 32 
     k = bytearray(32) 		# b'\x00' * 32 
     priv = encode_privkey(priv, 'bin')					# binary private key
     msghash = encode(hash_to_int(msghash), 256, 32)		# encode msg hash as 32 bytes
-    k = hmac_sha_256(k, v + b'\x00' + priv + msghash).digest()
-    v = hmac_sha_256(k, v).digest()
-    k = hmac_sha_256(k, v + b'\x01' + priv + msghash).digest()
-    v = hmac_sha_256(k, v).digest()
-    res = hmac_sha_256(k, v).digest()
+    k = hmac_sha256(k, v + b'\x00' + priv + msghash).digest()
+    v = hmac_sha256(k, v).digest()
+    k = hmac_sha256(k, v + b'\x01' + priv + msghash).digest()
+    v = hmac_sha256(k, v).digest()
+    res = hmac_sha256(k, v).digest()
     return decode(by(res), 256)
 
+# MSG SIGNING
 
 def ecdsa_raw_sign(msghash, priv):
     """Deterministically sign binary msghash (z) with k, returning (vbyte, r, s) as ints"""
@@ -536,14 +538,17 @@ def ecdsa_raw_sign(msghash, priv):
     k = deterministic_generate_k(msghash, priv)
 
     r, y = fast_multiply(G, k)
-    s = inv(k, N) * (z + r*decode_privkey(priv)) % N
-    # if s > N//2:				# as per BIP62, low s value
-    #     s = N - s
+    priv = decode_privkey(priv)
+    s = inv(k, N) * (z + r * priv) % N
+
     return 27+(y % 2), r, s		# vbyte, r, s
 
 
 def ecdsa_sign(msg, priv):
-    return encode_sig(*ecdsa_raw_sign(electrum_sig_hash(msg), priv))
+    """Sign a msg with privkey, returning base64 signature"""
+    sighash = electrum_sig_hash(msg)
+    v, r, s = ecdsa_raw_sign(sighash, priv)
+    return encode_sig(v, r, s)
 
 
 def ecdsa_raw_verify(msghash, vrs, pub):
@@ -554,21 +559,30 @@ def ecdsa_raw_verify(msghash, vrs, pub):
     z = hash_to_int(msghash)
 
     u1, u2 = z*w % N, r*w % N
-    x, y = fast_add(fast_multiply(G, u1), fast_multiply(decode_pubkey(pub), u2))
+    pub = decode_pubkey(pub)
+    x, y = fast_add(fast_multiply(G, u1), fast_multiply(pub, u2))
 
     return r == x
 
 
 def ecdsa_verify(msg, sig, pub):
-    return ecdsa_raw_verify(electrum_sig_hash(msg), decode_sig(sig), pub)
+    """Verify (base64) signature of a message using pubkey"""
+    sighash = electrum_sig_hash(msg)
+    vrs = decode_sig(sig)
+    return ecdsa_raw_verify(sighash, vrs, pub)
 
 
 def ecdsa_raw_recover(msghash, vrs):
     v, r, s = vrs
 
     x = r
-    beta = pow(x*x*x+A*x+B, (P+1)//4, P)
-    y = beta if v % 2 ^ beta % 2 else (P - beta)
+    xcubedaxb = (x*x*x+A*x+B) % P
+    beta = pow(xcubedaxb, (P+1)//4, P)
+    y = beta if ((v % 2) ^ (beta % 2)) else (P - beta)
+    # If xcubedaxb is not a quadratic residue, then r cannot be the x coord
+    # for a point on the curve, and so the sig is invalid
+    if (xcubedaxb - y*y) % P != 0:
+        return False
     z = hash_to_int(msghash)
     Gz = jacobian_multiply((Gx, Gy, 1), (N - z) % N)
     XY = jacobian_multiply((x, y, 1), s)
@@ -576,13 +590,17 @@ def ecdsa_raw_recover(msghash, vrs):
     Q = jacobian_multiply(Qr, inv(r, N))
     Q = from_jacobian(Q)
 
-    if ecdsa_raw_verify(msghash, vrs, Q):
-        return Q
-    return False
+    if not ecdsa_raw_verify(msghash, vrs, Q):
+        return False
+    return Q
 
 
 def ecdsa_recover(msg, sig):
-    return encode_pubkey(ecdsa_raw_recover(electrum_sig_hash(msg), decode_sig(sig)), 'hex')
+    """Recover pubkey from message and base64 signature"""
+    sighash = electrum_sig_hash(msg)
+    vrs = decode_sig(sig)
+    Q = ecdsa_raw_recover(sighash, vrs)
+    return encode_pubkey(Q, 'hex')
 
 
 # PBKDF2: a simple implementation using stock python modules.
@@ -614,8 +632,8 @@ def pbkdf2_hmac_sha512(password, salt):
         b = bin_pbkdf2_hmac('sha512', password, salt, 2048, 64)
     return safe_hexlify(b)
 
-hmac_sha_256 = lambda k, s: hmac.new(k, s, hashlib.sha256)
-hmac_sha_512 = lambda k, s: hmac.new(k, s, hashlib.sha512)
+hmac_sha256 = lambda k, s: hmac.new(k, s, hashlib.sha256)
+hmac_sha512 = lambda k, s: hmac.new(k, s, hashlib.sha512)
 
 
 
