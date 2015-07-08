@@ -145,26 +145,19 @@ OPS = {
     'b9': 'OP_NOP9',
 }
 
-STANDARD_TRANSACTION_LIST = [
-    'P2PKH',
-    'P2SH',
-    'Multisig',
-    'Pubkey',
-    'Null Data',
-]
 
-REGEX_PATTERNS = {
-        'P2PKH': re.compile('OP_DUP OP_HASH160 [abcdef0123456789]+ OP_EQUALVERIFY OP_CHECKSIG'),
-        'P2SH': re.compile('OP_HASH160 .* OP_EQUAL'),
-        'Multisig': re.compile('(OP_FALSE|OP_0|OP_TRUE) ([abcdef0123456789]+ )+(OP_1|OP_2|OP_3|OP_4|OP_5) OP_CHECKMULTISIG'),
-        'Pubkey': re.compile('[abcdef0123456789]+ OP_CHECKSIG'),
-        'Null Data': re.compile('OP_RETURN [abcdef0123456789]+'),
-}
+#REGEX_PATTERNS = {
+#        'P2PKH': re.compile('OP_DUP OP_HASH160 [abcdef0123456789]+ OP_EQUALVERIFY OP_CHECKSIG'),
+#        'P2SH': re.compile('OP_HASH160 .* OP_EQUAL'),
+#        'Multisig': re.compile('(OP_FALSE|OP_0|OP_TRUE) ([abcdef0123456789]+ )+(OP_1|OP_2|OP_3|OP_4|OP_5) OP_CHECKMULTISIG'),
+#        'Pubkey': re.compile('[abcdef0123456789]+ OP_CHECKSIG'),
+#        'Null Data': re.compile('OP_RETURN [abcdef0123456789]+'),
+#}
 
 OPname = dict([(v[3:], k) for k, v in OPS.iteritems()])
 OPint = dict([(decode(k, 16), v) for k, v in OPS.iteritems()])
 OPhex = OPS.copy()
 
-addr="n1hjyVvYQPQtejJcANd5ZJM5rmxHCCgWL7"
+#addr="n1hjyVvYQPQtejJcANd5ZJM5rmxHCCgWL7"
 
 #SIG64="G8kH/WEgiATGXSy78yToe36IF9AUlluY3bMdkDFD1XyyDciIbXkfiZxk/qmjGdMeP6/BQJ/C5U/pbQUZv1HGkn8="
