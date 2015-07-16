@@ -3,7 +3,7 @@ import hmac
 import hashlib
 from binascii import hexlify
 from bitcoin.pyspecials import st, by, string_types, from_str_to_bytes, from_bytes_to_str, safe_hexlify, safe_unhexlify
-from bitcoin.mnemonic import prepare_elec2_seed, is_elec1_seed, is_elec2_seed
+from bitcoin.bip39 import prepare_elec2_seed, is_elec1_seed, is_elec2_seed
 
 # TODO: detect Elec 1, 2 & BIP39
 
@@ -124,7 +124,8 @@ def bip32_serialize(rawtuple):
 
 def bip32_deserialize(data):
     dbin = changebase(data, 58, 256)
-    if bin_dbl_sha256(dbin[:-4])[:4] != dbin[-4:]:
+    checksum = dbin[-4:]
+    if bin_dbl_sha256(dbin[:-4])[:4] != checksum:
         raise Exception("Invalid checksum")
     vbytes = dbin[0:4]
     depth = from_byte_to_int(dbin[4])
@@ -138,7 +139,8 @@ def bip32_deserialize(data):
 def raw_bip32_privtopub(rawtuple):
     vbytes, depth, fingerprint, i, chaincode, key = rawtuple
     newvbytes = MAINNET_PUBLIC if vbytes == MAINNET_PRIVATE else TESTNET_PUBLIC
-    return (newvbytes, depth, fingerprint, i, chaincode, privtopub(key))
+    pubkey = privtopub(key)
+    return (newvbytes, depth, fingerprint, i, chaincode, pubkey)
 
 
 def bip32_privtopub(data):
@@ -222,28 +224,33 @@ def bip32_path(*args):
         key, path = args[0], args[1]
     elif len(args) > 2:
         key, path = args[0], args[1:]
+    is_public = (path.endswith(".pub") or ('pub' in path) or path.startswith('M'))
     pathlist = parse_bip32_path(path)
     for p in pathlist:
         key = bip32_ckd(key, p)
-    return key
+    return key if not is_public else bip32_privtopub(key)
 
 def parse_bip32_path(*args):
-    """Takes bip32 path as string "m/0'/2H" or 0' """
+    """Takes bip32 path as string "m/0'/2H" or "m/0H/1/2H/2/1000000000" """
     if len(args)==1:
-        if isinstance(args[0], list):
-            return args[0]
         path = st(args[0])
     else:
         path = '/'.join(map(st, args))
 
-    if path.startswith('m/'): path = path[2:]
+    if path.startswith('m/') or path.startswith('M/'):
+        path = path[2:]
+    if path.endswith(".pub"): path = path[:-4]
+    if len(path) == 0 or path == 'pub':
+        return [0]
+    elif '/' not in path:
+        path += "/"
+
     patharr = []
     for v in path.split('/'):
         if v[-1] in ("'H"):
-            v = int(v[:-1]) + 0x80000000
-        #if isinstance(v, str) and v == '2**31': 
-        #    v = 2**31
-        v = int(v)
+            v = int(v[:-1]) | 0x80000000
+        else:
+            v = int(v) & 0x7fffffff
         patharr.append(v)
     return patharr
 
