@@ -8,7 +8,7 @@ import unicodedata
 
 from bitcoin import *
 import bitcoin.ripemd as ripemd
-from bitcoin.mnemonic import bip39_check, bip39_to_mn, bip39_to_seed
+from bitcoin.bip39 import bip39_check, bip39_to_mn, bip39_to_seed
 from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, st, by, from_str_to_bytes, from_bytes_to_str
 from bitcoin.deterministic import electrum_mpubk, bip32_master_key
 
@@ -254,10 +254,10 @@ class TestTransaction(unittest.TestCase):
         self.assertEqual(tx['locktime'], 0, "Locktime incorrect")
         self.assertEqual(tx['outs'][0]['value'], 13, "Value incorrect")
 
-        hextx = preparetx('12c6DSiU4Rq3P4ZxziKxzrL5LmMBrzjrJX', '1HLoD9E4SDFFPDiYfNYnkBLQ85Y51J3Zb1', 13, locktime=2222222222)
-        tx = deserialize(hextx)
-        self.assertEqual(tx['locktime'], 2222222222, "Locktime incorrect")
-        self.assertEqual(tx['outs'][0]['value'], 13, "Value incorrect")
+#        hextx = preparetx('12c6DSiU4Rq3P4ZxziKxzrL5LmMBrzjrJX', '1HLoD9E4SDFFPDiYfNYnkBLQ85Y51J3Zb1', 13, locktime=2222222222)
+#        tx = deserialize(hextx)
+#        self.assertEqual(tx['locktime'], 2222222222, "Locktime incorrect")
+#        self.assertEqual(tx['outs'][0]['value'], 13, "Value incorrect")
 
 class TestDeterministicGenerate(unittest.TestCase):
     @classmethod
@@ -302,60 +302,112 @@ class TestBIP0032(unittest.TestCase):
     def setUpClass(cls):
         print("Beginning BIP0032 tests")
 
-    def _full_derive(self, key, chain):
-        if len(chain) == 0:
-            return key
-        elif chain[0] == 'pub':
-            return self._full_derive(bip32_privtopub(key), chain[1:])
-        else:
-            return self._full_derive(bip32_ckd(key, chain[0]), chain[1:])
+
+    # def _full_derive(self, key, chain):
+    #     if len(chain) == 0: return key
+    #     elif chain[0] == 'pub': return self._full_derive(bip32_privtopub(key), chain[1:])
+    #     else: return self._full_derive(bip32_ckd(key, chain[0]), chain[1:])
 
     def test_all(self):
-        test_vectors = [
-            [[], 'xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi'],
-            [['pub'], 'xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8'],
-            [[2**31], 'xprv9uHRZZhk6KAJC1avXpDAp4MDc3sQKNxDiPvvkX8Br5ngLNv1TxvUxt4cV1rGL5hj6KCesnDYUhd7oWgT11eZG7XnxHrnYeSvkzY7d2bhkJ7'],
-            [[2**31, 1], 'xprv9wTYmMFdV23N2TdNG573QoEsfRrWKQgWeibmLntzniatZvR9BmLnvSxqu53Kw1UmYPxLgboyZQaXwTCg8MSY3H2EU4pWcQDnRnrVA1xe8fs'],
-            [[2**31, 1, 2**31 + 2], 'xprv9z4pot5VBttmtdRTWfWQmoH1taj2axGVzFqSb8C9xaxKymcFzXBDptWmT7FwuEzG3ryjH4ktypQSAewRiNMjANTtpgP4mLTj34bhnZX7UiM'],
-            [[2**31, 1, 2**31 + 2, 'pub', 2, 1000000000], 'xpub6H1LXWLaKsWFhvm6RVpEL9P4KfRZSW7abD2ttkWP3SSQvnyA8FSVqNTEcYFgJS2UaFcxupHiYkro49S8yGasTvXEYBVPamhGW6cFJodrTHy']
+
+        hexmasters = ['000102030405060708090a0b0c0d0e0f',
+                   'fffcf9f6f3f0edeae7e4e1dedbd8d5d2cfccc9c6c3c0bdbab7b4b1aeaba8a5a2' \
+                   '9f9c999693908d8a8784817e7b7875726f6c696663605d5a5754514e4b484542']
+
+        masters = map(lambda k: bip32_master_key(safe_unhexlify(k)), hexmasters)
+
+        # https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#test-vector-1
+        test_vectors1 = [
+           #[ path, xpub, xprv]
+            ["m/",
+             'xpub661MyMwAqRbcFtXgS5sYJABqqG9YLmC4Q1Rdap9gSE8NqtwybGhePY2gZ29ESFjqJoCu1Rupje8YtGqsefD265TMg7usUDFdp6W1EGMcet8',
+             'xprv9s21ZrQH143K3QTDL4LXw2F7HEK3wJUD2nW2nRk4stbPy6cq3jPPqjiChkVvvNKmPGJxWUtg6LnF5kejMRNNU3TGtRBeJgk33yuGBxrMPHi'],
+            ["m/0H",
+             'xpub68Gmy5EdvgibQVfPdqkBBCHxA5htiqg55crXYuXoQRKfDBFA1WEjWgP6LHhwBZeNK1VTsfTFUHCdrfp1bgwQ9xv5ski8PX9rL2dZXvgGDnw',
+             'xprv9uHRZZhk6KAJC1avXpDAp4MDc3sQKNxDiPvvkX8Br5ngLNv1TxvUxt4cV1rGL5hj6KCesnDYUhd7oWgT11eZG7XnxHrnYeSvkzY7d2bhkJ7'],
+            ["m/0H/1",
+             'xpub6ASuArnXKPbfEwhqN6e3mwBcDTgzisQN1wXN9BJcM47sSikHjJf3UFHKkNAWbWMiGj7Wf5uMash7SyYq527Hqck2AxYysAA7xmALppuCkwQ',
+             'xprv9wTYmMFdV23N2TdNG573QoEsfRrWKQgWeibmLntzniatZvR9BmLnvSxqu53Kw1UmYPxLgboyZQaXwTCg8MSY3H2EU4pWcQDnRnrVA1xe8fs'],
+            ["m/0H/1/2H",
+             'xpub6D4BDPcP2GT577Vvch3R8wDkScZWzQzMMUm3PWbmWvVJrZwQY4VUNgqFJPMM3No2dFDFGTsxxpG5uJh7n7epu4trkrX7x7DogT5Uv6fcLW5',
+             'xprv9z4pot5VBttmtdRTWfWQmoH1taj2axGVzFqSb8C9xaxKymcFzXBDptWmT7FwuEzG3ryjH4ktypQSAewRiNMjANTtpgP4mLTj34bhnZX7UiM'],
+            ["m/0H/1/2H/2",
+             'xpub6FHa3pjLCk84BayeJxFW2SP4XRrFd1JYnxeLeU8EqN3vDfZmbqBqaGJAyiLjTAwm6ZLRQUMv1ZACTj37sR62cfN7fe5JnJ7dh8zL4fiyLHV',
+             'xprvA2JDeKCSNNZky6uBCviVfJSKyQ1mDYahRjijr5idH2WwLsEd4Hsb2Tyh8RfQMuPh7f7RtyzTtdrbdqqsunu5Mm3wDvUAKRHSC34sJ7in334'],
+            ["m/0H/1/2H/2/1000000000",
+             'xpub6H1LXWLaKsWFhvm6RVpEL9P4KfRZSW7abD2ttkWP3SSQvnyA8FSVqNTEcYFgJS2UaFcxupHiYkro49S8yGasTvXEYBVPamhGW6cFJodrTHy',
+             'xprvA41z7zogVVwxVSgdKUHDy1SKmdb533PjDz7J6N6mV6uS3ze1ai8FHa8kmHScGpWmj4WggLyQjgPie1rFSruoUihUZREPSL39UNdE3BBDu76']
         ]
 
-        mk = bip32_master_key(safe_unhexlify('000102030405060708090a0b0c0d0e0f'))
+        # https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki#test-vector-2
+        test_vectors2 = [
+            # [ path, xpub, xprv]
+            ["m/",
+             'xpub661MyMwAqRbcFW31YEwpkMuc5THy2PSt5bDMsktWQcFF8syAmRUapSCGu8ED9W6oDMSgv6Zz8idoc4a6mr8BDzTJY47LJhkJ8UB7WEGuduB',
+             'xprv9s21ZrQH143K31xYSDQpPDxsXRTUcvj2iNHm5NUtrGiGG5e2DtALGdso3pGz6ssrdK4PFmM8NSpSBHNqPqm55Qn3LqFtT2emdEXVYsCzC2U'],
+            ["m/0",
+             'xpub69H7F5d8KSRgmmdJg2KhpAK8SR3DjMwAdkxj3ZuxV27CprR9LgpeyGmXUbC6wb7ERfvrnKZjXoUmmDznezpbZb7ap6r1D3tgFxHmwMkQTPH',
+             'xprv9vHkqa6EV4sPZHYqZznhT2NPtPCjKuDKGY38FBWLvgaDx45zo9WQRUT3dKYnjwih2yJD9mkrocEZXo1ex8G81dwSM1fwqWpWkeS3v86pgKt'],
+            ["m/0/2147483647H",
+             'xpub6ASAVgeehLbnwdqV6UKMHVzgqAG8Gr6riv3Fxxpj8ksbH9ebxaEyBLZ85ySDhKiLDBrQSARLq1uNRts8RuJiHjaDMBU4Zn9h8LZNnBC5y4a',
+             'xprv9wSp6B7kry3Vj9m1zSnLvN3xH8RdsPP1Mh7fAaR7aRLcQMKTR2vidYEeEg2mUCTAwCd6vnxVrcjfy2kRgVsFawNzmjuHc2YmYRmagcEPdU9'],
+            ["m/0/2147483647H/1",
+             'xpub6DF8uhdarytz3FWdA8TvFSvvAh8dP3283MY7p2V4SeE2wyWmG5mg5EwVvmdMVCQcoNJxGoWaU9DCWh89LojfZ537wTfunKau47EL2dhHKon',
+             'xprv9zFnWC6h2cLgpmSA46vutJzBcfJ8yaJGg8cX1e5StJh45BBciYTRXSd25UEPVuesF9yog62tGAQtHjXajPPdbRCHuWS6T8XA2ECKADdw4Ef'],
+            ["m/0/2147483647H/1/2147483646H",
+             'xpub6ERApfZwUNrhLCkDtcHTcxd75RbzS1ed54G1LkBUHQVHQKqhMkhgbmJbZRkrgZw4koxb5JaHWkY4ALHY2grBGRjaDMzQLcgJvLJuZZvRcEL',
+             'xprvA1RpRA33e1JQ7ifknakTFpgNXPmW2YvmhqLQYMmrj4xJXXWYpDPS3xz7iAxn8L39njGVyuoseXzU6rcxFLJ8HFsTjSyQbLYnMpCqE2VbFWc'],
+            ["m/0/2147483647H/1/2147483646H/2",
+             'xpub6FnCn6nSzZAw5Tw7cgR9bi15UV96gLZhjDstkXXxvCLsUXBGXPdSnLFbdpq8p9HmGsApME5hQTZ3emM2rnY5agb9rXpVGyy3bdW6EEgAtqt',
+             'xprvA2nrNbFZABcdryreWet9Ea4LvTJcGsqrMzxHx98MMrotbir7yrKCEXw7nadnHM8Dq38EGfSh6dqA9QWTyefMLEcBYJUuekgW4BYPJcr9E7j']
+        ]
 
-        for tv in test_vectors:
-            left, right = self._full_derive(mk, tv[0]), tv[1]
-            self.assertEqual(
-                left,
-                right,
-                "Test vector does not match. Details: \n%s\n%s\n\%s" % (
-                    tv[0],
-                    [safe_hexlify(x) if isinstance(x, str) else x for x in bip32_deserialize(left)],
-                    [safe_hexlify(x) if isinstance(x, str) else x for x in bip32_deserialize(right)],
-                )
-            )
+        #mk = bip32_master_key(safe_unhexlify('000102030405060708090a0b0c0d0e0f'))
+
+        for i, test_vector in enumerate([test_vectors1, test_vectors2]):
+            mk = masters[i]
+            for tv in test_vector:
+                path, xpub, xprv = tv
+                pubpath = path + ".pub"
+                self.assertEqual(bip32_path(mk, path), xprv,
+                                 "Privkey derivation of %s: %s should return %s" % (safe_hexlify(mk), path, xprv))
+                self.assertEqual(bip32_path(mk, pubpath), xpub,
+                                 "Pubkey derivation of %s: %s should return %s" % (safe_hexlify(mk), pubpath, xpub))
+
+        # for tv in test_vectors:
+            # left, right = self._full_derive(mk, tv[0]), tv[1]
+            # self.assertEqual(
+            #     left,
+            #     right,
+            #     "Test vector does not match. Details: \n%s\n%s\n\%s" % (
+            #         tv[0],
+            #         [safe_hexlify(x) if isinstance(x, str) else x for x in bip32_deserialize(left)],
+            #         [safe_hexlify(x) if isinstance(x, str) else x for x in bip32_deserialize(right)],
+            #     )
+            # )
 
     def test_all_testnet(self):
         test_vectors = [
-            [[], 'tprv8ZgxMBicQKsPeDgjzdC36fs6bMjGApWDNLR9erAXMs5skhMv36j9MV5ecvfavji5khqjWaWSFhN3YcCUUdiKH6isR4Pwy3U5y5egddBr16m'],
-            [['pub'], 'tpubD6NzVbkrYhZ4XgiXtGrdW5XDAPFCL9h7we1vwNCpn8tGbBcgfVYjXyhWo4E1xkh56hjod1RhGjxbaTLV3X4FyWuejifB9jusQ46QzG87VKp'],
-            [[2**31], 'tprv8bxNLu25VazNnppTCP4fyhyCvBHcYtzE3wr3cwYeL4HA7yf6TLGEUdS4QC1vLT63TkjRssqJe4CvGNEC8DzW5AoPUw56D1Ayg6HY4oy8QZ9'],
-            [[2**31, 1], 'tprv8e8VYgZxtHsSdGrtvdxYaSrryZGiYviWzGWtDDKTGh5NMXAEB8gYSCLHpFCywNs5uqV7ghRjimALQJkRFZnUrLHpzi2pGkwqLtbubgWuQ8q'],
-            [[2**31, 1, 2**31 + 2], 'tprv8gjmbDPpbAirVSezBEMuwSu1Ci9EpUJWKokZTYccSZSomNMLytWyLdtDNHRbucNaRJWWHANf9AzEdWVAqahfyRjVMKbNRhBmxAM8EJr7R15'],
-            [[2**31, 1, 2**31 + 2, 'pub', 2, 1000000000], 'tpubDHNy3kAG39ThyiwwsgoKY4iRenXDRtce8qdCFJZXPMCJg5dsCUHayp84raLTpvyiNA9sXPob5rgqkKvkN8S7MMyXbnEhGJMW64Cf4vFAoaF']
+            ["m/", 'tprv8ZgxMBicQKsPeDgjzdC36fs6bMjGApWDNLR9erAXMs5skhMv36j9MV5ecvfavji5khqjWaWSFhN3YcCUUdiKH6isR4Pwy3U5y5egddBr16m'],
+            ['m/.pub', 'tpubD6NzVbkrYhZ4XgiXtGrdW5XDAPFCL9h7we1vwNCpn8tGbBcgfVYjXyhWo4E1xkh56hjod1RhGjxbaTLV3X4FyWuejifB9jusQ46QzG87VKp'],
+            ["m/0H", 'tprv8bxNLu25VazNnppTCP4fyhyCvBHcYtzE3wr3cwYeL4HA7yf6TLGEUdS4QC1vLT63TkjRssqJe4CvGNEC8DzW5AoPUw56D1Ayg6HY4oy8QZ9'],
+            ["m/0H/1", 'tprv8e8VYgZxtHsSdGrtvdxYaSrryZGiYviWzGWtDDKTGh5NMXAEB8gYSCLHpFCywNs5uqV7ghRjimALQJkRFZnUrLHpzi2pGkwqLtbubgWuQ8q'],
+            #["m/0H/2H/0", 'tprv8gjmbDPpbAirVSezBEMuwSu1Ci9EpUJWKokZTYccSZSomNMLytWyLdtDNHRbucNaRJWWHANf9AzEdWVAqahfyRjVMKbNRhBmxAM8EJr7R15'],
+            #["m/0H/2H/2/1000000000.pub", 'tpubDHNy3kAG39ThyiwwsgoKY4iRenXDRtce8qdCFJZXPMCJg5dsCUHayp84raLTpvyiNA9sXPob5rgqkKvkN8S7MMyXbnEhGJMW64Cf4vFAoaF']
         ]
 
         mk = bip32_master_key(safe_unhexlify('000102030405060708090a0b0c0d0e0f'), TESTNET_PRIVATE)
 
         for tv in test_vectors:
-            left, right = self._full_derive(mk, tv[0]), tv[1]
+            path, result = tv[0], tv[1]
             self.assertEqual(
-                left,
-                right,
+                bip32_path(mk, path),
+                result,
                 "Test vector does not match. Details:\n%s\n%s\n%s\n\%s" % (
-                    left,
-                    tv[0],
-                    [x.encode('hex') if isinstance(x, str) else x for x in bip32_deserialize(left)],
-                    [x.encode('hex') if isinstance(x, str) else x for x in bip32_deserialize(right)],
+                    path,
+                    result,
+                    [x.encode('hex') if isinstance(x, str) else x for x in bip32_deserialize(bip32_path(mk, path))],
+                    [x.encode('hex') if isinstance(x, str) else x for x in bip32_deserialize(result)],
                 )
             )
 
@@ -363,39 +415,48 @@ class TestBIP0032(unittest.TestCase):
         master = bip32_master_key(safe_unhexlify("000102030405060708090a0b0c0d0e0f"))
 
         path = "m/0"
-        assert bip32_ckd(master, "0") == "xprv9uHRZZhbkedL37eZEnyrNsQPFZYRAvjy5rt6M1nbEkLSo378x1CQQLo2xxBvREwiK6kqf7GRNvsNEchwibzXaV6i5GcsgyjBeRguXhKsi4R"
+        assert bip32_ckd(master, "0") == bip32_path(master, path)
+        #"xprv9uHRZZhbkedL37eZEnyrNsQPFZYRAvjy5rt6M1nbEkLSo378x1CQQLo2xxBvREwiK6kqf7GRNvsNEchwibzXaV6i5GcsgyjBeRguXhKsi4R"
         assert bip32_privtopub(bip32_ckd(master, "0")) == "xpub68Gmy5EVb2BdFbj2LpWrk1M7obNuaPTpT5oh9QCCo5sRfqSHVYWex97WpDZzszdzHzxXDAzPLVSwybe4uPYkSk4G3gnrPqqkV9RyNzAcNJ1"
 
         path = "m/1"
-        assert bip32_ckd(master, "1") == "xprv9uHRZZhbkedL4yTpidDvuVfrdUkTbhDHviERRBkbzbNDZeMjWzqzKAdxWhzftGDSxDmBdakjqHiZJbkwiaTEXJdjZAaAjMZEE3PMbMrPJih"
+        assert bip32_ckd(master, "1") == bip32_path(master, path)
+        #"xprv9uHRZZhbkedL4yTpidDvuVfrdUkTbhDHviERRBkbzbNDZeMjWzqzKAdxWhzftGDSxDmBdakjqHiZJbkwiaTEXJdjZAaAjMZEE3PMbMrPJih"
         assert bip32_privtopub(bip32_ckd(master, "1")) == "xpub68Gmy5EVb2BdHTYHpekwGdcbBWax19w9HwA2DaADYvuCSSgt4YAErxxSN1KWSnmyqkwRNbnTj3XiUBKmHeC8rTjLRPjSULcDKQQgfgJDppq"
 
         path = "m/0/0"
-        assert bip32_ckd(bip32_ckd(master, "0"), "0") == "xprv9ww7sMFLzJMzur2oEQDB642fbsMS4q6JRraMVTrM9bTWBq7NDS8ZpmsKVB4YF3mZecqax1fjnsPF19xnsJNfRp4RSyexacULXMKowSACTRc"
+        assert bip32_ckd(bip32_ckd(master, "0"), "0") == bip32_path(master, path)
+        #"xprv9ww7sMFLzJMzur2oEQDB642fbsMS4q6JRraMVTrM9bTWBq7NDS8ZpmsKVB4YF3mZecqax1fjnsPF19xnsJNfRp4RSyexacULXMKowSACTRc"
         assert bip32_privtopub(bip32_ckd(bip32_ckd(master, "0"), "0")) == "xpub6AvUGrnEpfvJ8L7GLRkBTByQ9uBvUHp9o5VxHrFxhvzV4dSWkySpNaBoLR9FpbnwRmTa69yLHF3QfcaxbWT7gWdwws5k4dpmJvqpEuMWwnj"
 
         path = "m/0'"
-        assert bip32_ckd(master, 2**31) == "xprv9uHRZZhk6KAJC1avXpDAp4MDc3sQKNxDiPvvkX8Br5ngLNv1TxvUxt4cV1rGL5hj6KCesnDYUhd7oWgT11eZG7XnxHrnYeSvkzY7d2bhkJ7"
+        assert bip32_ckd(master, 2**31) == bip32_path(master, path)
+        #"xprv9uHRZZhk6KAJC1avXpDAp4MDc3sQKNxDiPvvkX8Br5ngLNv1TxvUxt4cV1rGL5hj6KCesnDYUhd7oWgT11eZG7XnxHrnYeSvkzY7d2bhkJ7"
         assert bip32_privtopub(bip32_ckd(master, 2**31)) == "xpub68Gmy5EdvgibQVfPdqkBBCHxA5htiqg55crXYuXoQRKfDBFA1WEjWgP6LHhwBZeNK1VTsfTFUHCdrfp1bgwQ9xv5ski8PX9rL2dZXvgGDnw"
 
         path = "m/1'"
-        assert bip32_ckd(master, 2**31 + 1) == "xprv9uHRZZhk6KAJFszJGW6LoUFq92uL7FvkBhmYiMurCWPHLJZkX2aGvNdRUBNnJu7nv36WnwCN59uNy6sxLDZvvNSgFz3TCCcKo7iutQzpg78"
+        assert bip32_ckd(master, 2**31 + 1) == bip32_path(master, path)
+        #"xprv9uHRZZhk6KAJFszJGW6LoUFq92uL7FvkBhmYiMurCWPHLJZkX2aGvNdRUBNnJu7nv36WnwCN59uNy6sxLDZvvNSgFz3TCCcKo7iutQzpg78"
         assert bip32_privtopub(bip32_ckd(master, 2**31 + 1)) == "xpub68Gmy5EdvgibUN4mNXdMAcCZh4jpWiebYvh9WkKTkqvGD6tu4ZtXUAwuKSyF5DFZVmotf9UHFTGqSXo9qyDBSn47RkaN6Aedt9JbL7zcgSL"
 
         path = "m/1'"
-        assert bip32_ckd(master, 1 + 2**31) == "xprv9uHRZZhk6KAJFszJGW6LoUFq92uL7FvkBhmYiMurCWPHLJZkX2aGvNdRUBNnJu7nv36WnwCN59uNy6sxLDZvvNSgFz3TCCcKo7iutQzpg78"
+        assert bip32_ckd(master, 1 + 2**31) == bip32_path(master, path)
+        #"xprv9uHRZZhk6KAJFszJGW6LoUFq92uL7FvkBhmYiMurCWPHLJZkX2aGvNdRUBNnJu7nv36WnwCN59uNy6sxLDZvvNSgFz3TCCcKo7iutQzpg78"
         assert bip32_privtopub(bip32_ckd(master, 1 + 2**31)) == "xpub68Gmy5EdvgibUN4mNXdMAcCZh4jpWiebYvh9WkKTkqvGD6tu4ZtXUAwuKSyF5DFZVmotf9UHFTGqSXo9qyDBSn47RkaN6Aedt9JbL7zcgSL"
 
         path = "m/0'/0"
-        assert bip32_ckd(bip32_ckd(master, 2**31), "0") == "xprv9wTYmMFdV23N21MM6dLNavSQV7Sj7meSPXx6AV5eTdqqGLjycVjb115Ec5LgRAXscPZgy5G4jQ9csyyZLN3PZLxoM1h3BoPuEJzsgeypdKj"
+        assert bip32_ckd(bip32_ckd(master, 2**31), "0") == bip32_path(master, path)
+        #"xprv9wTYmMFdV23N21MM6dLNavSQV7Sj7meSPXx6AV5eTdqqGLjycVjb115Ec5LgRAXscPZgy5G4jQ9csyyZLN3PZLxoM1h3BoPuEJzsgeypdKj"
         assert bip32_privtopub(bip32_ckd(bip32_ckd(master, 2**31), "0")) == "xpub6ASuArnXKPbfEVRpCesNx4P939HDXENHkksgxsVG1yNp9958A33qYoPiTN9QrJmWFa2jNLdK84bWmyqTSPGtApP8P7nHUYwxHPhqmzUyeFG"
 
         path = "m/0'/0'"
-        assert bip32_ckd(bip32_ckd(master, 2**31), 2**31) == "xprv9wTYmMFmpgaLB5Hge4YtaGqCKpsYPTD9vXWSsmdZrNU3Y2i4WoBykm6ZteeCLCCZpGxdHQuqEhM6Gdo2X6CVrQiTw6AAneF9WSkA9ewaxtS"
+        assert bip32_ckd(bip32_ckd(master, 2**31), 2**31) == bip32_path(master, path)
+        #"xprv9wTYmMFmpgaLB5Hge4YtaGqCKpsYPTD9vXWSsmdZrNU3Y2i4WoBykm6ZteeCLCCZpGxdHQuqEhM6Gdo2X6CVrQiTw6AAneF9WSkA9ewaxtS"
         assert bip32_privtopub(bip32_ckd(bip32_ckd(master, 2**31), 2**31)) == "xpub6ASuArnff48dPZN9k65twQmvsri2nuw1HkS3gA3BQi12Qq3D4LWEJZR3jwCAr1NhsFMcQcBkmevmub6SLP37bNq91SEShXtEGUbX3GhNaGk"
 
         path = "m/44'/0'/0'/0/0"
-        assert bip32_ckd(bip32_ckd(bip32_ckd(bip32_ckd(bip32_ckd(master, 44 + 2**31), 2**31), 2**31), 0), 0) == "xprvA4A9CuBXhdBtCaLxwrw64Jaran4n1rgzeS5mjH47Ds8V67uZS8tTkG8jV3BZi83QqYXPcN4v8EjK2Aof4YcEeqLt688mV57gF4j6QZWdP9U"
+        assert bip32_ckd(bip32_ckd(bip32_ckd(bip32_ckd(bip32_ckd(master, 44 + 2**31), 2**31), 2**31), 0), 0) == bip32_path(master, path)
+        #"xprvA4A9CuBXhdBtCaLxwrw64Jaran4n1rgzeS5mjH47Ds8V67uZS8tTkG8jV3BZi83QqYXPcN4v8EjK2Aof4YcEeqLt688mV57gF4j6QZWdP9U"
         assert bip32_privtopub(bip32_ckd(bip32_ckd(bip32_ckd(bip32_ckd(bip32_ckd(master, 44 + 2**31), 2**31), 2**31), 0), 0)) == "xpub6H9VcQiRXzkBR4RS3tU6RSXb8ouGRKQr1f1NXfTinCfTxvEhygCiJ4TDLHz1dyQ6d2Vz8Ne7eezkrViwaPo2ZMsNjVtFwvzsQXCDV6HJ3cV"
 
 
@@ -563,12 +624,14 @@ class TestBIP39English(unittest.TestCase):
         BIP39_VECTORS = json.loads(fo)
 
         for v in BIP39_VECTORS:
-            self.assertTrue(bip39_check(v['mnemonic']))
-            self.assertEqual(bip39_to_mn(v['entropy']), v['mnemonic'])
-            self.assertEqual(bip39_to_seed(v['mnemonic'], v['passphrase']), v['seed'])
-            self.assertEqual(bip32_master_key(safe_unhexlify(v['seed'])), v['bip32_xprv'])
+            mnem, pwd, entropy, seed, xprv = v['mnemonic'], v['passphrase'], v['entropy'], v['seed'], v['bip32_xprv']
+            self.assertEqual(bip39_detect_lang(mnem), 'english', "English language detection failed")
+            self.assertTrue(bip39_check(mnem))
+            self.assertEqual(bip39_to_mn(entropy), mnem, "Mnemonic ==> Entropy failure")
+            self.assertEqual(bip39_to_seed(mnem, pwd), seed)
+            self.assertEqual(bip32_master_key(safe_unhexlify(seed)), xprv)
 
-class TestBIP39JAP(unittest.TestCase):
+class TestBIP39Jap(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -580,10 +643,12 @@ class TestBIP39JAP(unittest.TestCase):
         BIP39_VECTORS = json.loads(fo)
 
         for v in BIP39_VECTORS:
-            self.assertTrue(bip39_check(v['mnemonic']))        # check mnemonic valid bip39
-            self.assertEqual(bip39_to_mn(v['entropy'], lang='japanese'), v['mnemonic'])
-            self.assertEqual(bip39_to_seed(v['mnemonic'], v['passphrase']), v['seed'])
-            self.assertEqual(bip32_master_key(safe_unhexlify(v['seed'])), v['bip32_xprv'])
+            mnem, pwd, entropy, seed, xprv = v['mnemonic'], v['passphrase'], v['entropy'], v['seed'], v['bip32_xprv']
+            self.assertEqual(bip39_detect_lang(mnem), 'japanese', "Japanese language detection failed")
+            self.assertTrue(bip39_check(mnem))
+            self.assertEqual(bip39_to_mn(entropy, lang='japanese'), mnem, "Mnemonic ==> Entropy failure")
+            self.assertEqual(bip39_to_seed(mnem, pwd), seed)
+            self.assertEqual(bip32_master_key(safe_unhexlify(seed)), xprv)
 
 class TestPBKDF2HMACSHA512(unittest.TestCase):
 
@@ -599,9 +664,10 @@ class TestPBKDF2HMACSHA512(unittest.TestCase):
         strdklen = (64, 64, 64, 64)
         strhash = (b'867f70cf1ade02cff3752599a3a53dc4af34c7a669815ae5d513554e1c8cf252c02d470a285a0501bad999bfe943c08f050235d7d68b1da55e63f73b60a57fce', b'e1d9c16aa681708a45f5c7c4e215ceb66e011a2e9f0040713f18aefdb866d53cf76cab2868a39b9f7840edce4fef5a82be67335c77a6068e04112754f27ccf4e', b'd197b1b33db0143e018b12f3d1d1479e6cdebdcc97c5c0f87f6902e072f457b5143f30602641b3d55cd335988cb36b84376060ecd532e039b742a239434af2d5', b'8c0511f4c6e597c6ac6315d8f0362e225f3c501495ba23b868c005174dc4ee71115b59f9e60cd9532fa33e0f75aefe30225c583a186cd82bd4daea9724a3d3b8')
 
-        for i in range(4):
-            res = safe_hexlify(bin_pbkdf2_hmac("sha512", strpass[i], strsalt[i], strcount[i], strdklen[i]))
-            self.assertEqual(res, strhash[i])
+        for v in zip(strpass, strsalt, strcount, strdklen, strhash):
+            password, salt, count, dklen, hash = v
+            res = safe_hexlify(bin_pbkdf2_hmac("sha512", password, salt, count, dklen))
+            self.assertEqual(res, hash)
 
 if __name__ == '__main__':
     unittest.main()
