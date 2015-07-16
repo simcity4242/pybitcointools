@@ -218,36 +218,45 @@ def bip32_descend(*args):
         key = bip32_ckd(key, p)
     return bip32_extract_key(key)
 
-def bip32_path(*args):
+def bip32_path(*args, **kwargs):
     """Same as bip32_descend but returns masterkey instead of hex privkey"""
     if len(args) == 2:
         key, path = args[0], args[1]
     elif len(args) > 2:
         key, path = args[0], args[1:]
+        path = "m/" + "/".join(path)
     is_public = (path.endswith(".pub") or ('pub' in path) or path.startswith('M'))
     pathlist = parse_bip32_path(path)
+    oldkey = key[:]
+    if not pathlist:    # empty list
+        return oldkey if not is_public else bip32_privtopub(oldkey)
     for p in pathlist:
         key = bip32_ckd(key, p)
     return key if not is_public else bip32_privtopub(key)
 
 def parse_bip32_path(*args):
     """Takes bip32 path as string "m/0'/2H" or "m/0H/1/2H/2/1000000000" """
-    if len(args)==1:
-        path = st(args[0])
-    else:
-        path = '/'.join(map(st, args))
+    if len(args)==1:    path = st(args[0])
+    else:               path = '/'.join(map(st, args))
 
-    if path.startswith('m/') or path.startswith('M/'):
+    if (len(path) == 1 and path in ('mM')):
+        return []
+    if path.lower().startswith('m/'):
         path = path[2:]
-    if path.endswith(".pub"): path = path[:-4]
+    if path.endswith("pub"):
+        if path.endswith(".pub"):
+            path = path[:-4]
+        elif path.endswith("pub"):
+            path = path[:-3]
     if len(path) == 0 or path == 'pub':
-        return [0]
+        return []
     elif '/' not in path:
         path += "/"
 
     patharr = []
     for v in path.split('/'):
-        if v[-1] in ("'H"):
+        if not v: continue
+        elif v[-1] in ("'H"):
             v = int(v[:-1]) | 0x80000000
         else:
             v = int(v) & 0x7fffffff
