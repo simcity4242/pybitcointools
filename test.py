@@ -7,8 +7,8 @@ import unittest
 import unicodedata
 
 from bitcoin import *
-import bitcoin.ripemd as ripemd
-from bitcoin.bip39 import bip39_check, bip39_to_mn, bip39_to_seed
+from bitcoin.ripemd import *
+from bitcoin.mnemonic import bip39_check, bip39_to_mn, bip39_to_seed
 from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, st, by, from_str_to_bytes, from_bytes_to_str
 from bitcoin.deterministic import electrum_mpubk, bip32_master_key
 
@@ -215,6 +215,7 @@ class TestTransaction(unittest.TestCase):
         pubs = [privtopub(priv) for priv in privs]
         addresses = [pubtoaddr(pub) for pub in pubs]
         mscript = mk_multisig_script(pubs[1:], 2, 3)
+        self.assertEqual(mscript, mk_multisig_script(pubs[1:], 2), "Implicit n=3 error")
         msigaddr = p2sh_scriptaddr(mscript)
         tx = mktx(['01'*32+':1', '23'*32+':2'], 
                   [msigaddr+':20202', addresses[0]+':40404'], 
@@ -369,10 +370,24 @@ class TestBIP0032(unittest.TestCase):
             for tv in test_vector:
                 path, xpub, xprv = tv
                 pubpath = path + ".pub"
-                self.assertEqual(bip32_path(mk, path), xprv,
-                                 "Privkey derivation of %s: %s should return %s" % (safe_hexlify(mk), path, xprv))
-                self.assertEqual(bip32_path(mk, pubpath), xpub,
-                                 "Pubkey derivation of %s: %s should return %s" % (safe_hexlify(mk), pubpath, xpub))
+                self.assertEqual(
+                        bip32_path(mk, path), 
+                        xprv,
+                        "Test vector PRIVKEY derivation does not match. Details: \n%s\n%s\n\%s" % (
+                            path, 
+                            [safe_hexlify(x) if isinstance(x, str) else x for x in bip32_deserialize(bip32_path(mk, path))],
+                            [safe_hexlify(x) if isinstance(x, str) else x for x in bip32_deserialize(xprv)]
+                        )
+                )
+                self.assertEqual(
+                        bip32_path(mk, pubpath),
+                        xpub,
+                        "Test vector PUBKEY derivation does not match. Details: \n%s\n%s\n\%s" % (
+                            pubpath, 
+                            [safe_hexlify(x) if isinstance(x, str) else x for x in bip32_deserialize(bip32_path(mk, pubpath))],
+                            [safe_hexlify(x) if isinstance(x, str) else x for x in bip32_deserialize(xpub)]
+                        )
+                )
 
         # for tv in test_vectors:
             # left, right = self._full_derive(mk, tv[0]), tv[1]
@@ -521,8 +536,10 @@ class TestRipeMD160PythonBackup(unittest.TestCase):
         ]
 
         for i, s in enumerate(strvec):
-            digest = ripemd.RIPEMD160(s).digest()
-            hash160digest = ripemd.RIPEMD160(bin_sha256(s)).digest()
+            #digest = ripemd.RIPEMD160(s).digest()
+            digest = RIPEMD160(s).digest()
+            hash160digest = RIPEMD160(bin_sha256(s)).digest()
+            #hash160digest = ripemd.RIPEMD160(bin_sha256(s)).digest()
             self.assertEqual(safe_hexlify(digest), target[i])
             self.assertEqual(safe_hexlify(hash160digest), hash160target[i])
             self.assertEqual(safe_hexlify(bin_hash160(from_str_to_bytes(s))), hash160target[i])
