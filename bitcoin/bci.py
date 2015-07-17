@@ -277,6 +277,8 @@ def last_block_height(network='btc'):
 
 # Gets a specific transaction
 def bci_fetchtx(txhash):
+    if isinstance(txhash, list):
+        return [bci_fetchtx(h) for h in txhash]
     if not re.match('^[0-9a-fA-F]*$', txhash):
         txhash = safe_hexlify(txhash)
     data = make_request('https://blockchain.info/rawtx/'+txhash+'?format=hex')
@@ -291,10 +293,16 @@ def blockr_fetchtx(txhash, network='btc'):
     else:
         raise Exception(
             'Unsupported network {0} for blockr_fetchtx'.format(network))
-    if not re.match('^[0-9a-fA-F]*$', txhash):
-        txhash = safe_hexlify(txhash)
-    jsondata = json.loads(make_request(blockr_url+txhash))
-    return st(jsondata['data']['tx']['hex'])    # added st() to repair unicode return hex strings for python 2
+    if isinstance(txhash, list):
+        txhash = ','.join([safe_hexlify(x) if not re.match('^[0-9a-fA-F]*$', x)
+                           else x for x in txhash])
+        jsondata = json.loads(make_request(blockr_url + txhash))
+        return [d['tx']['hex'] for d in jsondata['data']]
+    else:
+        if not re.match('^[0-9a-fA-F]*$', txhash):
+            txhash = safe_hexlify(txhash)
+        jsondata = json.loads(make_request(blockr_url+txhash))
+        return st(jsondata['data']['tx']['hex'])    # added st() to repair unicode return hex strings for python 2
 
 
 def helloblock_fetchtx(txhash, network='btc'):
@@ -386,7 +394,7 @@ def _get_block(inp):
                           'https://blockchain.info/rawblock/'+inp))
 
 
-def get_block_header_data(inp):
+def bci_get_block_header_data(inp):
     j = _get_block(inp)
     return {
         'version': j['ver'],
@@ -398,6 +406,56 @@ def get_block_header_data(inp):
         'nonce': j['nonce'],
     }
 
+def blockr_get_block_header_data(height, network='btc'):
+    if network == 'testnet':
+        blockr_url = "https://tbtc.blockr.io/api/v1/block/raw/"
+    elif network == 'btc':
+        blockr_url = "https://btc.blockr.io/api/v1/block/raw/"
+    else:
+        raise Exception(
+            'Unsupported network {0} for blockr_get_block_header_data'.format(network))
+
+    k = json.loads(make_request(blockr_url + str(height)))
+    j = k['data']
+    return {
+        'version': j['version'],
+        'hash': j['hash'],
+        'prevhash': j['previousblockhash'],
+        'timestamp': j['time'],
+        'merkle_root': j['merkleroot'],
+        'bits': int(j['bits'], 16),
+        'nonce': j['nonce'],
+    }
+
+def get_block_timestamp(height, network='btc'):
+    if network == 'testnet':
+        blockr_url = "https://tbtc.blockr.io/api/v1/block/info/"
+    elif network == 'btc':
+        blockr_url = "https://btc.blockr.io/api/v1/block/info/"
+    else:
+        raise Exception(
+            'Unsupported network {0} for get_block_timestamp'.format(network))
+
+    import time, calendar
+    if isinstance(height, list):
+        k = json.loads(make_request(blockr_url + ','.join([str(x) for x in height])))
+        o = {x['nb']: calendar.timegm(time.strptime(x['time_utc'],
+             "%Y-%m-%dT%H:%M:%SZ")) for x in k['data']}
+        return [o[x] for x in height]
+    else:
+        k = json.loads(make_request(blockr_url + str(height)))
+        j = k['data']['time_utc']
+        return calendar.timegm(time.strptime(j, "%Y-%m-%dT%H:%M:%SZ"))
+
+block_header_data_getters = {
+    'bci': bci_get_block_header_data,
+    'blockr': blockr_get_block_header_data
+}
+
+def get_block_header_data(inp, **kwargs):
+    f = block_header_data_getters.get(kwargs.get('source', ''),
+                                      bci_get_block_header_data)
+    return f(inp, **kwargs)
 
 def get_txs_in_block(inp):
     j = _get_block(inp)
@@ -418,22 +476,3 @@ def get_block_coinbase(txval):
     cbtext = ''.join(list(map(chr, filter(lambda x: chr(x) in alpha, bytearray(cb)))))
     return cbtext
 
-#  def rscan(*args, **kwargs):
-#      if len(args) == 1 and isinstance(args, str): 
-#          addr = args[0]
-#      if len(args) == 1 and isinstance(args, list):
-#          addrs = args
-#     urladdr = 'https://blockchain.info/address/%s?format=json&offset=%s'
-#  	
-#     addrdata = json.loads(make_request(urladdr % (addr, '0')))
-#     ntx = addrdata.get('n_tx', len(addrdata["txs"]))
-#     
-#     txs = []
-#     for i in range(0, ntx//50 + 1):
-#         sys.stderr.write("Fetching Txs from offset\t%s\n" % str(i*50))
-#         jdata = json.loads(make_request(urladdr % (addr, str(i*50))))
-#         txs.extend(jdata["txs"])
-#     
-#     inputs = multiaccess(txs, "inputs")				# get all Tx inputs
-#     ninps = tuple([len(x["inputs"]) for x in txs])	# number of inputs
-#     scripts = map(lambda x, y: 
