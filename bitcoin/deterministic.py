@@ -220,12 +220,13 @@ def bip32_descend(*args):
 
 def bip32_path(*args, **kwargs):
     """Same as bip32_descend but returns masterkey instead of hex privkey"""
+    # use keyword public=True or end path in .pub for public child derivation
     if len(args) == 2:
         key, path = args[0], args[1]
     elif len(args) > 2:
         key, path = args[0], args[1:]
         path = "m/" + "/".join(path)
-    is_public = (path.endswith(".pub") or ('pub' in path) or path.startswith('M'))
+    is_public = (path.endswith(".pub") or ('pub' in path) or kwargs.get("public", False))
     pathlist = parse_bip32_path(path)
     oldkey = key[:]
     if not pathlist:    # empty list
