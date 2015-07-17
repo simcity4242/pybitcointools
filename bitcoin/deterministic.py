@@ -3,7 +3,7 @@ import hmac
 import hashlib
 from binascii import hexlify
 from bitcoin.pyspecials import st, by, string_types, from_str_to_bytes, from_bytes_to_str, safe_hexlify, safe_unhexlify
-from bitcoin.bip39 import prepare_elec2_seed, is_elec1_seed, is_elec2_seed
+from bitcoin.mnemonic import prepare_elec2_seed, is_elec1_seed, is_elec2_seed
 
 # TODO: detect Elec 1, 2 & BIP39
 
