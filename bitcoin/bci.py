@@ -232,7 +232,8 @@ def blockr_pushtx(tx, network='btc'):
         raise Exception(
             'Unsupported network {0} for blockr_pushtx'.format(network))
 
-    if not re.match('^[0-9a-fA-F]*$', tx): tx = safe_hexlify(tx)
+    if not re.match('^[0-9a-fA-F]*$', tx):
+        tx = safe_hexlify(tx)
     return make_request(blockr_url, '{"hex":"%s"}' % tx)
 
 
@@ -244,12 +245,12 @@ def helloblock_pushtx(tx):
 
 def webbtc_pushtx(tx, network='btc'):
     if network == 'testnet':
-        webbtc_url = 'http//test.webbtc.com/relay_tx'
+        webbtc_url = 'http//test.webbtc.com/relay_tx.json'
     elif network == 'btc':
-        webbtc_url = 'https://webbtc.com/relay_tx'
+        webbtc_url = 'http://webbtc.com/relay_tx.json'
     if not re.match('^[0-9a-fA-F]*$', tx):
         tx = safe_hexlify(tx)
-    return make_request(webbtc_url, 'tx='+tx)
+    return json.loads(make_request(webbtc_url, 'tx=%s' % tx))
 
 pushtx_getters = {
     'bci': bci_pushtx,
