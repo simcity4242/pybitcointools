@@ -89,18 +89,18 @@ if is_python2:
         return ord(a)
 
     def from_le_bytes_to_int(bstr):
-        return from_bytes_to_int(bstr, 'little', False)
+        return from_bytes_to_int(bstr, byteorder='little', signed=False)
 
-    def from_bytes_to_int(bytes, byteorder='big', signed=False):
+    def from_bytes_to_int(bstr, byteorder='big', signed=False):
         if byteorder != 'big':
-            bytes = reversed(bytes)
+            bstr = reversed(bstr)
         v = 0
         bytes_to_ints = (lambda x: [ord(c) for c in x]) if bytes == str else lambda x: x
-        for c in bytes_to_ints(bytes):
+        for c in bytes_to_ints(bstr):
             v <<= 8
             v += c
-        if signed and bytes[0] & 0x80:
-            v = v - (1 << (8*len(bytes)))
+        if signed and bstr[0] & 0x80:
+            v = v - (1 << (8*len(bstr)))
         return v
 
     def from_str_to_bytes(a):
@@ -208,8 +208,10 @@ elif sys.version_info.major == 3:
         return by(str(a))
 
     def from_int_to_le_bytes(i, length=1):
+        return from_int_to_bytes(i, length, 'little')
 
-        return int.to_bytes(i, length=length, byteorder='little')
+    def from_int_to_bytes(v, length=1, byteorder='little'):
+        return int.to_bytes(v, length, byteorder)
 
     def from_int_to_byte(a):
         return bytes([a])
@@ -218,7 +220,10 @@ elif sys.version_info.major == 3:
         return a
 
     def from_le_bytes_to_int(bstr):
-        return int.from_bytes(bstr, 'little')
+        return from_bytes_to_int(bstr, byteorder='little', signed=False)
+
+    def from_bytes_to_int(bstr, byteorder='little', signed=False):
+        return int.from_bytes(bstr, byteorder=byteorder, signed=signed)
 
     def from_str_to_bytes(a):
         return by(a)
@@ -282,4 +287,4 @@ elif sys.version_info.major == 3:
         return str(os.urandom(x))
 
 else:
-    raise IOError("pyspecials import error!")
+    raise ImportError("pyspecials import error!")

@@ -127,6 +127,7 @@ def helloblock_unspent(*args):
     return o
 
 def webbtc_unspent(*args):
+    # TODO: add code
     return None
 
 unspent_getters = {
@@ -159,7 +160,9 @@ def history(*args):
         addrs = args
         network = "btc"
 
-    if network == "testnet":pass
+    if network == "testnet":
+        pass
+    # TODO: fix testnet history code
 #         txs = []
 #         for addr in addrs:
 #             data = make_request("http://test.webbtc.com/address/%s" % addr)
@@ -245,9 +248,13 @@ def helloblock_pushtx(tx):
 
 def webbtc_pushtx(tx, network='btc'):
     if network == 'testnet':
-        webbtc_url = 'http//test.webbtc.com/relay_tx.json'
+        webbtc_url = 'http://test.webbtc.com/relay_tx.json'
     elif network == 'btc':
         webbtc_url = 'http://webbtc.com/relay_tx.json'
+    else:
+        raise Exception(
+            'Unsupported network {0} for blockr_pushtx'.format(network))
+
     if not re.match('^[0-9a-fA-F]*$', tx):
         tx = safe_hexlify(tx)
     return json.loads(make_request(webbtc_url, 'tx=%s' % tx))
@@ -255,7 +262,7 @@ def webbtc_pushtx(tx, network='btc'):
 pushtx_getters = {
     'bci': bci_pushtx,
     'blockr': blockr_pushtx,
-    'webbtc': webbtc_pushtx,        # POST to test.webbtc.com/relay_tx
+    'webbtc': webbtc_pushtx,
     'helloblock': helloblock_pushtx
 }
 

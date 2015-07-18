@@ -37,15 +37,10 @@
 ## * ftp://ftp.rsasecurity.com/pub/cryptobytes/crypto3n2.pdf
 ## */
 
-try:
-    import psyco
-    psyco.full()
-except ImportError:
-    pass
 
 import sys
 
-is_python2 = sys.version_info.major == 2
+is_python2 = str == bytes
 #block_size = 1
 digest_size = 20
 digestsize = 20

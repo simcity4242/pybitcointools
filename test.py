@@ -407,6 +407,7 @@ class TestBIP0032(unittest.TestCase):
             ['m/.pub', 'tpubD6NzVbkrYhZ4XgiXtGrdW5XDAPFCL9h7we1vwNCpn8tGbBcgfVYjXyhWo4E1xkh56hjod1RhGjxbaTLV3X4FyWuejifB9jusQ46QzG87VKp'],
             ["m/0H", 'tprv8bxNLu25VazNnppTCP4fyhyCvBHcYtzE3wr3cwYeL4HA7yf6TLGEUdS4QC1vLT63TkjRssqJe4CvGNEC8DzW5AoPUw56D1Ayg6HY4oy8QZ9'],
             ["m/0H/1", 'tprv8e8VYgZxtHsSdGrtvdxYaSrryZGiYviWzGWtDDKTGh5NMXAEB8gYSCLHpFCywNs5uqV7ghRjimALQJkRFZnUrLHpzi2pGkwqLtbubgWuQ8q'],
+            # TODO: Fix the below test cases which fail (depth + 1) returned instead of (depth)
             #["m/0H/2H/0", 'tprv8gjmbDPpbAirVSezBEMuwSu1Ci9EpUJWKokZTYccSZSomNMLytWyLdtDNHRbucNaRJWWHANf9AzEdWVAqahfyRjVMKbNRhBmxAM8EJr7R15'],
             #["m/0H/2H/2/1000000000.pub", 'tpubDHNy3kAG39ThyiwwsgoKY4iRenXDRtce8qdCFJZXPMCJg5dsCUHayp84raLTpvyiNA9sXPob5rgqkKvkN8S7MMyXbnEhGJMW64Cf4vFAoaF']
         ]
@@ -667,6 +668,7 @@ class TestBIP39Jap(unittest.TestCase):
             self.assertEqual(bip39_to_seed(mnem, pwd), seed)
             self.assertEqual(bip32_master_key(safe_unhexlify(seed)), xprv)
 
+
 class TestPBKDF2HMACSHA512(unittest.TestCase):
 
     @classmethod
@@ -685,6 +687,28 @@ class TestPBKDF2HMACSHA512(unittest.TestCase):
             password, salt, count, dklen, hash = v
             res = safe_hexlify(bin_pbkdf2_hmac("sha512", password, salt, count, dklen))
             self.assertEqual(res, hash)
+
+class BitcoinCoreSignatureValidation(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        print("Testing BitcoinCore signatures")
+
+    def test_all(self):
+
+        fo = open("tests/signmessage.json", "r").read()
+        SIG_TESTS = json.loads(fo)
+
+        for test in SIG_TESTS:
+            pkwif, sig, addr = str(test['wif']), str(test['signature']), str(test['address'])
+            priv = encode_privkey(decode_privkey(pkwif), 'hex')
+            pubkey = privtopub(priv)
+            pub_recovered = ecdsa_recover(addr, sig)
+            self.assertEqual(
+                pubkey,
+                pub_recovered,
+                "Sig's pubkey: %s\nRecovered pubkey:%s" % (pubkey, pub_recovered)
+            )
 
 if __name__ == '__main__':
     unittest.main()

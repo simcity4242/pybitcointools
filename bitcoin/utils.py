@@ -1,6 +1,9 @@
 from bitcoin.main import *
 from bitcoin.pyspecials import *
-import urlparse, re
+import re
+
+def ishex(s):
+    return set(s).issubset(set('0123456789abcdefABCDEF'))
 
 def satoshi_to_btc(val):
     return (float(val) / 10**8)
@@ -8,11 +11,11 @@ def satoshi_to_btc(val):
 def btc_to_satoshi(val):
     return int(val * 10**8 + 0.5)
 
-# Return the address and btc_amount from the
-# parsed uri_string. If either of address
-# or amount is not found that particular
+# Return the address and btc_amount from the parsed uri_string.
+# If either of address or amount is not found that particular
 # return value is None.
 def parse_bitcoin_uri(uri_string):
+    import urlparse
     parsed = urlparse.urlparse(uri_string)
     if parsed.scheme == 'bitcoin':
         addr = parsed.path
@@ -161,3 +164,4 @@ OPhex = OPS.copy()
 #addr="n1hjyVvYQPQtejJcANd5ZJM5rmxHCCgWL7"
 
 #SIG64="G8kH/WEgiATGXSy78yToe36IF9AUlluY3bMdkDFD1XyyDciIbXkfiZxk/qmjGdMeP6/BQJ/C5U/pbQUZv1HGkn8="
+
