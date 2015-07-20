@@ -1,11 +1,7 @@
-from bitcoin import *
 from bitcoin.main import *
-from bitcoin.transaction import *
-from bitcoin.pyspecials import *
-from bitcoin.composite import *
 from bitcoin.bci import *
-from bitcoin.deterministic import *
-from bitcoin.mnemonic import *
+from bitcoin.transaction import *
+from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, st, by
 from bitcoin.utils import *
 
 OPCODE_LIST = [
@@ -126,7 +122,7 @@ OPCODE_LIST = [
 ]
 
 OPCODE_TO_INT = dict(o for o in OPCODE_LIST)
-
+OPCODE_TO_INT['OP_TRUE'] = 0x81
 INT_TO_OPCODE = dict(reversed(i) for i in OPCODE_LIST)
 
 priv = sha256("mrbubby"*3+"!")
@@ -145,7 +141,7 @@ l = [
 
 def mk_script(*args):
     # lst = ['76', 'a9', '14', 'dd6cce9f255a8cc17bda8ba0373df8e861cb866e', '88', 'ac']
-    if len(args) == 1 and isinstance(args[0], (list, tuple))
+    if len(args) == 1 and isinstance(args[0], (list, tuple)):
         lst = list(args[0])
     elif len(args) > 1 and all(map(lambda o: isinstance(o, str), args)):
         lst = [args]

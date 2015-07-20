@@ -16,7 +16,7 @@ is_python2 = str == bytes
 
 
 # Elliptic curve parameters (secp256k1)
-P = 2**256 - 2**32 - 977
+P = 2**256 - 2**32 - 977	# P = 2**256 - 2**32 - 2**9 - 2**8 - 2**7 - 2**6 - 2**4 - 2**0
 # fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f
 N = 115792089237316195423570985008687907852837564279074904382605163141518161494337
 # fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141

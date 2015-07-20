@@ -139,8 +139,8 @@ def signature_form(tx, i, script, hashcode=SIGHASH_ALL):
     elif hashcode == SIGHASH_SINGLE:
         newtx["outs"] = newtx["outs"][:len(newtx["ins"])]
         for out in range(len(newtx["ins"]) - 1):
-            out.value = 2**64 - 1
-            out.script = ""
+            out['value'] = 2**64 - 1	# 0xffffffffffffffff
+            out['script'] = ""
     elif hashcode == SIGHASH_ANYONECANPAY:
         newtx["ins"] = [newtx["ins"][i]]
     else:
@@ -336,7 +336,7 @@ def serialize_script_unit(unit):
         if unit < 16:
             return from_int_to_byte(unit + 80)
         else:
-            return bytes([unit])
+            return from_int_to_byte(unit)
     elif unit is None:
         return b'\x00'
     else:
@@ -375,7 +375,7 @@ def mk_multisig_script(*args):
     else:
         pubs = list(filter(lambda x: len(str(x)) >= 32, args))
         k = int(args[len(pubs)])
-    return serialize_script([k]+pubs+[len(pubs)]) + 'ae'
+    return serialize_script([k] + pubs + [len(pubs)] + [0xae])
 
 # Signing and verifying
 

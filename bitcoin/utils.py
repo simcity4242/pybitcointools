@@ -1,5 +1,7 @@
 from bitcoin.main import *
-from bitcoin.pyspecials import *
+from bitcoin.bci import *
+from bitcoin.transaction import *
+from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, st, by
 import re
 
 def ishex(s):
@@ -277,8 +279,8 @@ INT_TO_OPCODE = dict(reversed(i) for i in OPCODE_LIST)
 #        'Null Data': re.compile('OP_RETURN [abcdef0123456789]+'),
 #}
 
-OPname = dict([(v[3:], k) for k, v in OPCODE_LIST])
-OPint = dict([(decode(k, 16), v) for k, v in OPCODE_LIST])
+OPname = dict([(k[3:], v) for k, v in OPCODE_LIST])
+OPint = dict([o for o in OPCODE_LIST])
 OPhex = OPS.copy()
 
 #addr="n1hjyVvYQPQtejJcANd5ZJM5rmxHCCgWL7"
