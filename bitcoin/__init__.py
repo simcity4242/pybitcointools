@@ -8,3 +8,5 @@ from bitcoin.stealth import *
 from bitcoin.blocks import *
 from bitcoin.mnemonic import *
 from bitcoin.file_insert import *
+from bitcoin.utils import *
+from bitcoin.mk_script import *

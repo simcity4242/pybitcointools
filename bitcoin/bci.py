@@ -9,6 +9,18 @@ try:
 except:
     from urllib2 import build_opener
 
+BCI_API = ""
+
+def set_api(*args):
+    """Set API code for web service"""
+    # "api_hex_code_string", "service" or defaults to "bci"
+    if len(args)==2 and args[1] in ("bci"):
+        code, svc = args[0], args[1]
+    else:
+        code, svc = args[0], "bci"
+    if svc == "bci":
+        global BCI_API
+        BCI_API = code
 
 # Makes a request to a given URL (first arg) and optional params (second arg)
 def make_request(*args):
@@ -44,7 +56,7 @@ def parse_addr_args(*args):
 
 # Gets the unspent outputs of one or more addresses
 def bci_unspent(*args, **kwargs):
-    api = "?api=%s" % str(kwargs.get("api", None)) if "api" in kwargs else ""
+    api = "?api=%s" % BCI_API if BCI_API else ""
     network, addrs = parse_addr_args(*args)
     u = []
     for a in addrs:
@@ -141,7 +153,7 @@ unspent_getters = {
 def unspent(*args, **kwargs):
     """unspent(addr, "btc", source="blockr")"""
     svc = kwargs.get('source', '')
-    f = unspent_getters.get(svc, bci_unspent)
+    f = unspent_getters.get(svc, blockr_unspent)
     return f(*args)
 
 
@@ -171,13 +183,14 @@ def history(*args):
 #         for txo in txs:
 #             for tx in txo.values():pass
     elif network == "btc":
+        api = "?api=%s" % BCI_API if BCI_API else ""
         txs = []
         for addr in addrs:
             offset = 0
             while 1:
                 data = make_request(
-                    'https://blockchain.info/address/%s?format=json&offset=%s' %
-                    (addr, offset))
+                    'https://blockchain.info/address/%s?format=json&offset=%s%s' %
+                    (addr, offset, api))
                 try:
                     jsonobj = json.loads(data)
                 except:
@@ -210,7 +223,8 @@ def history(*args):
 
 # Pushes a transaction to the network using https://blockchain.info/pushtx
 def bci_pushtx(tx):
-    if not re.match('^[0-9a-fA-F]*$', tx): tx = safe_hexlify(tx)
+    if not re.match('^[0-9a-fA-F]*$', tx): 
+        tx = safe_hexlify(tx)
     return make_request('https://blockchain.info/pushtx', 'tx='+tx)
 
 
@@ -269,7 +283,7 @@ pushtx_getters = {
 
 def pushtx(*args, **kwargs):
     svc = kwargs.get('source', '')
-    f = pushtx_getters.get(svc, bci_pushtx)
+    f = pushtx_getters.get(svc, blockr_pushtx)
     return f(*args)
 
 
@@ -373,7 +387,7 @@ fetchtx_getters = {
 
 def fetchtx(*args, **kwargs):
     svc = kwargs.get("source", "")
-    f = fetchtx_getters.get(svc, bci_fetchtx)
+    f = fetchtx_getters.get(svc, blockr_fetchtx)
     return f(*args)
 
 
@@ -462,7 +476,7 @@ block_header_data_getters = {
 
 def get_block_header_data(inp, **kwargs):
     f = block_header_data_getters.get(kwargs.get('source', ''),
-                                      bci_get_block_header_data)
+                                      blockr_get_block_header_data)
     return f(inp, **kwargs)
 
 def get_txs_in_block(inp):
@@ -483,4 +497,3 @@ def get_block_coinbase(txval):
     alpha = set(map(chr, list(range(32, 126))))
     cbtext = ''.join(list(map(chr, filter(lambda x: chr(x) in alpha, bytearray(cb)))))
     return cbtext
-
