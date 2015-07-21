@@ -18,10 +18,15 @@ def mk_multisig_scriptpubkey(fo):
         chunk = data[:65]
         data = data[65:]
         # pad right side with null bytes
+<<<<<<< HEAD
         if len(chunk) < 33:   
             chunk += by(bytearray(33-len(chunk)))
         elif len(chunk) < 65: 
             chunk += by(bytearray(65-len(chunk)))
+=======
+        if len(chunk) < 33:   chunk += by(bytearray(33-len(chunk)))
+        elif len(chunk) < 65: chunk += by(bytearray(65-len(chunk)))
+>>>>>>> cc816084972615246d1c815f52cafd6b2c483222
         script_pubkeys.append(chunk)
 
     pubz = list(map(safe_hexlify, script_pubkeys))

@@ -8,10 +8,10 @@ def ishex(s):
     return set(s).issubset(set('0123456789abcdefABCDEF'))
 
 def satoshi_to_btc(val):
-    return (float(val) / 10**8)
+    return (float(val) / 1e8)
 
 def btc_to_satoshi(val):
-    return int(val * 10**8 + 0.5)
+    return int(val*1e8 + 0.5)
 
 # Return the address and btc_amount from the parsed uri_string.
 # If either of address or amount is not found that particular
@@ -19,19 +19,15 @@ def btc_to_satoshi(val):
 def parse_bitcoin_uri(uri_string):
     import urlparse
     parsed = urlparse.urlparse(uri_string)
-    if parsed.scheme == 'bitcoin':
+    if parsed.scheme != 'bitcoin':
+        return None, None
+    elif parsed.scheme == 'bitcoin':
         addr = parsed.path
         queries = urlparse.parse_qs(parsed.query)
-        if 'amount' not in queries:
-            btc_amount = None
-        elif len(queries['amount']) == 1:
-            btc_amount = float(queries['amount'][0])
-        else:
-            btc_amount = None
+        if 'amount' not in queries:       btc_amount = None
+        elif len(queries['amount']) == 1: btc_amount = float(queries['amount'][0])
+        else:                             btc_amount = None
         return addr, btc_amount
-    else:
-        return None, None
-
 
 OPS = {
     '00': 'OP_FALSE',
@@ -152,12 +148,14 @@ OPS = {
 
 OPCODE_LIST = [
   ("OP_0", 0),
+  ("OP_FALSE", 0),
   ("OP_PUSHDATA1", 76),
   ("OP_PUSHDATA2", 77),
   ("OP_PUSHDATA4", 78),
   ("OP_1NEGATE", 79),
   ("OP_RESERVED", 80),
   ("OP_1", 81),
+#  ("OP_TRUE", 81),
   ("OP_2", 82),
   ("OP_3", 83),
   ("OP_4", 84),
@@ -253,6 +251,7 @@ OPCODE_LIST = [
   ("OP_CHECKMULTISIG", 174),
   ("OP_CHECKMULTISIGVERIFY", 175),
   ("OP_NOP1", 176),
+# ("OP_CHECKLOCKTIMEVERIFY", 177),
   ("OP_NOP2", 177),
   ("OP_NOP3", 178),
   ("OP_NOP4", 179),
@@ -267,6 +266,14 @@ OPCODE_LIST = [
   ("OP_INVALIDOPCODE", 255),
 ]
 
+# SUBSETS
+#OPCODES_PUSHDATA = set(xrange(0, 96+1))
+#OPCODES_INTEGERS = set(xrange(0x51, 0x60+1))
+#OPCODES_CRYPTO = set([166, 167, 168, 169, 170])
+#OPCODES_LOGIC = set([99, 100, 101, 102, 103, 104])
+#OPCODES_ARITHMETIC = set(xrange(139, 152))
+#OPCODES_SIGCHECKS = 
+
 OPCODE_TO_INT = dict(o for o in OPCODE_LIST)
 
 INT_TO_OPCODE = dict(reversed(i) for i in OPCODE_LIST)
@@ -280,8 +287,9 @@ INT_TO_OPCODE = dict(reversed(i) for i in OPCODE_LIST)
 #}
 
 OPname = dict([(k[3:], v) for k, v in OPCODE_LIST])
-OPint = dict([o for o in OPCODE_LIST])
+OPint = dict([(v,k) for k,v in OPCODE_LIST])
 OPhex = OPS.copy()
+getop = lambda o: OPname.get(o.upper() if not o.startswith("OP_") else o[2:], 0)
 
 #addr="n1hjyVvYQPQtejJcANd5ZJM5rmxHCCgWL7"
 
@@ -301,7 +309,11 @@ ops = [
        masterpub, 
        OPname['CHECKSIGVERIFY'], 
        OPname['ELSE'], 
+<<<<<<< HEAD
        safe_hexlify(from_int_to_le_bytes(last_block_height("testnet")+24)),
+=======
+       safe_hexlify(from_int_to_le_bytes(507776)), #safe_hexlify(from_int_to_le_bytes(last_block_height("testnet")+24)), 
+>>>>>>> cc816084972615246d1c815f52cafd6b2c483222
        OPname['NOP2'], 
        OPname['DROP'], 
        OPname['ENDIF'], 
@@ -313,4 +325,15 @@ myscript = "63210330ed33784ee1891122bc608b89da2da45194efaca68564051e5a7be9bee7f6
 
 msaddr = "2NBrWPN37wvZhMYb66h23v5rScuVRDDFNsR"
 
+<<<<<<< HEAD
 pushedtx_txid = "2e7f518ce5ab61c1c959d25e396bc9d3d684d22ea86dc477b1a90329c6ca354f"
+=======
+pushedtx_txid = "2e7f518ce5ab61c1c959d25e396bc9d3d684d22ea86dc477b1a90329c6ca354f"
+
+raw = mktx(["2e7f518ce5ab61c1c959d25e396bc9d3d684d22ea86dc477b1a90329c6ca354f:1"], [{'value': 84480000, 'script': '76a914dd6cce9f255a8cc17bda8ba0373df8e861cb866e88ac'}])
+#signing_tx = signature_form(tx, i, '<utxo_scriptPubKey>', hashcode)
+signing_tx = signature_form(raw, 0, myscript)
+sig1 = multisign(signing_tx, 0, myscript, masterpriv)
+sig2 = multisign(signing_tx, 0, myscript, priv)
+signed1 = apply_multisignatures(raw, 0, myscript, sig1, sig2)
+>>>>>>> cc816084972615246d1c815f52cafd6b2c483222
