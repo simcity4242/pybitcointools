@@ -9,7 +9,6 @@ from bitcoin.mnemonic import prepare_elec2_seed, is_elec1_seed, is_elec2_seed
 
 # Electrum wallets
 def bin_electrum_extract_seed(mn_seed, password=b''):
-    assert len(mn_seed) == 1
     if isinstance(mn_seed, string_types):
         mn_seed = prepare_elec2_seed(mn_seed)
     elif isinstance(mn_seed, list):

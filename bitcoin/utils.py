@@ -292,11 +292,25 @@ pub = privtopub(priv)
 addr = privtoaddr(priv, 111)
 pkh = mk_pubkey_script(addr)[6:-4]
 
-l = [
-     OPname["DUP"], 
-     OPname['HASH160'], 
-     changebase(str(len(pkh)/2), 10, 16, 2), 
-     pkh, 
-     OPname['EQUALVERIFY'], 
-     OPname['CHECKSIG']
-     ]
+masterpriv = sha256("master"*42)
+masterpub = compress(privtopub(masterpriv))
+masteraddr = pubtoaddr(masterpub, 111)
+
+ops = [
+       OPname['IF'], 
+       masterpub, 
+       OPname['CHECKSIGVERIFY'], 
+       OPname['ELSE'], 
+       safe_hexlify(from_int_to_le_bytes(last_block_height("testnet")+24)),
+       OPname['NOP2'], 
+       OPname['DROP'], 
+       OPname['ENDIF'], 
+       pub, 
+       OPname['CHECKSIG']
+       ]
+
+myscript = "63210330ed33784ee1891122bc608b89da2da45194efaca68564051e5a7be9bee7f63fad670380bf07b1756841042daa93315eebbe2cb9b5c3505df4c6fb6caca8b756786098567550d4820c09db988fe9997d049d687292f815ccd6e7fb5c1b1a91137999818d17c73d0f80aef9ac"
+
+msaddr = "2NBrWPN37wvZhMYb66h23v5rScuVRDDFNsR"
+
+pushedtx_txid = "2e7f518ce5ab61c1c959d25e396bc9d3d684d22ea86dc477b1a90329c6ca354f"
