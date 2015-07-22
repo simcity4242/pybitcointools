@@ -110,7 +110,7 @@ Fun stuff with json:
 * random_elec2_seed    : () -> electrum seed
 * random_bip39_seed    :
 * random_bip39_mn      :
-* random_mini_key      :
+* random_mini_key      : () -> 30 character mini private key
 
 * electrum_stretch     : (seed) -> secret exponent
 * electrum_privkey     : (seed or secret exponent, i, type) -> privkey
@@ -126,13 +126,15 @@ Fun stuff with json:
 * bip32_ckd            : (private or public bip32 key, i) -> child key
 * bip32_privtopub      : (private bip32 key) -> public bip32 key
 * bip32_extract_key    : (private or public bip32_key) -> privkey or pubkey
+* bip32_path           : (private or public bip32 key) -> child priv or pubkey at path "m/1H/2'/3.pub"
+* parse_bip32_path     : bip32_path -> array of depths
 
-* bip39_to_mn          :
-* bip39_to_seed        :
-* bip39_to_entropy     :
-* bip39_check          :
-* bip39_detect_lang    :
-* random_bip39_mn      :
+* bip39_to_mn          : (entropy) -> bip39 mnemonic (lang = english, japanese, spanish, french, chinese_traditional, chinese_simplified)
+* bip39_to_seed        : (bip39 mnemonic) -> hex seed (for bip32)
+* bip39_to_entropy     : (bip39 mnemonic) -> input entropy
+* bip39_check          : check mnemonic is bip39 compliant
+* bip39_detect_lang    : detect language of bip39 mnemonic
+* random_bip39_mn      : random mnemonic
 
 * deserialize          : (hex or bin transaction) -> JSON tx
 * serialize            : (JSON tx) -> hex or bin tx
@@ -158,6 +160,15 @@ Fun stuff with json:
 * sum                  : (json list) -> sum of all values
 
 * get_block_coinbase   : Return block's coinbase field (if any)
-* encode_file          : encode binary file into blockchain
 * bip44_address        :
 * mk_opreturn          :
+
+
+BLOCKCHAIN DECODING/ENCODING:
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+signedtx = encode_file("filename_in_pybitcointools_rootdir.jpg", privkey_to_sign_with)
+pushtx(signedtx, 'testnet', source='blockr')
+
+with open('tunguska.png', 'wb') as fo:
+    fo.write(decode_file("93532aa557c00bbe7abcade3423a59a2de971379365a3d5e8581fa6c8b8d7df4", network='testnet'))

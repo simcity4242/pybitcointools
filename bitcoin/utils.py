@@ -148,14 +148,12 @@ OPS = {
 
 OPCODE_LIST = [
   ("OP_0", 0),
-  ("OP_FALSE", 0),
   ("OP_PUSHDATA1", 76),
   ("OP_PUSHDATA2", 77),
   ("OP_PUSHDATA4", 78),
   ("OP_1NEGATE", 79),
   ("OP_RESERVED", 80),
   ("OP_1", 81),
-#  ("OP_TRUE", 81),
   ("OP_2", 82),
   ("OP_3", 83),
   ("OP_4", 84),
@@ -251,7 +249,6 @@ OPCODE_LIST = [
   ("OP_CHECKMULTISIG", 174),
   ("OP_CHECKMULTISIGVERIFY", 175),
   ("OP_NOP1", 176),
-# ("OP_CHECKLOCKTIMEVERIFY", 177),
   ("OP_NOP2", 177),
   ("OP_NOP3", 178),
   ("OP_NOP4", 179),
@@ -266,6 +263,12 @@ OPCODE_LIST = [
   ("OP_INVALIDOPCODE", 255),
 ]
 
+OP_ALIASES = [
+    ("OP_CHECKLOCKTIMEVERIFY", 177),
+    ("OP_TRUE", 81),
+    ("OP_FALSE", 0)
+]
+
 # SUBSETS
 #OPCODES_PUSHDATA = set(xrange(0, 96+1))
 #OPCODES_INTEGERS = set(xrange(0x51, 0x60+1))
@@ -274,9 +277,6 @@ OPCODE_LIST = [
 #OPCODES_ARITHMETIC = set(xrange(139, 152))
 #OPCODES_SIGCHECKS = 
 
-OPCODE_TO_INT = dict(o for o in OPCODE_LIST)
-
-INT_TO_OPCODE = dict(reversed(i) for i in OPCODE_LIST)
 
 #REGEX_PATTERNS = {
 #        'P2PKH': re.compile('OP_DUP OP_HASH160 [abcdef0123456789]+ OP_EQUALVERIFY OP_CHECKSIG'),
@@ -288,7 +288,7 @@ INT_TO_OPCODE = dict(reversed(i) for i in OPCODE_LIST)
 
 OPname = dict([(k[3:], v) for k, v in OPCODE_LIST])
 OPint = dict([(v,k) for k,v in OPCODE_LIST])
-OPhex = OPS.copy()
+OPhex = dict([(encode(k, 16, 2), v) for v,k in OPCODE_LIST])
 getop = lambda o: OPname.get(o.upper() if not o.startswith("OP_") else o[2:], 0)
 
 #addr="n1hjyVvYQPQtejJcANd5ZJM5rmxHCCgWL7"
@@ -308,12 +308,8 @@ ops = [
        OPname['IF'], 
        masterpub, 
        OPname['CHECKSIGVERIFY'], 
-       OPname['ELSE'], 
-<<<<<<< HEAD
-       safe_hexlify(from_int_to_le_bytes(last_block_height("testnet")+24)),
-=======
-       safe_hexlify(from_int_to_le_bytes(507776)), #safe_hexlify(from_int_to_le_bytes(last_block_height("testnet")+24)), 
->>>>>>> cc816084972615246d1c815f52cafd6b2c483222
+       OPname['ELSE'],
+       safe_hexlify(from_int_to_le_bytes(507776)), # '80bf07'
        OPname['NOP2'], 
        OPname['DROP'], 
        OPname['ENDIF'], 
@@ -321,19 +317,21 @@ ops = [
        OPname['CHECKSIG']
        ]
 
-myscript = "63210330ed33784ee1891122bc608b89da2da45194efaca68564051e5a7be9bee7f63fad670380bf07b1756841042daa93315eebbe2cb9b5c3505df4c6fb6caca8b756786098567550d4820c09db988fe9997d049d687292f815ccd6e7fb5c1b1a91137999818d17c73d0f80aef9ac"
+myscript = "63210330ed33784ee1891122bc608b89da2da45194efaca68564051e5a7be9bee7f63fad670380bf07" \
+           "b1756841042daa93315eebbe2cb9b5c3505df4c6fb6caca8b756786098567550d4820c09db988fe999" \
+           "7d049d687292f815ccd6e7fb5c1b1a91137999818d17c73d0f80aef9ac"
 
 msaddr = "2NBrWPN37wvZhMYb66h23v5rScuVRDDFNsR"
 
-<<<<<<< HEAD
-pushedtx_txid = "2e7f518ce5ab61c1c959d25e396bc9d3d684d22ea86dc477b1a90329c6ca354f"
-=======
 pushedtx_txid = "2e7f518ce5ab61c1c959d25e396bc9d3d684d22ea86dc477b1a90329c6ca354f"
 
-raw = mktx(["2e7f518ce5ab61c1c959d25e396bc9d3d684d22ea86dc477b1a90329c6ca354f:1"], [{'value': 84480000, 'script': '76a914dd6cce9f255a8cc17bda8ba0373df8e861cb866e88ac'}])
+raw = mktx(
+    ["2e7f518ce5ab61c1c959d25e396bc9d3d684d22ea86dc477b1a90329c6ca354f:1"],
+    [{'value': 84480000, 'script': '76a914dd6cce9f255a8cc17bda8ba0373df8e861cb866e88ac'}])
+
 #signing_tx = signature_form(tx, i, '<utxo_scriptPubKey>', hashcode)
 signing_tx = signature_form(raw, 0, myscript)
+
 sig1 = multisign(signing_tx, 0, myscript, masterpriv)
 sig2 = multisign(signing_tx, 0, myscript, priv)
 signed1 = apply_multisignatures(raw, 0, myscript, sig1, sig2)
->>>>>>> cc816084972615246d1c815f52cafd6b2c483222
