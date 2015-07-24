@@ -467,15 +467,13 @@ def random_mini_key():
 
 # Encodings
 def b58check_to_bin(inp):
-    leadingzbytes = len(re.match('^1*', inp).group(0))
-    data = b'\x00' * leadingzbytes + changebase(inp, 58, 256)
+    data = changebase(inp, 58, 256)
     assert bin_dbl_sha256(data[:-4])[:4] == data[-4:]
     return data[1:-4]
 
 
 def get_version_byte(inp):
-    leadingzbytes = len(re.match('^1*', inp).group(0))
-    data = b'\x00' * leadingzbytes + changebase(inp, 58, 256)
+    data = changebase(inp, 58, 256)
     assert bin_dbl_sha256(data[:-4])[:4] == data[-4:]
     return ord(data[0])
 

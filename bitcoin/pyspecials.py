@@ -46,15 +46,28 @@ if is_python2:
             raise ValueError("Invalid base!")
 
     def changebase(string, frm, to, minlen=0):
+        # TODO: fix Python 3.x changebase
         if frm == to:
             return lpad(string, get_code_string(frm)[0], minlen)
+        elif frm in (16, 256) and to == 58:
+            if frm == 16:
+                nblen = len(re.match('^(00)*', string).group(0))/2
+            else:
+                nblen = len(re.match('^(\x00)*', string).group(0))
+            return lpad('', '1', nblen) + encode(decode(string, frm), to)
+        elif frm == 58 and to in (16, 256):
+            nblen = len(re.match('^1*', string).group(0))
+            if to == 16:
+                padding = lpad('', '00', nblen)
+            else:
+                padding = lpad('', '\0', nblen)
+            return padding + encode(decode(string, frm), to)
         return encode(decode(string, frm), to, minlen)
 
     def bin_to_b58check(inp, magicbyte=0):
         inp_fmtd = chr(int(magicbyte)) + inp
-        leadingzbytes = len(re.match('^\x00*', inp_fmtd).group(0))
         checksum = bin_dbl_sha256(inp_fmtd)[:4]
-        return '1' * leadingzbytes + changebase(inp_fmtd+checksum, 256, 58)
+        return changebase(inp_fmtd + checksum, 256, 58)
         
     def safe_hexlify(b):
         return binascii.hexlify(b)

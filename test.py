@@ -688,7 +688,7 @@ class TestPBKDF2HMACSHA512(unittest.TestCase):
             res = safe_hexlify(bin_pbkdf2_hmac("sha512", password, salt, count, dklen))
             self.assertEqual(res, hash)
 
-class BitcoinCoreSignatureValidation(unittest.TestCase):
+class BitcoinCore_SignatureValidation(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -708,6 +708,32 @@ class BitcoinCoreSignatureValidation(unittest.TestCase):
                 pubkey,
                 pub_recovered,
                 "Sig's pubkey: %s\nRecovered pubkey:%s" % (pubkey, pub_recovered)
+            )
+
+class BitcoinCore_Base58_encode_decode(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        print("Testing BitcoinCore Base58 Encode/Decode vectors")
+
+    def test_all(self):
+
+        fo = open("tests/base58_encode_decode.json", "r").read()
+        BASE58_TESTS = json.loads(fo)
+
+        for test in BASE58_TESTS:
+            base16, base58 = test
+            result_from_hex = changebase(base16, 16, 58)
+            result_to_hex = changebase(base58, 58, 16)
+            self.assertEqual(
+                result_from_hex,
+                base58,
+                "Calculated: %s\nResult:%s" % (result_from_hex, base58)
+            )
+            self.assertEqual(
+                result_to_hex,
+                base16,
+                "Calculated: %s\nResult:%s" % (result_to_hex, base16)
             )
 
 if __name__ == '__main__':
