@@ -502,10 +502,8 @@ pubtoaddr = pubkey_to_address
 
 def encode_sig(v, r, s):
     """Takes vbyte and (r,s) as ints, returns base64 string"""
-    vb, rb, sb = from_int_to_byte(v), encode(r, 256), encode(s, 256)
-    result = base64.b64encode(vb + 
-                              b'\x00'*(32-len(rb)) + rb + \
-                              b'\x00'*(32-len(sb)) + sb)
+    vb, rb, sb = from_int_to_byte(v), encode(r, 256, 32), encode(s, 256, 32)
+    result = base64.b64encode(vb, rb, sb)
     return st(result)
 
 
@@ -521,9 +519,9 @@ def deterministic_generate_k(msghash, priv):
     k = bytearray(32) 		# b'\x00' * 32 
     priv = encode_privkey(priv, 'bin')					# binary private key
     msghash = encode(hash_to_int(msghash), 256, 32)		# encode msg hash as 32 bytes
-    k = hmac_sha256(k, v + b'\x00' + priv + msghash).digest()
+    k = hmac_sha256(k, v + b'\0' + priv + msghash).digest()
     v = hmac_sha256(k, v).digest()
-    k = hmac_sha256(k, v + b'\x01' + priv + msghash).digest()
+    k = hmac_sha256(k, v + b'\1' + priv + msghash).digest()
     v = hmac_sha256(k, v).digest()
     res = hmac_sha256(k, v).digest()
     return decode(by(res), 256)

@@ -736,5 +736,50 @@ class BitcoinCore_Base58_encode_decode(unittest.TestCase):
                 "Calculated: %s\nResult:%s" % (result_to_hex, base16)
             )
 
+# class BitcoinCore_TransactionValid(unittest.TestCase):
+#
+#     @classmethod
+#     def setUpClass(cls):
+#         print("Testing BitcoinCore Transactions (Valid)")
+#
+#     def load_test_vectors(self, name):
+#         with open("b:/pybtc/python-bitcoinlib/bitcoin/tests/data/%s" % name, 'r') as fd:
+#             for test_case in json.load(fd):
+#                 # Comments designated by single length strings
+#                 if len(test_case) == 1:
+#                     continue
+#                 assert len(test_case) == 3
+#
+#                 prevouts = []
+#                 for json_prevout in test_case[0]:
+#                     assert len(json_prevout) == 3
+#                     n = json_prevout[1]
+#                     if n == -1: n = 0xffffffff
+#                     prevout = "%s:%d" % (json_prevout[0], n)
+#                     prevouts.append(dict(script=json_prevout[-1], txid=prevout))
+#
+#                 tx = deserialize(test_case[1])
+#                 enforceP2SH = test_case[2]
+#
+#                 yield (prevouts, tx, enforceP2SH)
+#
+#     def test_all(self):
+#
+#         fo = open("tests/tx_valid.json", "r").read()
+#         for test_case in json.loads(fo):
+#             if len(test_case) == 1:     # commented object
+#                 continue
+#             assert len(test_case) == 3  # test_case
+#
+#             prevouts = {}
+#             for json_prevout in test_case[0]:
+#                 assert len(json_prevout) == 3   # prevout hash, prevout vout, prevout scriptPubKey
+#                 n = json_prevout[1]
+#                 if n == -1:
+#                     n = 0xffffffff
+#                 prevout =
+
+
+
 if __name__ == '__main__':
     unittest.main()

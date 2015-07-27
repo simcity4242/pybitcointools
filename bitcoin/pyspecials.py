@@ -51,12 +51,12 @@ if is_python2:
             return lpad(string, get_code_string(frm)[0], minlen)
         elif frm in (16, 256) and to == 58:
             if frm == 16:
-                nblen = len(re.match('^(00)*', string).group(0))/2
+                nblen = len(re.match('^(00)*', string).group(0))//2
             else:
                 nblen = len(re.match('^(\x00)*', string).group(0))
             return lpad('', '1', nblen) + encode(decode(string, frm), to)
         elif frm == 58 and to in (16, 256):
-            nblen = len(re.match('^1*', string).group(0))
+            nblen = len(re.match('^(1)*', string).group(0))
             if to == 16:
                 padding = lpad('', '00', nblen)
             else:
@@ -65,7 +65,7 @@ if is_python2:
         return encode(decode(string, frm), to, minlen)
 
     def bin_to_b58check(inp, magicbyte=0):
-        inp_fmtd = chr(int(magicbyte)) + inp
+        inp_fmtd = from_int_to_byte(int(magicbyte)) + inp
         checksum = bin_dbl_sha256(inp_fmtd)[:4]
         return changebase(inp_fmtd + checksum, 256, 58)
         

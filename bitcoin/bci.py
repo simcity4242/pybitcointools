@@ -89,9 +89,9 @@ def blockr_unspent(*args):
     network, addr_args = parse_addr_args(*args)
 
     if network == 'testnet':
-        blockr_url = 'https://tbtc.blockr.io/api/v1/address/unspent/'
+        blockr_url = 'http://tbtc.blockr.io/api/v1/address/unspent/'
     elif network == 'btc':
-        blockr_url = 'https://btc.blockr.io/api/v1/address/unspent/'
+        blockr_url = 'http://btc.blockr.io/api/v1/address/unspent/'
     else:
         raise Exception(
             'Unsupported network {0} for blockr_unspent'.format(network))
@@ -138,14 +138,22 @@ def helloblock_unspent(*args):
                 })
     return o
 
-def webbtc_unspent(*args):
-    # TODO: add code
-    return None
+# def webbtc_unspent(*args):
+#     network, addrs = parse_addr_args(*args)
+#     if network == 'testnet':
+#         url = "http://test.webbtc.com/address/%s.json"
+#     elif network == 'btc':
+#         url = "http://webbtc.com/address/%s.json"
+#     o = []
+#     for addr in addrs:
+#         mr = make_request(url % addr)
+#         if mr['balance'] == 0:
+#             break
 
 unspent_getters = {
     'bci': bci_unspent,
     'blockr': blockr_unspent,
-    'webbtc': webbtc_unspent,           #
+    #'webbtc': webbtc_unspent,           #
     'helloblock': helloblock_unspent
 }
 
@@ -188,9 +196,19 @@ def history(*args):
         for addr in addrs:
             offset = 0
             while 1:
-                data = make_request(
-                    'https://blockchain.info/address/%s?format=json&offset=%s%s' %
-                    (addr, offset, api))
+                gathered = False
+                while not gathered:
+                    try:
+                        data = make_request(
+                            'https://blockchain.info/address/%s?format=json&offset=%s%s' %
+                            (addr, offset, api))
+                        gathered = True
+                    except Exception as e:
+                        try:
+                            sys.stderr.write(e.read().strip())
+                        except:
+                            sys.stderr.write(str(e))
+                        gathered = False
                 try:
                     jsonobj = json.loads(data)
                 except:
@@ -243,9 +261,9 @@ def eligius_pushtx(tx):
 
 def blockr_pushtx(tx, network='btc'):
     if network == 'testnet':
-        blockr_url = 'https://tbtc.blockr.io/api/v1/tx/push'
+        blockr_url = 'http://tbtc.blockr.io/api/v1/tx/push'
     elif network == 'btc':
-        blockr_url = 'https://btc.blockr.io/api/v1/tx/push'
+        blockr_url = 'http://btc.blockr.io/api/v1/tx/push'
     else:
         raise Exception(
             'Unsupported network {0} for blockr_pushtx'.format(network))
@@ -290,7 +308,7 @@ def pushtx(*args, **kwargs):
 
 def last_block_height(network='btc'):
     if network == 'testnet':
-        data = make_request('https://tbtc.blockr.io/api/v1/block/info/last')
+        data = make_request('http://tbtc.blockr.io/api/v1/block/info/last')
         jsonobj = json.loads(data)
         return jsonobj["data"]["nb"]
     data = make_request('https://blockchain.info/latestblock')
@@ -431,9 +449,9 @@ def bci_get_block_header_data(inp):
 
 def blockr_get_block_header_data(height, network='btc'):
     if network == 'testnet':
-        blockr_url = "https://tbtc.blockr.io/api/v1/block/raw/"
+        blockr_url = "http://tbtc.blockr.io/api/v1/block/raw/"
     elif network == 'btc':
-        blockr_url = "https://btc.blockr.io/api/v1/block/raw/"
+        blockr_url = "http://btc.blockr.io/api/v1/block/raw/"
     else:
         raise Exception(
             'Unsupported network {0} for blockr_get_block_header_data'.format(network))
@@ -452,9 +470,9 @@ def blockr_get_block_header_data(height, network='btc'):
 
 def get_block_timestamp(height, network='btc'):
     if network == 'testnet':
-        blockr_url = "https://tbtc.blockr.io/api/v1/block/info/"
+        blockr_url = "http://tbtc.blockr.io/api/v1/block/info/"
     elif network == 'btc':
-        blockr_url = "https://btc.blockr.io/api/v1/block/info/"
+        blockr_url = "http://btc.blockr.io/api/v1/block/info/"
     else:
         raise Exception(
             'Unsupported network {0} for get_block_timestamp'.format(network))
