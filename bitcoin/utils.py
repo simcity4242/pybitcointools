@@ -309,7 +309,7 @@ ops = [
        masterpub, 
        OPname['CHECKSIGVERIFY'], 
        OPname['ELSE'],
-       safe_hexlify(from_int_to_le_bytes(507776)), # '80bf07'
+       '80bf07', #safe_hexlify(from_int_to_le_bytes(507776)), # '80bf07'
        OPname['NOP2'], 
        OPname['DROP'], 
        OPname['ENDIF'], 

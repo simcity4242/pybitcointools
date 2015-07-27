@@ -46,7 +46,6 @@ if is_python2:
             raise ValueError("Invalid base!")
 
     def changebase(string, frm, to, minlen=0):
-        # TODO: fix Python 3.x changebase
         if frm == to:
             return lpad(string, get_code_string(frm)[0], minlen)
         elif frm in (16, 256) and to == 58:
@@ -199,16 +198,25 @@ elif sys.version_info.major == 3:
     def changebase(string, frm, to, minlen=0):
         if frm == to:
             return lpad(string, get_code_string(frm)[0], minlen)
+        elif frm in (16, 256) and to == 58:
+            if frm == 16:
+                nblen = len(re.match('^(00)*', string).group(0)) // 2
+            else:
+                nblen = len(from_bytes_to_str(re.match('^(\x00)*', string).group(0)))
+            return lpad('', '1', nblen) + encode(decode(string, frm), to)
+        elif frm == 58 and to in (16, 256):
+            nblen = len(re.match('^(1)*', string).group(0))
+            if to == 16:
+                padding = lpad('', '00', nblen)
+            else:
+                padding = lpad('', '\0', nblen)
+            return padding + encode(decode(string, frm), to)
         return encode(decode(string, frm), to, minlen)
 
     def bin_to_b58check(inp, magicbyte=0):
         inp_fmtd = from_int_to_byte(int(magicbyte))+inp
-        leadingzbytes = 0
-        for x in inp_fmtd:
-            if x != 0: break
-            leadingzbytes += 1
         checksum = bin_dbl_sha256(inp_fmtd)[:4]
-        return '1' * leadingzbytes + changebase(inp_fmtd+checksum, 256, 58)
+        return changebase(inp_fmtd+checksum, 256, 58)
 
     def safe_hexlify(a):
         return st(binascii.hexlify(a))

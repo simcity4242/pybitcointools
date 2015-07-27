@@ -70,7 +70,7 @@ def bip39_detect_lang(mnem_str):
             sys.stderr.write("Cannot determine if English or French.\nEnglish returned")
             return 'english '
     else:
-        print Warning("Unable to determine language.\nReturning English")
+        sys.stderr.write("Unable to determine language.\nReturning English")
         return 'english'
 
 def bip39_to_mn(hexstr, lang=None):
