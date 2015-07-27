@@ -186,7 +186,7 @@ OP_ALIASES = [
 OPname = dict([(k[3:], v) for k, v in OPCODE_LIST + OP_ALIASES]);OPname.update(dict([(k,v) for k,v in OPCODE_LIST + OP_ALIASES]))
 OPint = dict([(v,k) for k,v in OPCODE_LIST])
 OPhex = dict([(encode(k, 16, 2), v) for v,k in OPCODE_LIST])
-getop = lambda o: OPname.get(o.upper() if not o.startswith("OP_") else upper(o[2:]), 0)
+getop = lambda o: OPname.get(o.upper() if not o.startswith("OP_") else str(o[2:]).upper(), 0)
 
 def get_op(s):
     """Returns OP_CODE for integer, or integer for OP_CODE"""
@@ -195,25 +195,21 @@ def get_op(s):
     elif isinstance(s, basestring):
         return getop(s)
 
-def parse_script(script):
-    if isinstance(script, list):
-        script = ' '.join(script)
-    scriptarr = script.split()
-    SCR = []
-    for v in scriptarr:
-        if isinstance(v, basestring):
-            if str(v).startswith('0x'):
-                if int(v[2:], 16) < 0x4c:
-                    continue
-                else:
-                    SCR.append(v[2:])
-            elif len(v) in (1, 2):
-                SCR.append(int(v, 0))
-            elif v.startswith('OP_'):
-                SCR.append(get_op(v[3:]))
+def parse_script(s):
+    r = []
+    for word in s.split():
+        if word.isdigit() or (word[0] == '-' and word[1:].isdigit()):
+            r.append(int(word, 0))
+        elif word.startswith('0x') and ishex(word[2:]):
+            if int(word[2:], 16) < 0x4c:
+                continue
             else:
-                SCR.append(v)
-    return serialize_script(SCR)
+                r.append(word[2:])
+        elif len(word) >= 2 and word[0] == "'" and word[-1] == "'":
+            r.append(word[1:-1])
+        elif word in OPname:
+            r.append(OPname[word])  # r.append(get_op(v[3:]))
+    return serialize_script(r)
 
 #addr="n1hjyVvYQPQtejJcANd5ZJM5rmxHCCgWL7"
 
@@ -222,7 +218,7 @@ def parse_script(script):
 tpriv = priv = sha256("mrbubby"*3+"!")
 tpub = pub = privtopub(priv)
 taddr = addr = privtoaddr(priv, 111)
-pkh = mk_pubkey_script(addr)[6:-4]
+tpkh = pkh = mk_pubkey_script(addr)[6:-4]
 
 masterpriv = sha256("master"*42)
 masterpub = compress(privtopub(masterpriv))
