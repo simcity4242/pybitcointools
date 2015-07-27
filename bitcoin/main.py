@@ -515,8 +515,8 @@ def decode_sig(sig):
 # https://tools.ietf.org/html/rfc6979#section-3.2
 def deterministic_generate_k(msghash, priv):
     hmac_sha256 = lambda k, s: hmac.new(k, s, hashlib.sha256)
-    v = bytearray([1]*32)	# b'\x01' * 32 
-    k = bytearray(32) 		# b'\x00' * 32 
+    v = b'\1' * 32	            # b'\x01' * 32
+    k = encode(0, 256, 32) 		# b'\x00' * 32
     priv = encode_privkey(priv, 'bin')					# binary private key
     msghash = encode(hash_to_int(msghash), 256, 32)		# encode msg hash as 32 bytes
     k = hmac_sha256(k, v + b'\0' + priv + msghash).digest()
@@ -528,7 +528,7 @@ def deterministic_generate_k(msghash, priv):
 
 # MSG SIGNING
 
-def ecdsa_raw_sign(msghash, priv):
+def ecdsa_raw_sign(msghash, priv, low_s=True):
     """Deterministically sign binary msghash (z) with k, returning (vbyte, r, s) as ints"""
     z = hash_to_int(msghash)
     k = deterministic_generate_k(msghash, priv)
@@ -536,7 +536,8 @@ def ecdsa_raw_sign(msghash, priv):
     r, y = fast_multiply(G, k)
     priv = decode_privkey(priv)
     s = inv(k, N) * (z + r * priv) % N
-
+    if low_s:
+        s = N-s if s>N//2 else s
     return 27+(y % 2), r, s		# vbyte, r, s
 
 

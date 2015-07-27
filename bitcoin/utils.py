@@ -2,10 +2,23 @@ from bitcoin.main import *
 from bitcoin.bci import *
 from bitcoin.transaction import *
 from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, st, by
+
 import re
+from pprint import pprint as pp
 
 def ishex(s):
     return set(s).issubset(set('0123456789abcdefABCDEF'))
+
+def isbin(s):
+    if not (is_python2 or isinstance(s, bytes)):
+        return False
+    if len(s)%2 == 1:
+        return True
+    try: 
+        unhexed = safe_unhexlify(s)
+    except TypeError: 
+        return True
+    return True
 
 def satoshi_to_btc(val):
     return (float(val) / 1e8)
@@ -29,122 +42,6 @@ def parse_bitcoin_uri(uri_string):
         else:                             btc_amount = None
         return addr, btc_amount
 
-OPS = {
-    '00': 'OP_FALSE',
-    '4c': 'OP_PUSHDATA1',
-    '4d': 'OP_PUSHDATA2',
-    '4e': 'OP_PUSHDATA4',
-    '4f': 'OP_1NEGATE',
-    '51': 'OP_TRUE',
-    '52': 'OP_2',
-    '53': 'OP_3',
-    '54': 'OP_4',
-    '55': 'OP_5',
-    '56': 'OP_6',
-    '57': 'OP_7',
-    '58': 'OP_8',
-    '59': 'OP_9',
-    '5a': 'OP_10',
-    '5b': 'OP_11',
-    '5c': 'OP_12',
-    '5d': 'OP_13',
-    '5e': 'OP_14',
-    '5f': 'OP_15',
-    '60': 'OP_16',
-    '61': 'OP_NOP',
-    '63': 'OP_IF',
-    '64': 'OP_NOTIF',
-    '67': 'OP_ELSE',
-    '68': 'OP_ENDIF',
-    '69': 'OP_VERIFY',
-    '6a': 'OP_RETURN',
-    '6b': 'OP_TOALTSTACK',
-    '6c': 'OP_FROMALTSTACK',
-    '73': 'OP_IFDUP',
-    '74': 'OP_DEPTH',
-    '75': 'OP_DROP',
-    '76': 'OP_DUP',
-    '77': 'OP_NIP',
-    '78': 'OP_OVER',
-    '79': 'OP_PICK',
-    '7a': 'OP_ROLL',
-    '7b': 'OP_ROT',
-    '7c': 'OP_SWAP',
-    '7d': 'OP_TUCK',
-    '6d': 'OP_2DROP',
-    '6e': 'OP_2DUP',
-    '6f': 'OP_3DUP',
-    '70': 'OP_2OVER',
-    '71': 'OP_2ROT',
-    '72': 'OP_2SWAP',
-    '7e': 'OP_CAT',
-    '7f': 'OP_SUBSTR',
-    '80': 'OP_LEFT',
-    '81': 'OP_RIGHT',
-    '82': 'OP_SIZE',
-    '83': 'OP_INVERT',
-    '84': 'OP_AND',
-    '85': 'OP_OR',
-    '86': 'OP_XOR',
-    '87': 'OP_EQUAL',
-    '88': 'OP_EQUALVERIFY',
-    '8b': 'OP_1ADD',
-    '8c': 'OP_1SUB',
-    '8d': 'OP_2MUL',
-    '8e': 'OP_2DIV',
-    '8f': 'OP_NEGATE',
-    '90': 'OP_ABS',
-    '91': 'OP_NOT',
-    '92': 'OP_0NOTEQUAL',
-    '93': 'OP_ADD',
-    '94': 'OP_SUB',
-    '95': 'OP_MUL',
-    '96': 'OP_DIV',
-    '97': 'OP_MOD',
-    '98': 'OP_LSHIFT',
-    '99': 'OP_RSHIFT',
-    '9a': 'OP_BOOLAND',
-    '9b': 'OP_BOOLOR',
-    '9c': 'OP_NUMEQUAL',
-    '9d': 'OP_NUMEQUALVERIFY',
-    '9e': 'OP_NUMNOTEQUAL',
-    '9f': 'OP_LESSTHAN',
-    'a0': 'OP_GREATERTHAN',
-    'a1': 'OP_LESSTHANOREQUAL',
-    'a2': 'OP_GREATERTHANOREQUAL',
-    'a3': 'OP_MIN',
-    'a4': 'OP_MAX',
-    'a5': 'OP_WITHIN',
-    'a6': 'OP_RIPEMD160',
-    'a7': 'OP_SHA1',
-    'a8': 'OP_SHA256',
-    'a9': 'OP_HASH160',
-    'aa': 'OP_HASH256',
-    'ab': 'OP_CODESEPARATOR',
-    'ac': 'OP_CHECKSIG',
-    'ad': 'OP_CHECKSIGVERIFY',
-    'ae': 'OP_CHECKMULTISIG',
-    'af': 'OP_CHECKMULTISIGVERIFY',
-    'fd': 'OP_PUBKEYHASH',
-    'fe': 'OP_PUBKEY',
-    'ff': 'OP_INVALIDOPCODE',
-    '50': 'OP_RESERVED',
-    '62': 'OP_VER',
-    '65': 'OP_VERIF',
-    '66': 'OP_VERNOTIF',
-    '89': 'OP_RESERVED1',
-    '8a': 'OP_RESERVED2',
-    'b0': 'OP_NOP0',
-    'b1': 'OP_NOP1',
-    'b2': 'OP_NOP2',
-    'b3': 'OP_NOP3',
-    'b4': 'OP_NOP4',
-    'b5': 'OP_NOP5',
-    'b6': 'OP_NOP6',
-    'b7': 'OP_NOP7',
-    'b8': 'OP_NOP8',
-    'b9': 'OP_NOP9',
-}
 
 OPCODE_LIST = [
   ("OP_0", 0),
@@ -286,18 +183,45 @@ OP_ALIASES = [
 #        'Null Data': re.compile('OP_RETURN [abcdef0123456789]+'),
 #}
 
-OPname = dict([(k[3:], v) for k, v in OPCODE_LIST])
+OPname = dict([(k[3:], v) for k, v in OPCODE_LIST + OP_ALIASES]);OPname.update(dict([(k,v) for k,v in OPCODE_LIST + OP_ALIASES]))
 OPint = dict([(v,k) for k,v in OPCODE_LIST])
 OPhex = dict([(encode(k, 16, 2), v) for v,k in OPCODE_LIST])
-getop = lambda o: OPname.get(o.upper() if not o.startswith("OP_") else o[2:], 0)
+getop = lambda o: OPname.get(o.upper() if not o.startswith("OP_") else upper(o[2:]), 0)
+
+def get_op(s):
+    """Returns OP_CODE for integer, or integer for OP_CODE"""
+    if isinstance(s, int):
+        return OPint.get(s, '')
+    elif isinstance(s, basestring):
+        return getop(s)
+
+def parse_script(script):
+    if isinstance(script, list):
+        script = ' '.join(script)
+    scriptarr = script.split()
+    SCR = []
+    for v in scriptarr:
+        if isinstance(v, basestring):
+            if str(v).startswith('0x'):
+                if int(v[2:], 16) < 0x4c:
+                    continue
+                else:
+                    SCR.append(v[2:])
+            elif len(v) in (1, 2):
+                SCR.append(int(v, 0))
+            elif v.startswith('OP_'):
+                SCR.append(get_op(v[3:]))
+            else:
+                SCR.append(v)
+    return serialize_script(SCR)
 
 #addr="n1hjyVvYQPQtejJcANd5ZJM5rmxHCCgWL7"
 
 #SIG64="G8kH/WEgiATGXSy78yToe36IF9AUlluY3bMdkDFD1XyyDciIbXkfiZxk/qmjGdMeP6/BQJ/C5U/pbQUZv1HGkn8="
 
-priv = sha256("mrbubby"*3+"!")
-pub = privtopub(priv)
-addr = privtoaddr(priv, 111)
+tpriv = priv = sha256("mrbubby"*3+"!")
+tpub = pub = privtopub(priv)
+taddr = addr = privtoaddr(priv, 111)
 pkh = mk_pubkey_script(addr)[6:-4]
 
 masterpriv = sha256("master"*42)
@@ -335,3 +259,10 @@ signing_tx = signature_form(raw, 0, myscript)
 sig1 = multisign(signing_tx, 0, myscript, masterpriv)
 sig2 = multisign(signing_tx, 0, myscript, priv)
 signed1 = apply_multisignatures(raw, 0, myscript, sig1, sig2)
+
+txh = txh23b = "0100000001b14bdcbc3e01bdaad36cc08e81e69c82e1060bc14e518db2b49aa43ad90ba26000000000" \
+               "490047304402203f16c6f40162ab686621ef3000b04e75418a0c0cb2d8aebeac894ae360ac1e780220" \
+               "ddc15ecdfc3507ac48e1681a33eb60996631bf6bf5bc0a0682c4db743ce7ca2b01ffffffff0140420f" \
+               "00000000001976a914660d4ef3a743e3e696ad990364e555c271ad504b88ac00000000"
+
+txo = txo23b = deserialize(txh23b)

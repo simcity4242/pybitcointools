@@ -152,24 +152,21 @@ def signature_form(tx, i, script, hashcode=SIGHASH_ALL):
 
 def der_encode_sig(v, r, s):
     """Takes (vbyte, r, s) as ints and returns hex der encode sig"""
-    s = N-s if s>N//2 else s	# BIP62 low s
+    #s = N-s if s>N//2 else s	# BIP62 low s
     b1, b2 = encode(r, 256), encode(s, 256)
-    # TODO: check s < N // 2, otherwise s = complement (1 byte shorter)
-    # https://gist.github.com/3aea5d82b1c543dd1d3c
-    if bytearray(b1)[0] & 0x80:		# add null bytes if leading byte interpreted as negative
+    if ord(b1[0]) & 0x80:		# add null bytes if leading byte interpreted as negative
         b1 = b'\x00' + b1
-    if bytearray(b2)[0] & 0x80:
+    if ord(b2[0]) & 0x80:
         b2 = b'\x00' + b2
-    left = b'\x02' + encode(len(b1), 256, 1) + b1
+    left  = b'\x02' + encode(len(b1), 256, 1) + b1
     right = b'\x02' + encode(len(b2), 256, 1) + b2
-    sighex = safe_hexlify(b'\x30' + encode(len(left+right), 256, 1) + left + right)	# TODO: standard format
-    assert is_bip66(sighex)
+    sighex = safe_hexlify(b'\x30' + encode(len(left+right), 256, 1) + left + right)
+    #assert is_bip66(sighex)
     return sighex
 
 
 def der_decode_sig(sig):
     """Takes hex der sig and returns (v=None, r, s) as ints"""
-    #assert is_bip66(sig)
     leftlen = decode(sig[6:8], 16)*2
     left = sig[8:8+leftlen]
     rightlen = decode(sig[10+leftlen:12+leftlen], 16)*2
@@ -217,7 +214,7 @@ def bin_txhash(tx, hashcode=None):
 
 
 def ecdsa_tx_sign(tx, priv, hashcode=SIGHASH_ALL):
-    """Takes rawTx with scriptPubKey inserted"""
+    """Returns DER sig for rawtx w/ hashcode apppended"""
     rawsig = ecdsa_raw_sign(bin_txhash(tx, hashcode), priv)
     return der_encode_sig(*rawsig)+encode(hashcode, 16, 2)
 
@@ -243,7 +240,6 @@ def mk_pubkey_script(addr):
 def mk_scripthash_script(addr):
     return 'a914' + b58check_to_hex(addr) + '87'
 
-#def mk_opreturn(msg='', rawtx=None, jsonfmt=0):
 def mk_opreturn(*args):
     # [message text] [hex rawTx] 
     # TODO: add *args for json format or separate function?
