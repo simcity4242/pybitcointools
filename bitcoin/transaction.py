@@ -345,20 +345,37 @@ def serialize_script_unit(unit):
 if is_python2:
     def serialize_script(script):
         if json_is_base(script, 16):
-            return binascii.hexlify(serialize_script(json_changebase(script,
-                                    lambda x: binascii.unhexlify(str(x)))))
-        return ''.join(map(serialize_script_unit, script))
+            script_bin = json_changebase(script, lambda x: binascii.unhexlify(str(x)))
+            return safe_hexlify(serialize_script(script_bin))
+        else:
+            return ''.join(map(serialize_script_unit, script))
 else:
     def serialize_script(script):
         if json_is_base(script, 16):
-            return safe_hexlify(serialize_script(json_changebase(script,
-                                    lambda x: binascii.unhexlify(x))))
-        
-        result = bytes()
-        for b in map(serialize_script_unit, script):
-            result += b if isinstance(b, bytes) else bytes(b, 'utf-8')
-        return result
+            script_bin = json_changebase(script, lambda x: binascii.unhexlify(x))
+            return safe_hexlify(serialize_script(script_bin))
+        else:
+            result = bytes()
+            for b in map(serialize_script_unit, script):
+                result += b if isinstance(b, bytes) else bytes(b, 'utf-8')
+            return result
 
+def serialize_script(script):
+    if is_python2:
+        if json_is_base(script, 16):
+            script_bin = json_changebase(script, lambda x: binascii.unhexlify(str(x)))
+            return safe_hexlify(serialize_script(script_bin))
+        else:
+            return ''.join(map(serialize_script_unit, script))
+    else:
+        if json_is_base(script, 16):
+            script_bin = json_changebase(script, lambda x: binascii.unhexlify(x))
+            return safe_hexlify(serialize_script(script_bin))
+        else:
+            result = bytes()
+            for b in map(serialize_script_unit, script):
+                result += b if isinstance(b, bytes) else bytes(b, 'utf-8')
+            return result
 
 def mk_multisig_script(*args):  
     # [pubs],k or pub1,pub2...pub[n],k
@@ -429,7 +446,8 @@ def apply_multisignatures(*args):
         script = binascii.unhexlify(script)
     sigs = [binascii.unhexlify(x) if x[:2] == '30' else x for x in sigs]
     if isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx):
-        return safe_hexlify(apply_multisignatures(binascii.unhexlify(tx), i, script, sigs))
+        tx = binascii.unhexlify(tx)
+        return safe_hexlify(apply_multisignatures(tx, i, script, sigs))
 
     txobj = deserialize(tx)
     txobj["ins"][i]["script"] = serialize_script([None]+sigs+[script])

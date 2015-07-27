@@ -51,9 +51,11 @@ if is_python2:
         elif frm in (16, 256) and to == 58:
             if frm == 16:
                 nblen = len(re.match('^(00)*', string).group(0))//2
+                padding = lpad('', '1', nblen)
             else:
                 nblen = len(re.match('^(\x00)*', string).group(0))
-            return lpad('', '1', nblen) + encode(decode(string, frm), to)
+                padding = lpad('', '1', nblen)
+            return padding + encode(decode(string, frm), to)
         elif frm == 58 and to in (16, 256):
             nblen = len(re.match('^(1)*', string).group(0))
             if to == 16:
