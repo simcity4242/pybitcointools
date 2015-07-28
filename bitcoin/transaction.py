@@ -166,12 +166,12 @@ def der_encode_sig(v, r, s):
 
 
 def der_decode_sig(sig):
-    """Takes hex der sig and returns (v=None, r, s) as ints"""
+    """Takes DER sig (incl. hashcode), returns v,r,s as ints"""
     leftlen = decode(sig[6:8], 16)*2
     left = sig[8:8+leftlen]
     rightlen = decode(sig[10+leftlen:12+leftlen], 16)*2
     right = sig[12+leftlen:12+leftlen+rightlen]
-    assert 3*2 + leftlen + 3*2 + rightlen + 1*2 == len(sig) 	# check for new s code
+    #assert 3*2 + leftlen + 3*2 + rightlen + 1*2 == len(sig) 	
     return (None, decode(left, 16), decode(right, 16))
 
 
@@ -241,27 +241,22 @@ def mk_scripthash_script(addr):
     return 'a914' + b58check_to_hex(addr) + '87'
 
 def mk_opreturn(*args):
-    # [message text] [hex rawTx] 
-    # TODO: add *args for json format or separate function?
     if len(args) == 1 and isinstance(args[0], string_types):
         msg = args[0]
+        rawtx = None
     elif len(args) == 2 and re.match('^[0-9a-fA-F]*$', args[1]):
         msg = args[0]
         rawtx = args[1]
-    mlen = len(msg)
-    orhex = safe_hexlify(b'\x6a' + num_to_op_push(mlen) + msg)
+    orhex = serialize_script([0x6a, msg])
     orjson = {'script' : orhex, 'value' : 0}
-    if rawtx is not None:
-        try:    # TODO: accept json TxObjs
-            txo = deserialize(rawtx)
-            if 'outs' not in txo or len(txo['outs']) == 0:
-                sys.stderr.write("OP_Return cannot be the sole output!")
-            txo['outs'].append(orjson)
-            newrawtx = serialize(txo)
-            return newrawtx
-        except:
-            raise Exception("Raw Tx Error!")
-    return orhex
+    if rawtx is None:
+	    return orhex
+	else:
+        txo = deserialize(rawtx)
+        if 'outs' not in txo or len(txo['outs']) == 0:
+            sys.stderr.write("OP_Return cannot be the sole output!")
+        txo['outs'].append(orjson)
+        return serialize(txo)
 
 
 # Address representation to output script

@@ -51,7 +51,7 @@ def inv(a, n):
     return lm % n
 
 def is_point(x, y):
-    """Is point (x,y) on SECO256k1 curve?"""
+    """Is point (x,y) on curve?"""
     x, y = int(x), int(y)
     return (y**2 - (x**3 + A*x + B )) % P == 0
 
@@ -508,7 +508,7 @@ pubtoaddr = pubkey_to_address
 def encode_sig(v, r, s):
     """Takes vbyte and (r,s) as ints, returns base64 string"""
     vb, rb, sb = from_int_to_byte(v), encode(r, 256, 32), encode(s, 256, 32)
-    result = base64.b64encode(vb+rb+sb)
+    result = base64.b64encode(vb + rb + sb)
     return st(result)
 
 
@@ -520,8 +520,8 @@ def decode_sig(sig):
 # https://tools.ietf.org/html/rfc6979#section-3.2
 def deterministic_generate_k(msghash, priv):
     hmac_sha256 = lambda k, s: hmac.new(k, s, hashlib.sha256)
-    v = b'\1' * 32	            # b'\x01' * 32
-    k = encode(0, 256, 32) 		# b'\x00' * 32
+    v = bytearray(b'\1' * 32)	            
+    k = bytearray(32)          #b'\0' * 32 		
     priv = encode_privkey(priv, 'bin')					# binary private key
     msghash = encode(hash_to_int(msghash), 256, 32)		# encode msg hash as 32 bytes
     k = hmac_sha256(k, v + b'\0' + priv + msghash).digest()
