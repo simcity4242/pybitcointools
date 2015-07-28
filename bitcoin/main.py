@@ -406,14 +406,19 @@ def hash_to_int(x):
 
 
 def num_to_var_int(x):
-    # TODO: use num_to_op_push lambda below
     x = int(x)
-    pcfx = lambda pc, i, ln: from_int_to_byte(pc) + from_int_to_bytes(i, ln)
-    if x < 253:     return pcfx(0, x, 1)[1:]
-    elif x < 2**16: return pcfx(253, x, 2)
-    elif x < 2**32: return pcfx(254, x, 4)
-    elif x < 2**64: return pcfx(255, x, 8)
-    else: raise ValueError(x < 2**64)
+    if x < 253:       return from_int_to_byte(x)
+    elif x < 2**16:   return from_int_to_byte(253) + encode(x, 256, 2)[::-1]
+    elif x < 2**32:   return from_int_to_byte(254) + encode(x, 256, 4)[::-1]
+    elif x < 2**64:   return from_int_to_byte(255) + encode(x, 256, 8)[::-1]
+    else:             raise ValueError(x < 2**64)
+    
+    #pcfx = lambda pc, i, ln: from_int_to_byte(pc) + from_int_to_bytes(i, ln)
+    #if x < 253:     return pcfx(0, x, 1)[1:]
+    #elif x < 2**16: return pcfx(253, x, 2)
+    #elif x < 2**32: return pcfx(254, x, 4)
+    #elif x < 2**64: return pcfx(255, x, 8)
+    #else: raise ValueError(x < 2**64)
 
 def num_to_op_push(x):
     # TODO: check x < 0xff is right, or is it x <= 0xff ?
@@ -503,7 +508,7 @@ pubtoaddr = pubkey_to_address
 def encode_sig(v, r, s):
     """Takes vbyte and (r,s) as ints, returns base64 string"""
     vb, rb, sb = from_int_to_byte(v), encode(r, 256, 32), encode(s, 256, 32)
-    result = base64.b64encode(vb, rb, sb)
+    result = base64.b64encode(vb+rb+sb)
     return st(result)
 
 
