@@ -46,7 +46,8 @@ def json_changebase(obj, changer):
 def deserialize(tx):
     if isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx):
         #tx = bytes(bytearray.fromhex(tx))
-        return json_changebase(deserialize(binascii.unhexlify(tx)), lambda x: safe_hexlify(x))
+        return json_changebase(deserialize(binascii.unhexlify(tx)),
+                              lambda x: safe_hexlify(x))
     # http://stackoverflow.com/questions/4851463/python-closure-write-to-variable-in-parent-scope
     # Python's scoping rules are demented, requiring me to make pos an object
     # so that it is call-by-reference
@@ -355,22 +356,22 @@ else:
                 result += b if isinstance(b, bytes) else bytes(b, 'utf-8')
             return result
 
-def serialize_script(script):
-    if is_python2:
-        if json_is_base(script, 16):
-            script_bin = json_changebase(script, lambda x: binascii.unhexlify(str(x)))
-            return safe_hexlify(serialize_script(script_bin))
-        else:
-            return ''.join(map(serialize_script_unit, script))
-    else:
-        if json_is_base(script, 16):
-            script_bin = json_changebase(script, lambda x: binascii.unhexlify(x))
-            return safe_hexlify(serialize_script(script_bin))
-        else:
-            result = bytes()
-            for b in map(serialize_script_unit, script):
-                result += b if isinstance(b, bytes) else bytes(b, 'utf-8')
-            return result
+# def serialize_script(script):
+#     if is_python2:
+#         if json_is_base(script, 16):
+#             script_bin = json_changebase(script, lambda x: binascii.unhexlify(str(x)))
+#             return safe_hexlify(serialize_script(script_bin))
+#         else:
+#             return ''.join(map(serialize_script_unit, script))
+#     else:
+#         if json_is_base(script, 16):
+#             script_bin = json_changebase(script, lambda x: binascii.unhexlify(x))
+#             return safe_hexlify(serialize_script(script_bin))
+#         else:
+#             result = bytes()
+#             for b in map(serialize_script_unit, script):
+#                 result += b if isinstance(b, bytes) else bytes(b, 'utf-8')
+#             return result
 
 def mk_multisig_script(*args):  
     # [pubs],k or pub1,pub2...pub[n],k

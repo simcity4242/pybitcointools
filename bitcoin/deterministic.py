@@ -241,7 +241,6 @@ def parse_bip32_path(path):
         return []
     elif path.endswith("/"):
         path += "0"
-
     patharr = []
     for v in path.split('/'):
         if not v: 

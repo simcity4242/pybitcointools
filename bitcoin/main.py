@@ -9,6 +9,7 @@ import time
 import random
 import hmac
 from bitcoin.ripemd import *
+from bitcoin.transaction import serialize_script
 
 is_ios = "Pythonista" in os.environ.get("XPC_SERVICE_NAME", "")
 reclimit = lambda x: sys.setrecursionlimit(x)	# for Pythonista iOS
@@ -230,29 +231,36 @@ def encode_privkey(priv, formt, vbyte=0):
     if not isinstance(priv, int_types):
         return encode_privkey(decode_privkey(priv), formt, vbyte)
     if formt == 'decimal': return priv
-    elif formt == 'mini': raise Exception("Cannot decode to mini format!")
-    elif formt == 'bin': return encode(priv, 256, 32)
-    elif formt == 'bin_compressed': return encode(priv, 256, 32)+b'\x01'
-    elif formt == 'hex': return encode(priv, 16, 64)
-    elif formt == 'hex_compressed': return encode(priv, 16, 64)+'01'
+    #elif formt == 'mini':          raise Exception("Can't encode mini")
+    elif formt == 'bin':            return encode(priv, 256, 32)
+    elif formt == 'bin_compressed': return encode(priv, 256, 32) + b'\1'
+    elif formt == 'hex':            return encode(priv, 16, 64)
+    elif formt == 'hex_compressed': return encode(priv, 16, 64) + '01'
     elif formt == 'wif':
-        return bin_to_b58check(encode(priv, 256, 32), 128+int(vbyte))
+        return bin_to_b58check(encode(priv, 256, 32), magicbyte=int(vbyte)|0x80)
     elif formt == 'wif_compressed':
-        return bin_to_b58check(encode(priv, 256, 32)+b'\x01', 128+int(vbyte))
+        return bin_to_b58check(encode(priv, 256, 32) + b'\1', magicbyte=int(vbyte)|0x80)
     else: raise Exception("Invalid format!")
 
 def decode_privkey(priv,formt=None):
     if not formt: formt = get_privkey_format(priv)
     if formt == 'decimal': return priv
-    elif formt == 'mini': return sha256(priv)
+    #elif formt == 'mini': return sha256(priv)
     elif formt == 'bin': return decode(priv, 256)
     elif formt == 'bin_compressed': return decode(priv[:32], 256)
     elif formt == 'hex': return decode(priv, 16)
     elif formt == 'hex_compressed': return decode(priv[:64], 16)
-    elif formt == 'wif': return decode(b58check_to_bin(priv),256)
+    elif formt == 'wif': return decode(b58check_to_bin(priv), 256)
     elif formt == 'wif_compressed':
-        return decode(b58check_to_bin(priv)[:32],256)
+        return decode(b58check_to_bin(priv)[:32], 256)
     else: raise Exception("WIF does not represent privkey")
+
+def convert_privkey(priv, formt=None):
+    from_format = get_privkey_format(priv)
+    to_format = 'hex' if formt is None else str(formt)
+    if from_format != to_format:
+        return encode_privkey(decode_privkey(priv, from_format), to_format)
+    return priv
 
 def add_pubkeys(p1, p2):
     reclimit(512)
@@ -405,23 +413,15 @@ def hash_to_int(x):
     return decode(x, 256)
 
 
-def num_to_var_int(x):
+def num_to_varint(x):
     x = int(x)
     if x < 253:       return from_int_to_byte(x)
     elif x < 2**16:   return from_int_to_byte(253) + encode(x, 256, 2)[::-1]
     elif x < 2**32:   return from_int_to_byte(254) + encode(x, 256, 4)[::-1]
     elif x < 2**64:   return from_int_to_byte(255) + encode(x, 256, 8)[::-1]
     else:             raise ValueError(x < 2**64)
-    
-    #pcfx = lambda pc, i, ln: from_int_to_byte(pc) + from_int_to_bytes(i, ln)
-    #if x < 253:     return pcfx(0, x, 1)[1:]
-    #elif x < 2**16: return pcfx(253, x, 2)
-    #elif x < 2**32: return pcfx(254, x, 4)
-    #elif x < 2**64: return pcfx(255, x, 8)
-    #else: raise ValueError(x < 2**64)
 
 def num_to_op_push(x):
-    # TODO: check x < 0xff is right, or is it x <= 0xff ?
     x = int(x)
     pcfx = lambda pc, i, ln: from_int_to_byte(pc) + from_int_to_bytes(i, ln)
     if x < 76:              return pcfx(0, x, 1)[1:]
@@ -432,26 +432,23 @@ def num_to_op_push(x):
 
 def wrap_varint(hexdata):
     if re.match('^[0-9a-fA-F]*$', hexdata):
-        hdata = safe_unhexlify(hexdata)
-        varint = num_to_var_int(len(hdata))
-        return safe_hexlify(varint) + hexdata
-    return num_to_var_int(len(hexdata)) + hexdata
+        return safe_hexlify(wrap_varint(safe_unhexlify(hexdata)))
+    return num_to_varint(len(hexdata)) + hexdata
 
 def wrap_script(hexdata):
     if re.match('^[0-9a-fA-F]*$', hexdata):
-        hdata = safe_unhexlify(hexdata)
-        pushcode = num_to_op_push(len(hdata))
-        return safe_hexlify(pushcode) + hexdata
-    return num_to_op_push(len(hexdata)) + hexdata
+        return safe_hexlify(wrap_script(safe_unhexlify(hexdata)))
+    return serialize_script([hexdata])
 
 # WTF, Electrum?
-def electrum_sig_hash(message):
-    padded = b"\x18Bitcoin Signed Message:\n" + num_to_var_int(len(message)) + from_str_to_bytes(message)
+def electrum_sig_hash(msg):
+    padded = b"\x18" + "Bitcoin Signed Message:\n" + \
+             num_to_varint(len(msg)) + from_str_to_bytes(msg)
     return bin_dbl_sha256(padded)
 
 
+# Gotta be secure after that java.SecureRandom fiasco...
 def random_key():
-    # Gotta be secure after that java.SecureRandom fiasco...
     entropy = from_str_to_bytes(
         random_string(32) + str(random.randrange(2**256)) \
         + str(int(time.time() * 1000000)))
@@ -532,7 +529,6 @@ def deterministic_generate_k(msghash, priv):
     return decode(by(res), 256)
 
 # MSG SIGNING
-
 def ecdsa_raw_sign(msghash, priv, low_s=True):
     """Deterministically sign binary msghash (z) with k, returning (vbyte, r, s) as ints"""
     z = hash_to_int(msghash)
@@ -606,10 +602,9 @@ def ecdsa_recover(msg, sig):
     return encode_pubkey(Q, 'hex')
 
 
-# PBKDF2: a simple implementation using stock python modules.
 # Modifications based on https://matt.ucc.asn.au/src/pbkdf2.py
 def bin_pbkdf2_hmac(hashname, password, salt, rounds, dklen=None):
-    """Returns the result of the Password-Based Key Derivation Function 2"""
+    """Password-Based Key Derivation Function (PBKDF) 2"""
     h = hmac.new(key=password, digestmod=lambda d=b'': hashlib.new(hashname, d))
     dklen = h.digest_size if dklen is None else dklen
     def prf(data):
@@ -628,7 +623,7 @@ def bin_pbkdf2_hmac(hashname, password, salt, rounds, dklen=None):
     return bytes(key[:dklen])
 
 def pbkdf2_hmac_sha512(password, salt):
-    password, salt = map(from_str_to_bytes, (password, salt))
+    password, salt = from_str_to_bytes(password), from_str_to_bytes(salt)
     if hasattr(hashlib, 'pbkdf2_hmac'):
         b = hashlib.pbkdf2_hmac('sha512', password, salt, 2048, 64)
     else:
