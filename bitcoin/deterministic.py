@@ -225,7 +225,7 @@ def bip32_path(*args, **kwargs):
     elif len(args) > 2:
         key, path = args[0], args[1:]
         path = "m/" + "/".join(path)
-    is_public = (path.endswith(".pub") or ('pub' in path) or kwargs.get("public", False))
+    is_public = (path.endswith("pub") or kwargs.get("public", False))
     pathlist = parse_bip32_path(path)
     oldkey = key[:]
     if not pathlist:    # empty list
@@ -234,42 +234,33 @@ def bip32_path(*args, **kwargs):
         key = bip32_ckd(key, p)
     return key if not is_public else bip32_privtopub(key)
 
-def parse_bip32_path(*args):
-    """Takes bip32 path as string "m/0'/2H" or "m/0H/1/2H/2/1000000000" """
-    if len(args)==1:    path = st(args[0])
-    else:               path = '/'.join(map(st, args))
-
-    if (len(path) == 1 and path in ('mM')):
+def parse_bip32_path(path):
+    """Takes bip32 path as string "m/0'/2H" or "m/0H/1/2H/2/1000000000.pub" """
+    path = path.lstrip("m/").rstrip(".pub")
+    if not path:
         return []
-    if path.lower().startswith('m/'):
-        path = path[2:]
-    if path.endswith("pub"):
-        if path.endswith(".pub"):
-            path = path[:-4]
-        elif path.endswith("pub"):
-            path = path[:-3]
-    if len(path) == 0 or path == 'pub':
-        return []
-    elif '/' not in path:
-        path += "/"
+    elif path.endswith("/"):
+        path += "0"
 
     patharr = []
     for v in path.split('/'):
-        if not v: continue
-        elif v[-1] in ("'H"):
+        if not v: 
+            continue
+        elif v[-1] in ("'H"):  # hardened path
             v = int(v[:-1]) | 0x80000000
-        else:
+        else:                  # non-hardened path
             v = int(v) & 0x7fffffff
         patharr.append(v)
     return patharr
 
-def bip44_descend(*args):
-    # 44'/COINTYPE'/ACCOUNT'/change/index
-    # either 5 args: masterkey, 
-    masterkey, coin, account, change, idx = args[0], args[1], args[2], args[3], args[4]
-    path = '/'.join(map(st, ["44'", coin, account, change, idx]))
-    path = parse_bip32_path(path)
-    return bip32_descend(masterkey, path)
+def bip44_descend(masterkey, network='btc', account=0, for_change=0, index=0):
+    # 44'/NETWORK'/ACCOUNT'/internal_or_change?/index
+    network = "0H" if network == 'btc' else "1H"
+    account, for_change, index = str(account), str(for_change), str(index)
+    account += 'H'
+    for_change += 'H'
+    path = "m/44H/%s/%s/%s/%s" % (network, account, for_change, index)
+    return bip32_extract_key(bip32_path(masterkey, path))
 
-def bip44_address(*args):
-    return privtoaddr(bip44_descend(args))
+def bip44_address(masterkey, network='btc', account=0, for_change=0, index=0):
+    return privtoaddr(bip44_descend(masterkey, network, account, for_change, index))

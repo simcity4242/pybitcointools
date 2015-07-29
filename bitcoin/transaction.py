@@ -250,11 +250,12 @@ def mk_opreturn(*args):
     orhex = serialize_script([0x6a, msg])
     orjson = {'script' : orhex, 'value' : 0}
     if rawtx is None:
-	    return orhex
-	else:
+        return orhex
+    else:
         txo = deserialize(rawtx)
         if 'outs' not in txo or len(txo['outs']) == 0:
             sys.stderr.write("OP_Return cannot be the sole output!")
+            return
         txo['outs'].append(orjson)
         return serialize(txo)
 
@@ -275,19 +276,18 @@ def script_to_address(script, vbyte=0):
     if script[:3] == b'\x76\xa9\x14' and script[-2:] == b'\x88\xac' and len(script) == 25:
         return bin_to_b58check(script[3:-2], vbyte)  # pubkey hash addresses
     else:
-        if vbyte in [111, 196]:
-            # Testnet
+        if vbyte in [111, 196]:     # Testnet
             scripthash_byte = 196
         else:
             scripthash_byte = 5
-        # BIP0016 scripthash addresses
-        return bin_to_b58check(script[2:-1], scripthash_byte)
+        return bin_to_b58check(script[2:-1], scripthash_byte)   # BIP0016 scripthash addresses
 
 
 def p2sh_scriptaddr(script, magicbyte=5):
     if re.match('^[0-9a-fA-F]*$', script):
         script = binascii.unhexlify(script)
     return hex_to_b58check(hash160(script), magicbyte)
+
 scriptaddr = p2sh_scriptaddr
 
 

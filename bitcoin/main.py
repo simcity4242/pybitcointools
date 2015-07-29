@@ -575,6 +575,7 @@ def ecdsa_verify(msg, sig, pub):
 
 
 def ecdsa_raw_recover(msghash, vrs):
+    """Recovers (x,y) point from msghash and DER values (v,r,s)"""
     v, r, s = vrs
 
     x = r

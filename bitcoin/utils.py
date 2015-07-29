@@ -166,22 +166,7 @@ OP_ALIASES = [
     ("OP_FALSE", 0)
 ]
 
-# SUBSETS
-#OPCODES_PUSHDATA = set(xrange(0, 96+1))
-#OPCODES_INTEGERS = set(xrange(0x51, 0x60+1))
-#OPCODES_CRYPTO = set([166, 167, 168, 169, 170])
-#OPCODES_LOGIC = set([99, 100, 101, 102, 103, 104])
-#OPCODES_ARITHMETIC = set(xrange(139, 152))
-#OPCODES_SIGCHECKS = 
 
-
-#REGEX_PATTERNS = {
-#        'P2PKH': re.compile('OP_DUP OP_HASH160 [abcdef0123456789]+ OP_EQUALVERIFY OP_CHECKSIG'),
-#        'P2SH': re.compile('OP_HASH160 .* OP_EQUAL'),
-#        'Multisig': re.compile('(OP_FALSE|OP_0|OP_TRUE) ([abcdef0123456789]+ )+(OP_1|OP_2|OP_3|OP_4|OP_5) OP_CHECKMULTISIG'),
-#        'Pubkey': re.compile('[abcdef0123456789]+ OP_CHECKSIG'),
-#        'Null Data': re.compile('OP_RETURN [abcdef0123456789]+'),
-#}
 
 OPname = dict([(k[3:], v) for k, v in OPCODE_LIST + OP_ALIASES]);OPname.update(dict([(k,v) for k,v in OPCODE_LIST + OP_ALIASES]))
 OPint = dict([(v,k) for k,v in OPCODE_LIST])
