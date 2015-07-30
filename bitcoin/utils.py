@@ -1,10 +1,10 @@
+import re
+from pprint import pprint as pp
 from bitcoin.main import *
 from bitcoin.bci import *
 from bitcoin.transaction import *
-from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, st, by
+from bitcoin.pyspecials import *
 
-import re
-from pprint import pprint as pp
 
 def ishex(s):
     return set(s).issubset(set('0123456789abcdefABCDEF'))
@@ -203,7 +203,7 @@ def parse_script(s):
 tpriv = priv = sha256("mrbubby"*3+"!")
 tpub = pub = privtopub(priv)
 taddr = addr = privtoaddr(priv, 111)
-tpkh = pkh = mk_pubkey_script(addr)[6:-4]
+#tpkh = pkh = mk_pubkey_script(addr)[6:-4]
 
 masterpriv = sha256("master"*42)
 masterpub = compress(privtopub(masterpriv))

@@ -9,7 +9,6 @@ import time
 import random
 import hmac
 from bitcoin.ripemd import *
-from bitcoin.transaction import serialize_script
 
 is_ios = "Pythonista" in os.environ.get("XPC_SERVICE_NAME", "")
 reclimit = lambda x: sys.setrecursionlimit(x)	# for Pythonista iOS
@@ -413,7 +412,7 @@ def hash_to_int(x):
     return decode(x, 256)
 
 
-def num_to_varint(x):
+def num_to_var_int(x):
     x = int(x)
     if x < 253:       return from_int_to_byte(x)
     elif x < 2**16:   return from_int_to_byte(253) + encode(x, 256, 2)[::-1]
@@ -433,17 +432,17 @@ def num_to_op_push(x):
 def wrap_varint(hexdata):
     if re.match('^[0-9a-fA-F]*$', hexdata):
         return safe_hexlify(wrap_varint(safe_unhexlify(hexdata)))
-    return num_to_varint(len(hexdata)) + hexdata
+    return num_to_var_int(len(hexdata)) + hexdata
 
 def wrap_script(hexdata):
     if re.match('^[0-9a-fA-F]*$', hexdata):
         return safe_hexlify(wrap_script(safe_unhexlify(hexdata)))
-    return serialize_script([hexdata])
+    return len(num_to_op_push(hexdata)) + safe_hexlify(hexdata)
 
 # WTF, Electrum?
 def electrum_sig_hash(msg):
     padded = b"\x18" + "Bitcoin Signed Message:\n" + \
-             num_to_varint(len(msg)) + from_str_to_bytes(msg)
+             num_to_var_int(len(msg)) + from_str_to_bytes(msg)
     return bin_dbl_sha256(padded)
 
 
