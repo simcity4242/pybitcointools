@@ -1,7 +1,6 @@
 from bitcoin.main import *
 from bitcoin.pyspecials import *
 from bitcoin.transaction import *
-from bitcoin.bci import fetchtx
 
 def ecdsa_raw_sign(msghash, priv, low_s=True):
     """Deterministically sign binary msghash (z) with k, returning (vbyte, r, s) as ints"""
@@ -21,10 +20,6 @@ def ecdsa_sign(msg, priv):
     sighash = electrum_sig_hash(msg)
     v, r, s = ecdsa_raw_sign(sighash, priv)
     return encode_sig(v, r, s)
-
-
-
-
 
 def ecdsa_verify(msg, sig, pub):
     """Verify (base64) signature of a message using pubkey"""
@@ -50,7 +45,6 @@ def ecdsa_raw_recover(msghash, vrs):
     Qr = jacobian_add(Gz, XY)
     Q = jacobian_multiply(Qr, inv(r, N))
     Q = from_jacobian(Q)
-
     if not ecdsa_raw_verify(msghash, vrs, Q):
         return False
     return Q
@@ -69,10 +63,8 @@ def ecdsa_recover(msg, sig):
 def txhash(tx, hashcode=None):
     if isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx):
         tx = changebase(tx, 16, 256)
-    if hashcode:
-        return dbl_sha256(from_str_to_bytes(tx) + from_int_to_bytes(int(hashcode), 4))
-    else:
-        return safe_hexlify(bin_dbl_sha256(tx)[::-1])
+    if hashcode: return dbl_sha256(from_str_to_bytes(tx) + from_int_to_bytes(int(hashcode), 4))
+    else:        return safe_hexlify(bin_dbl_sha256(tx)[::-1])
 
 
 def bin_txhash(tx, hashcode=None):
@@ -82,12 +74,13 @@ def bin_txhash(tx, hashcode=None):
 def ecdsa_tx_sign(tx, priv, hashcode=SIGHASH_ALL):
     """Takes rawTx with scriptPubKey inserted"""
     rawsig = ecdsa_raw_sign(bin_txhash(tx, hashcode), priv)
-    return der_encode_sig(*rawsig)+encode(hashcode, 16, 2)
+    return der_encode_sig(*rawsig) + encode(hashcode, 16, 2)
 
 
 def ecdsa_tx_verify(tx, sig, pub, hashcode=SIGHASH_ALL):
-    
-    return ecdsa_raw_verify(bin_txhash(tx, hashcode), der_decode_sig(sig), pub)
+    decoded_sig = der_decode_sig(sig)
+    tx_digest = bin_txhash(tx, hashcode)
+    return ecdsa_raw_verify(tx_digest, decoded_sig, pub)
 
 def ecdsa_raw_verify(msghash, vrs, pub):
     """Takes msghash, DER sign (as ints), pubkey; verifies signature"""
@@ -96,9 +89,12 @@ def ecdsa_raw_verify(msghash, vrs, pub):
     w = inv(s, N)
     z = hash_to_int(msghash)
 
-    u1, u2 = z*w % N, r*w % N
+    u1 = z*w % N
+    u2 = r*w % N
     pub = decode_pubkey(pub)
-    x, y = fast_add(fast_multiply(G, u1), fast_multiply(pub, u2))
+    first = fast_multiply(G, u1)
+    second = fast_multiply(pub, u2)
+    x, y = fast_add(first, second)
 
     return r == x
 
@@ -120,19 +116,44 @@ def verify_tx_input(tx, i, script, sig, pub):
     modtx = signature_form(tx, int(i), script, hashcode)
     return ecdsa_tx_verify(modtx, sig, pub, hashcode)
 
-def create_signable_tx(rawtx, hashcodes):
-    #rawtx = empty input scriptSigs
-    #hashcodes = [SIGHASH_ALL, ...]
+def create_signable_tx(rawtx, i, hashcode=SIGHASH_ALL):
+    # rawtx = empty input scriptSigs
     if re.match('^[0-9a-fA-F]*$', rawtx):
-         serialize(create_signable_tx(deserialize(rawtx, hashcodes)))
+         serialize(create_signable_tx(deserialize(rawtx), i, hashcode))
+    i = int(i)
     outpoints = [max(x.values()) + ":%d" % min(x.values()) \
-                 for x in multiaccess(rawtx['ins'], 'outpoint')]  # ['a1075db55d41...e9d5fbf5d48d:0']
-    scriptsigs = [get_scriptsig(x) for x in outpoints]
+                 for x in multiaccess(rawtx['ins'], 'outpoint')]  # getting input reference txs
+    # ['a1075d...f5d48d:0']
+    outpoint = outpoints[i]
+    for tx in rawtx[ins]:
+        tx['script'] = ''        # asserting all inputs' scriptSigs are deleted
+    rawtx['ins'][i]['script'] = get_scriptpubkey(outpoint)
+    rawtx = serialize(rawtx) + safe_hexlify(encode(hashcode, 256, 4)[::-1])
+    return rawtx
+    
+
+def get_script(*args, **kwargs):
+    # takes txid, vout or "txid:0"
+    # kwargs "source" takes 'ins' and 'outs'
+    if len(args) == 1 and ':' in args[0]:
+        txid, vout = args[0].split(':')
+    elif len(args) == 2:
+        txid = filter(lambda x: len(str(x))==64, list(args))[0]
+        vout = filter(lambda x: len(str(x))<=5,  list(args))[0]
+    try:    txo = deserialize(fetchtx(txid))
+    except: txo = deserialize(fetchtx(txid, 'testnet'))
+    source = str(kwargs.get("source", "both")).lower()
+    scr_type = "both" if (source is None or source not in ("ins", "outs")) else source
+    scriptsig = reduce(access, ["ins",  vout, "script"], txo)
+    script_pk = reduce(access, ["outs", vout, "script"], txo)
+    if scr_type == 'both':
+        return {'ins': scriptsig, 'outs': script_pk}
+    return scriptsig if scr_type == 'ins' else script_pk
 
 def get_scriptsig(*args):
     # takes txid, vout or "txid:0"
     if len(args) == 1 and ':' in args[0]:
-        txid, vout = str(args[0]).split(':')
+        txid, vout = args[0].split(':')
     elif len(args) == 2:
         txid = filter(lambda x: len(str(x))==64, list(args))[0]
         vout = filter(lambda x: len(str(x))<=5,  list(args))[0]
@@ -144,18 +165,16 @@ def get_scriptsig(*args):
 def get_scriptpubkey(*args):
     # takes txid, vout or "txid:0"
     if len(args) == 1 and ':' in args[0]:
-        txid, vout = str(args[0]).split(':')
+        txid, vout = args[0].split(':')
     elif len(args) == 2:
-        txid = filter(lambda x: len(str(x)) == 64, list(args))[0]
-        vout = filter(lambda x: len(str(x)) <= 5, list(args))[0]
-    try:
-        txo = deserialize(fetchtx(txid))
-    except:
-        txo = deserialize(fetchtx(txid, 'testnet'))
-    spk = reduce(access, ["outs", vout, "script"], txo)
-    return spk
+        txid = filter(lambda x: len(str(x))==64, list(args))[0]
+        vout = filter(lambda x: len(str(x))<=5,  list(args))[0]
+    try:    txo = deserialize(fetchtx(txid))
+    except: txo = deserialize(fetchtx(txid, 'testnet'))
+    script_pk = reduce(access, ["ins", vout, "script"], txo)
+    return script_pk
 
-
+#pizzatxid = 'cca7507897abc89628f450e8b1e0c6fca4ec3f7b34cccf55f3f531c659ff4d79'
 #verify_tx_input(tx, 0, inspk, inder, inpub)
 #inder = "30450221009908144ca6539e09512b9295c8a27050d478fbb96f8addbc3d075544dc41328702201aa528be2b907d316d2da068dd9eb1e23243d97e444d59290d2fddf25269ee0e01"
 #inpub = "042e930f39ba62c6534ee98ed20ca98959d34aa9e057cda01cfd422c6bab3667b76426529382c23f42b9b08d7832d4fee1d6b437a8526e59667ce9c4e9dcebcabb"
@@ -163,4 +182,3 @@ def get_scriptpubkey(*args):
 #inaddr = "17SkEw2md5avVNyYgj6RiXuQKNwkXaxFyQ"
 #tx = "01000000018dd4f5fbd5e980fc02f35c6ce145935b11e284605bf599a13c6d415db55d07a1000000001976a91446af3fb481837fadbb421727f9959c2d32a3682988acffffffff0200719a81860000001976a914df1bd49a6c9e34dfa8631f2c54cf39986027501b88ac009f0a5362000000434104cd5e9726e6afeae357b1806be25a4c3d3811775835d235417ea746b7db9eeab33cf01674b944c64561ce3388fa1abd0fa88b06c44ce81e2234aa70fe578d455dac00000000"
 #txh = "01000000018dd4f5fbd5e980fc02f35c6ce145935b11e284605bf599a13c6d415db55d07a1000000008b4830450221009908144ca6539e09512b9295c8a27050d478fbb96f8addbc3d075544dc41328702201aa528be2b907d316d2da068dd9eb1e23243d97e444d59290d2fddf25269ee0e0141042e930f39ba62c6534ee98ed20ca98959d34aa9e057cda01cfd422c6bab3667b76426529382c23f42b9b08d7832d4fee1d6b437a8526e59667ce9c4e9dcebcabbffffffff0200719a81860000001976a914df1bd49a6c9e34dfa8631f2c54cf39986027501b88ac009f0a5362000000434104cd5e9726e6afeae357b1806be25a4c3d3811775835d235417ea746b7db9eeab33cf01674b944c64561ce3388fa1abd0fa88b06c44ce81e2234aa70fe578d455dac00000000"
-#txid = "cca7507897abc89628f450e8b1e0c6fca4ec3f7b34cccf55f3f531c659ff4d79"
