@@ -3,7 +3,7 @@ import binascii, re, json, copy, sys
 from bitcoin.main import *
 from _functools import reduce
 from bitcoin.pyspecials import st, by, safe_hexlify, safe_unhexlify, from_int_to_byte, from_str_to_bytes, from_bytes_to_int, from_int_to_bytes, string_types
-from bitcoin.utils import create_signable_tx, get_script, get_scriptpubkey, get_scriptsig, get_outpoint
+#from bitcoin.utils import create_signable_tx, get_script, get_scriptpubkey, get_scriptsig, get_outpoint
 
 ### Hex to bin converter and vice versa for objects
 
