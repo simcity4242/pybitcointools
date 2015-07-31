@@ -3,14 +3,13 @@ import binascii, re, json, copy, sys
 from bitcoin.main import *
 from _functools import reduce
 from bitcoin.pyspecials import st, by, safe_hexlify, safe_unhexlify, from_int_to_byte, from_str_to_bytes, from_bytes_to_int, from_int_to_bytes, string_types
-
+from bitcoin.utils import create_signable_tx, get_script, get_scriptpubkey, get_scriptsig, get_outpoint
 
 ### Hex to bin converter and vice versa for objects
 
 def json_is_base(obj, base):
     if not is_python2 and isinstance(obj, bytes):
         return False
-    
     alpha = get_code_string(base)
     if isinstance(obj, string_types):
         for i in range(len(obj)):
@@ -394,6 +393,30 @@ def verify_tx_input(tx, i, script, sig, pub):
     hashcode = decode(sig[-2:], 16)
     modtx = signature_form(tx, int(i), script, hashcode)
     return ecdsa_tx_verify(modtx, sig, pub, hashcode)
+
+# def verify_tx_input(tx, i, script=None, sig=None, pub=None):
+#     """UPDATED: verify Tx input of signed Txs;
+#     without needing spkey, pubkey, der sig"""
+#     i = int(i)
+#     if re.match('^[0-9a-fA-F]*$', tx):
+#         tx = binascii.unhexlify(tx)
+#     if script is not None:
+#         if re.match('^[0-9a-fA-F]*$', script):
+#             script = binascii.unhexlify(script)
+#     else:
+#         script = safe_unhexlify(
+#             get_scriptpubkey(get_outpoint(safe_hexlify(tx), i)))
+#     if sig is not None:
+#         if not re.match('^[0-9a-fA-F]*$', sig):
+#             sig = safe_hexlify(sig)
+#     else:
+#         sig, pubkey = deserialize_script(
+#             get_scriptsig(get_outpoint(safe_hexlify(tx), i)))
+#     if pub is None:
+#         pub = pubkey
+#     hashcode = decode(sig[-2:], 16)
+#     modtx = signature_form(safe_hexlify(tx), i, script, hashcode)
+#     return ecdsa_tx_verify(modtx, sig, pub, hashcode)
 
 
 def sign(tx, i, priv, hashcode=SIGHASH_ALL):
