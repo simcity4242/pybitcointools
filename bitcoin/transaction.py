@@ -3,6 +3,7 @@ import binascii, re, json, copy, sys
 from bitcoin.main import *
 from _functools import reduce
 from bitcoin.pyspecials import st, by, safe_hexlify, safe_unhexlify, from_int_to_byte, from_str_to_bytes, from_bytes_to_int, from_int_to_bytes, string_types
+from bitcoin.bci import fetchtx
 #from bitcoin.utils import create_signable_tx, get_script, get_scriptpubkey, get_scriptsig, get_outpoint
 
 ### Hex to bin converter and vice versa for objects
@@ -586,23 +587,25 @@ def create_signable_tx(rawtx, i, hashcode=SIGHASH_ALL):
     rawtx['ins'][i]['script'] = get_scriptpubkey(outpoint)
     return serialize(rawtx) + safe_hexlify(encode(hashcode, 256, 4)[::-1])
 
-def get_script(*args, **kwargs):
-    # takes txid, vout or "txid:0"
-    # kwargs "source" takes 'ins' and 'outs'
-    if len(args) == 1 and ':' in args[0]:
+def get_script(*args):
+    # takes "txid:0" or txid, vout
+    # last param can be 'ins', 'outs'
+    if args[-1] in ("ins", "outs"):
+        source = str(args[-1])
+        args.pop(-1)
+    else: source = None
+    if isinstance(args[0], str) and ':' in args[0]:
         txid, vout = args[0].split(':')
     elif len(args) == 2:
         txid = filter(lambda x: len(str(x))==64, list(args))[0]
         vout = filter(lambda x: len(str(x))<=5,  list(args))[0]
     try:    txo = deserialize(fetchtx(txid))
     except: txo = deserialize(fetchtx(txid, 'testnet'))
-    source = str(kwargs.get("source", "both")).lower()
-    scr_type = "both" if (source is None or source not in ("ins", "outs")) else source
-    scriptsig = reduce(access, ["ins", vout, "script"], txo)
-    script_pk = reduce(access, ["outs", vout, "script"], txo)
-    if scr_type == 'both':
-        return {'ins': scriptsig, 'outs': script_pk}
-    return scriptsig if scr_type == 'ins' else script_pk
+    scriptsig = reduce(access, ["ins", vout, "script"],  txo)
+    script_pubkey = reduce(access, ["outs", vout, "script"], txo)
+    if source is None:
+        return {'ins': scriptsig, 'outs': script_pubkey}
+    return scriptsig if source == 'ins' else script_pubkey
 
 def get_scriptsig(*args):
     # takes txid, vout or "txid:0"
@@ -626,7 +629,7 @@ def get_scriptpubkey(*args):
     try:    txo = deserialize(fetchtx(txid))
     except: txo = deserialize(fetchtx(txid, 'testnet'))
     script_pk = reduce(access, ["outs", vout, "script"], txo)
-    return script_pk
+    return script_pubkey
 
 def get_outpoint(rawtx, i):
     if not re.match('^[0-9a-fA-F]*$', rawtx) and isinstance(rawtx, str):
