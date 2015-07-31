@@ -4,7 +4,7 @@ from bitcoin.main import *
 from _functools import reduce
 from bitcoin.pyspecials import st, by, safe_hexlify, safe_unhexlify, from_int_to_byte, from_str_to_bytes, from_bytes_to_int, from_int_to_bytes, string_types
 from bitcoin.bci import fetchtx
-#from bitcoin.utils import create_signable_tx, get_script, get_scriptpubkey, get_scriptsig, get_outpoint
+#from bitcoin.utils import create_signable_tx, get_script, get_scriptpubkey, get_scriptsig, get_outpoints
 
 ### Hex to bin converter and vice versa for objects
 
@@ -406,13 +406,13 @@ def verify_tx_input(tx, i, script, sig, pub):
 #             script = binascii.unhexlify(script)
 #     else:
 #         script = safe_unhexlify(
-#             get_scriptpubkey(get_outpoint(safe_hexlify(tx), i)))
+#             get_scriptpubkey(get_outpoints(safe_hexlify(tx), i)))
 #     if sig is not None:
 #         if not re.match('^[0-9a-fA-F]*$', sig):
 #             sig = safe_hexlify(sig)
 #     else:
 #         sig, pubkey = deserialize_script(
-#             get_scriptsig(get_outpoint(safe_hexlify(tx), i)))
+#             get_scriptsig(get_outpoints(safe_hexlify(tx), i)))
 #     if pub is None:
 #         pub = pubkey
 #     hashcode = decode(sig[-2:], 16)
@@ -592,7 +592,7 @@ def get_script(*args):
     # last param can be 'ins', 'outs'
     if args[-1] in ("ins", "outs"):
         source = str(args[-1])
-        args.pop(-1)
+        args = args[:-1]
     else: source = None
     if isinstance(args[0], str) and ':' in args[0]:
         txid, vout = args[0].split(':')
@@ -628,18 +628,19 @@ def get_scriptpubkey(*args):
         vout = filter(lambda x: len(str(x))<=5, list(args))[0]
     try:    txo = deserialize(fetchtx(txid))
     except: txo = deserialize(fetchtx(txid, 'testnet'))
-    script_pk = reduce(access, ["outs", vout, "script"], txo)
+    script_pubkey = reduce(access, ["outs", vout, "script"], txo)
     return script_pubkey
 
-def get_outpoint(rawtx, i):
-    if not re.match('^[0-9a-fA-F]*$', rawtx) and isinstance(rawtx, str):
-        return get_outpoint(safe_hexlify(rawtx), i)
-    rawtx, i = deserialize(rawtx), int(i)
+def get_outpoints(rawtx, i=None):
+    if not re.match('^[0-9a-fA-F]*$', rawtx) and isinstance(rawtx, str):    # binary
+        return get_outpoints(safe_hexlify(rawtx), i)
+    rawtx = deserialize(rawtx)
+    if i is not None:
+        i = int(i)
     outpoints = [max(x.values()) + ":%d" % min(x.values()) \
                  for x in multiaccess(rawtx['ins'], 'outpoint')]
-    outpoint = outpoints[i]
-    assert outpoint[64] == ':'
-    return outpoint
+    assert all([x[64] == ':' for x in outpoints])
+    return outpoints if i is None else outpoints[i]
 
 def verify_txinput(tx, i, script=None, sig=None, pub=None):
     """UPDATED: verify Tx input of signed Txs;
@@ -652,13 +653,13 @@ def verify_txinput(tx, i, script=None, sig=None, pub=None):
             script = binascii.unhexlify(script)
     else:
         script = safe_unhexlify(
-            get_scriptpubkey(get_outpoint(safe_hexlify(tx), i)))
+            get_scriptpubkey(get_outpoints(safe_hexlify(tx), i)))
     if sig is not None:
         if not re.match('^[0-9a-fA-F]*$', sig):
             sig = safe_hexlify(sig)
     else:
         sig, pubkey = deserialize_script(
-            get_scriptsig(get_outpoint(safe_hexlify(tx), i)))
+            get_scriptsig(get_outpoints(safe_hexlify(tx), i)))
     if pub is None:
         pub = pubkey
     hashcode = decode(sig[-2:], 16)
