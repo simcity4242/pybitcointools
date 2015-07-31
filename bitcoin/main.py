@@ -10,8 +10,8 @@ import random
 import hmac
 from bitcoin.ripemd import *
 
-is_ios = "Pythonista" in os.environ.get("XPC_SERVICE_NAME", "")
-reclimit = lambda x: sys.setrecursionlimit(x)	# for Pythonista iOS
+# is_ios = "Pythonista" in os.environ.get("XPC_SERVICE_NAME", "")
+# reclimit = lambda x: sys.setrecursionlimit(x)	# for Pythonista iOS
 is_python2 = str == bytes
 
 
@@ -257,9 +257,9 @@ def decode_privkey(priv,formt=None):
 def convert_privkey(priv, formt=None):
     from_format = get_privkey_format(priv)
     to_format = 'hex' if formt is None else str(formt)
-    if from_format != to_format:
-        return encode_privkey(decode_privkey(priv, from_format), to_format)
-    return priv
+    if from_format == to_format:
+        return priv
+    return encode_privkey(decode_privkey(priv, from_format), to_format)
 
 def add_pubkeys(p1, p2):
     reclimit(512)
@@ -437,7 +437,7 @@ def wrap_varint(hexdata):
 def wrap_script(hexdata):
     if re.match('^[0-9a-fA-F]*$', hexdata):
         return safe_hexlify(wrap_script(safe_unhexlify(hexdata)))
-    return len(num_to_op_push(hexdata)) + safe_hexlify(hexdata)
+    return len(num_to_op_push(hexdata)) + hexdata
 
 # WTF, Electrum?
 def electrum_sig_hash(msg):
@@ -460,7 +460,7 @@ def random_electrum_seed():
 def random_mini_key():
     charset = get_code_string(58)[1:]   # Base58 without the 1
     while True:
-        randstr = ''.join([charset[random.randrange(57)] for i in xrange(29)])
+        randstr = ''.join([random.choice(charset) for i in range(29)])
         key = "%s%s%s" % ('S', randstr, '?')
         if bin_sha256(key)[0] != b'\0': continue
         if bin_sha256(key)[0] == b'\0': break

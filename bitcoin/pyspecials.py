@@ -5,7 +5,10 @@ import os
 import hashlib
 import struct
 
-is_python2 = (str == bytes) and (sys.version_info.major == 2)
+is_python2 = str == bytes or sys.version_info.major == 2
+# for Pythonista iOS
+is_ios = "Pythonista" in os.environ.get("XPC_SERVICE_NAME", "")
+reclimit = lambda x: sys.setrecursionlimit(x)
 
 #   PYTHON 2 FUNCTIONS
 #
