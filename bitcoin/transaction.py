@@ -568,3 +568,96 @@ def mksend(*args, **kwargs):
         outputs2 += [{"address": change, "value": isum-osum-fee}]
 
     return mktx(ins, outputs2, **kwargs)
+
+	
+def create_signable_tx(rawtx, i, hashcode=SIGHASH_ALL):
+    # rawtx = empty input scriptSigs
+    if isinstance(rawtx, dict) or not re.match('^[0-9a-fA-F]*$', rawtx):
+        rawtx = serialize(rawtx)
+        return create_signable_tx(rawtx, i, hashcode)
+    i = int(i)
+    rawtx = deserialize(rawtx)
+    outpoints = [max(x.values()) + ":%d" % min(x.values()) \
+                 for x in multiaccess(rawtx['ins'], 'outpoint')]  # getting input reference txs
+    # ['a1075d...f5d48d:0']
+    outpoint = outpoints[i]
+    for tx in rawtx['ins']:
+        tx['script'] = ''        # asserting all inputs' scriptSigs are deleted
+    rawtx['ins'][i]['script'] = get_scriptpubkey(outpoint)
+    return serialize(rawtx) + safe_hexlify(encode(hashcode, 256, 4)[::-1])
+
+def get_script(*args, **kwargs):
+    # takes txid, vout or "txid:0"
+    # kwargs "source" takes 'ins' and 'outs'
+    if len(args) == 1 and ':' in args[0]:
+        txid, vout = args[0].split(':')
+    elif len(args) == 2:
+        txid = filter(lambda x: len(str(x))==64, list(args))[0]
+        vout = filter(lambda x: len(str(x))<=5,  list(args))[0]
+    try:    txo = deserialize(fetchtx(txid))
+    except: txo = deserialize(fetchtx(txid, 'testnet'))
+    source = str(kwargs.get("source", "both")).lower()
+    scr_type = "both" if (source is None or source not in ("ins", "outs")) else source
+    scriptsig = reduce(access, ["ins", vout, "script"], txo)
+    script_pk = reduce(access, ["outs", vout, "script"], txo)
+    if scr_type == 'both':
+        return {'ins': scriptsig, 'outs': script_pk}
+    return scriptsig if scr_type == 'ins' else script_pk
+
+def get_scriptsig(*args):
+    # takes txid, vout or "txid:0"
+    if len(args) == 1 and ':' in args[0]:
+        txid, vout = args[0].split(':')
+    elif len(args) == 2:
+        txid = filter(lambda x: len(str(x))==64, list(args))[0]
+        vout = filter(lambda x: len(str(x))<=5, list(args))[0]
+    try:    txo = deserialize(fetchtx(txid))
+    except: txo = deserialize(fetchtx(txid, 'testnet'))
+    scriptsig = reduce(access, ["ins", vout, "script"], txo)
+    return scriptsig
+
+def get_scriptpubkey(*args):
+    # takes txid, vout or "txid:0"
+    if len(args) == 1 and ':' in args[0]:
+        txid, vout = args[0].split(':')
+    elif len(args) == 2:
+        txid = filter(lambda x: len(str(x))==64, list(args))[0]
+        vout = filter(lambda x: len(str(x))<=5, list(args))[0]
+    try:    txo = deserialize(fetchtx(txid))
+    except: txo = deserialize(fetchtx(txid, 'testnet'))
+    script_pk = reduce(access, ["outs", vout, "script"], txo)
+    return script_pk
+
+def get_outpoint(rawtx, i):
+    if not re.match('^[0-9a-fA-F]*$', rawtx) and isinstance(rawtx, str):
+        return get_outpoint(safe_hexlify(rawtx), i)
+    rawtx, i = deserialize(rawtx), int(i)
+    outpoints = [max(x.values()) + ":%d" % min(x.values()) \
+                 for x in multiaccess(rawtx['ins'], 'outpoint')]
+    outpoint = outpoints[i]
+    assert outpoint[64] == ':'
+    return outpoint
+
+def verify_txinput(tx, i, script=None, sig=None, pub=None):
+    """UPDATED: verify Tx input of signed Txs;
+    without needing spkey, pubkey, der sig"""
+    i = int(i)
+    if re.match('^[0-9a-fA-F]*$', tx):
+        tx = binascii.unhexlify(tx)
+    if script is not None:
+        if re.match('^[0-9a-fA-F]*$', script):
+            script = binascii.unhexlify(script)
+    else:
+        script = safe_unhexlify(
+            get_scriptpubkey(get_outpoint(safe_hexlify(tx), i)))
+    if sig is not None:
+        if not re.match('^[0-9a-fA-F]*$', sig):
+            sig = safe_hexlify(sig)
+    else:
+        sig, pubkey = deserialize_script(
+            get_scriptsig(get_outpoint(safe_hexlify(tx), i)))
+    if pub is None:
+        pub = pubkey
+    hashcode = decode(sig[-2:], 16)
+    modtx = signature_form(safe_hexlify(tx), i, script, hashcode)
+    return ecdsa_tx_verify(modtx, sig, pub, hashcode)

@@ -2,8 +2,9 @@ import re
 from pprint import pprint as pp
 from bitcoin.main import *
 from bitcoin.bci import *
-from bitcoin.transaction import *
 from bitcoin.pyspecials import *
+#from bitcoin.transaction import *
+
 
 
 def ishex(s):
@@ -230,9 +231,9 @@ msaddr = "2NBrWPN37wvZhMYb66h23v5rScuVRDDFNsR"
 
 pushedtx_txid = "2e7f518ce5ab61c1c959d25e396bc9d3d684d22ea86dc477b1a90329c6ca354f"
 
-raw = mktx(
-    ["2e7f518ce5ab61c1c959d25e396bc9d3d684d22ea86dc477b1a90329c6ca354f:1"],
-    [{'value': 84480000, 'script': '76a914dd6cce9f255a8cc17bda8ba0373df8e861cb866e88ac'}])
+#raw = mktx(
+#    ["2e7f518ce5ab61c1c959d25e396bc9d3d684d22ea86dc477b1a90329c6ca354f:1"],
+#    [{'value': 84480000, 'script': '76a914dd6cce9f255a8cc17bda8ba0373df8e861cb866e88ac'}])
 #
 #signing_tx = signature_form(tx, i, '<utxo_scriptPubKey>', hashcode)
 #signing_tx = signature_form(raw, 0, myscript)
@@ -248,103 +249,11 @@ raw = mktx(
 
 #txo = txo23b = deserialize(txh23b)
 
-def create_signable_tx(rawtx, i, hashcode=SIGHASH_ALL):
-    # rawtx = empty input scriptSigs
-    if isinstance(rawtx, dict) or not re.match('^[0-9a-fA-F]*$', rawtx):
-        rawtx = serialize(rawtx)
-        return create_signable_tx(rawtx, i, hashcode)
-    i = int(i)
-    rawtx = deserialize(rawtx)
-    outpoints = [max(x.values()) + ":%d" % min(x.values()) \
-                 for x in multiaccess(rawtx['ins'], 'outpoint')]  # getting input reference txs
-    # ['a1075d...f5d48d:0']
-    outpoint = outpoints[i]
-    for tx in rawtx['ins']:
-        tx['script'] = ''        # asserting all inputs' scriptSigs are deleted
-    rawtx['ins'][i]['script'] = get_scriptpubkey(outpoint)
-    return serialize(rawtx) + safe_hexlify(encode(hashcode, 256, 4)[::-1])
-
-def get_script(*args, **kwargs):
-    # takes txid, vout or "txid:0"
-    # kwargs "source" takes 'ins' and 'outs'
-    if len(args) == 1 and ':' in args[0]:
-        txid, vout = args[0].split(':')
-    elif len(args) == 2:
-        txid = filter(lambda x: len(str(x))==64, list(args))[0]
-        vout = filter(lambda x: len(str(x))<=5,  list(args))[0]
-    try:    txo = deserialize(fetchtx(txid))
-    except: txo = deserialize(fetchtx(txid, 'testnet'))
-    source = str(kwargs.get("source", "both")).lower()
-    scr_type = "both" if (source is None or source not in ("ins", "outs")) else source
-    scriptsig = reduce(access, ["ins", vout, "script"], txo)
-    script_pk = reduce(access, ["outs", vout, "script"], txo)
-    if scr_type == 'both':
-        return {'ins': scriptsig, 'outs': script_pk}
-    return scriptsig if scr_type == 'ins' else script_pk
-
-def get_scriptsig(*args):
-    # takes txid, vout or "txid:0"
-    if len(args) == 1 and ':' in args[0]:
-        txid, vout = args[0].split(':')
-    elif len(args) == 2:
-        txid = filter(lambda x: len(str(x))==64, list(args))[0]
-        vout = filter(lambda x: len(str(x))<=5, list(args))[0]
-    try:    txo = deserialize(fetchtx(txid))
-    except: txo = deserialize(fetchtx(txid, 'testnet'))
-    scriptsig = reduce(access, ["ins", vout, "script"], txo)
-    return scriptsig
-
-def get_scriptpubkey(*args):
-    # takes txid, vout or "txid:0"
-    if len(args) == 1 and ':' in args[0]:
-        txid, vout = args[0].split(':')
-    elif len(args) == 2:
-        txid = filter(lambda x: len(str(x))==64, list(args))[0]
-        vout = filter(lambda x: len(str(x))<=5, list(args))[0]
-    try:    txo = deserialize(fetchtx(txid))
-    except: txo = deserialize(fetchtx(txid, 'testnet'))
-    script_pk = reduce(access, ["outs", vout, "script"], txo)
-    return script_pk
-
-def get_outpoint(rawtx, i):
-    if not re.match('^[0-9a-fA-F]*$', rawtx) and isinstance(rawtx, str):
-        return get_outpoint(safe_hexlify(rawtx), i)
-    rawtx, i = deserialize(rawtx), int(i)
-    outpoints = [max(x.values()) + ":%d" % min(x.values()) \
-                 for x in multiaccess(rawtx['ins'], 'outpoint')]
-    outpoint = outpoints[i]
-    assert outpoint[64] == ':'
-    return outpoint
-
-def verify_tx_input(tx, i, script=None, sig=None, pub=None):
-    """UPDATED: verify Tx input of signed Txs;
-    without needing spkey, pubkey, der sig"""
-    i = int(i)
-    if re.match('^[0-9a-fA-F]*$', tx):
-        tx = binascii.unhexlify(tx)
-    if script is not None:
-        if re.match('^[0-9a-fA-F]*$', script):
-            script = binascii.unhexlify(script)
-    else:
-        script = safe_unhexlify(
-            get_scriptpubkey(get_outpoint(safe_hexlify(tx), i)))
-    if sig is not None:
-        if not re.match('^[0-9a-fA-F]*$', sig):
-            sig = safe_hexlify(sig)
-    else:
-        sig, pubkey = deserialize_script(
-            get_scriptsig(get_outpoint(safe_hexlify(tx), i)))
-    if pub is None:
-        pub = pubkey
-    hashcode = decode(sig[-2:], 16)
-    modtx = signature_form(safe_hexlify(tx), i, script, hashcode)
-    return ecdsa_tx_verify(modtx, sig, pub, hashcode)
-
-pizzatxid = 'cca7507897abc89628f450e8b1e0c6fca4ec3f7b34cccf55f3f531c659ff4d79'
-#verify_tx_input(tx, 0, inspk, inder, inpub)
-#inder = "30450221009908144ca6539e09512b9295c8a27050d478fbb96f8addbc3d075544dc41328702201aa528be2b907d316d2da068dd9eb1e23243d97e444d59290d2fddf25269ee0e01"
-#inpub = "042e930f39ba62c6534ee98ed20ca98959d34aa9e057cda01cfd422c6bab3667b76426529382c23f42b9b08d7832d4fee1d6b437a8526e59667ce9c4e9dcebcabb"
-#inspk = "76a91446af3fb481837fadbb421727f9959c2d32a3682988ac"
-#inaddr = "17SkEw2md5avVNyYgj6RiXuQKNwkXaxFyQ";
-#tx = "01000000018dd4f5fbd5e980fc02f35c6ce145935b11e284605bf599a13c6d415db55d07a1000000001976a91446af3fb481837fadbb421727f9959c2d32a3682988acffffffff0200719a81860000001976a914df1bd49a6c9e34dfa8631f2c54cf39986027501b88ac009f0a5362000000434104cd5e9726e6afeae357b1806be25a4c3d3811775835d235417ea746b7db9eeab33cf01674b944c64561ce3388fa1abd0fa88b06c44ce81e2234aa70fe578d455dac00000000"
-#txh = "01000000018dd4f5fbd5e980fc02f35c6ce145935b11e284605bf599a13c6d415db55d07a1000000008b4830450221009908144ca6539e09512b9295c8a27050d478fbb96f8addbc3d075544dc41328702201aa528be2b907d316d2da068dd9eb1e23243d97e444d59290d2fddf25269ee0e0141042e930f39ba62c6534ee98ed20ca98959d34aa9e057cda01cfd422c6bab3667b76426529382c23f42b9b08d7832d4fee1d6b437a8526e59667ce9c4e9dcebcabbffffffff0200719a81860000001976a914df1bd49a6c9e34dfa8631f2c54cf39986027501b88ac009f0a5362000000434104cd5e9726e6afeae357b1806be25a4c3d3811775835d235417ea746b7db9eeab33cf01674b944c64561ce3388fa1abd0fa88b06c44ce81e2234aa70fe578d455dac00000000"
+txid = pizzatxid = 'cca7507897abc89628f450e8b1e0c6fca4ec3f7b34cccf55f3f531c659ff4d79';vout=i=0
+verify_tx_input(tx, 0, inspk, inder, inpub)
+inder = "30450221009908144ca6539e09512b9295c8a27050d478fbb96f8addbc3d075544dc41328702201aa528be2b907d316d2da068dd9eb1e23243d97e444d59290d2fddf25269ee0e01"
+inpub = "042e930f39ba62c6534ee98ed20ca98959d34aa9e057cda01cfd422c6bab3667b76426529382c23f42b9b08d7832d4fee1d6b437a8526e59667ce9c4e9dcebcabb"
+inspk = "76a91446af3fb481837fadbb421727f9959c2d32a3682988ac"
+inaddr = "17SkEw2md5avVNyYgj6RiXuQKNwkXaxFyQ";
+tx = "01000000018dd4f5fbd5e980fc02f35c6ce145935b11e284605bf599a13c6d415db55d07a1000000001976a91446af3fb481837fadbb421727f9959c2d32a3682988acffffffff0200719a81860000001976a914df1bd49a6c9e34dfa8631f2c54cf39986027501b88ac009f0a5362000000434104cd5e9726e6afeae357b1806be25a4c3d3811775835d235417ea746b7db9eeab33cf01674b944c64561ce3388fa1abd0fa88b06c44ce81e2234aa70fe578d455dac00000000"
+txh = "01000000018dd4f5fbd5e980fc02f35c6ce145935b11e284605bf599a13c6d415db55d07a1000000008b4830450221009908144ca6539e09512b9295c8a27050d478fbb96f8addbc3d075544dc41328702201aa528be2b907d316d2da068dd9eb1e23243d97e444d59290d2fddf25269ee0e0141042e930f39ba62c6534ee98ed20ca98959d34aa9e057cda01cfd422c6bab3667b76426529382c23f42b9b08d7832d4fee1d6b437a8526e59667ce9c4e9dcebcabbffffffff0200719a81860000001976a914df1bd49a6c9e34dfa8631f2c54cf39986027501b88ac009f0a5362000000434104cd5e9726e6afeae357b1806be25a4c3d3811775835d235417ea746b7db9eeab33cf01674b944c64561ce3388fa1abd0fa88b06c44ce81e2234aa70fe578d455dac00000000"
