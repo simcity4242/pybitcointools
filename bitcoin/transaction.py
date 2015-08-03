@@ -203,9 +203,9 @@ def is_bip66(sig):
 
 def txhash(tx, hashcode=None):
     if isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx):
-        tx = changebase(tx, 16, 256)
+        tx = safe_unhexlify(tx)
     if hashcode:
-        return dbl_sha256(from_str_to_bytes(tx) + from_int_to_bytes(int(hashcode), 4))
+        return dbl_sha256(from_str_to_bytes(tx) + from_int_to_bytes(int(hashcode), 4, 'little'))
     else:
         return safe_hexlify(bin_dbl_sha256(tx)[::-1])
 
@@ -217,7 +217,7 @@ def bin_txhash(tx, hashcode=None):
 def ecdsa_tx_sign(tx, priv, hashcode=SIGHASH_ALL):
     """Returns DER sig for rawtx w/ hashcode apppended"""
     rawsig = ecdsa_raw_sign(bin_txhash(tx, hashcode), priv)
-    return der_encode_sig(*rawsig)+encode(hashcode, 16, 2)
+    return der_encode_sig(*rawsig) + encode(hashcode, 16, 2)
 
 
 def ecdsa_tx_verify(tx, sig, pub, hashcode=SIGHASH_ALL):
@@ -225,6 +225,7 @@ def ecdsa_tx_verify(tx, sig, pub, hashcode=SIGHASH_ALL):
 
 
 def ecdsa_tx_recover(tx, sig, hashcode=SIGHASH_ALL):
+    """Recover valid pubkey(s) for signed tx"""
     z = bin_txhash(tx, hashcode)
     _, r, s = der_decode_sig(sig)
     left = ecdsa_raw_recover(z, (0, r, s))
@@ -235,30 +236,28 @@ def ecdsa_tx_recover(tx, sig, hashcode=SIGHASH_ALL):
 
 def mk_pubkey_script(addr):
     # Keep the auxiliary functions around for altcoins' sake
-    return '76a914' + b58check_to_hex(addr) + '88ac'
+    hash160 = b58check_to_bin(addr)
+    return safe_hexlify('\x76\xa9\x14' + hash160 + '\x88\xac')
 
 
 def mk_scripthash_script(addr):
-    return 'a914' + b58check_to_hex(addr) + '87'
+    hash160 = b58check_to_bin(addr)
+    return safe_hexlify('\xa9\x14' + hash160 + '\x87')
 
-def mk_opreturn(*args):
-    if len(args) == 1 and isinstance(args[0], string_types):
-        msg = args[0]
-        rawtx = None
-    elif len(args) == 2 and re.match('^[0-9a-fA-F]*$', args[1]):
-        msg = args[0]
-        rawtx = args[1]
+def mk_opreturn(msg, *args):
     orhex = serialize_script([0x6a, msg])
-    orjson = {'script' : orhex, 'value' : 0}
-    if rawtx is None:
+    if len(args) == 0:
         return orhex
-    else:
-        txo = deserialize(rawtx)
-        if 'outs' not in txo or len(txo['outs']) == 0:
-            sys.stderr.write("OP_Return cannot be the sole output!")
-            return
-        txo['outs'].append(orjson)
-        return serialize(txo)
+    if len(args) == 1:
+        if isinstance(args[0], str) and re.match('^[0-9a-fA-F]*$', args[0]):
+            return serialize(mk_opreturn(msg, deserialize(args[0])))
+        elif isinstance(args[0], dict):
+            txo = args[0]
+    assert 'outs' in txo, "Outputs cannot be empty"
+    txo['outs'].append({'script': orhex, 'value': 0})
+    #if len(json_changebase(multiaccess(txo['outs'], 'script'), lambda x: safe_unhexlify(x))) != 1:
+    #    sys.stderr.write(("Outputs cannot have >1 OP_RETURN"))
+    return txo
 
 
 # Address representation to output script
@@ -385,6 +384,7 @@ def mk_multisig_script(*args):
 # Signing and verifying
 
 def verify_tx_input(tx, i, script, sig, pub):
+    """tx = scriptsig replaced by scriptPubKey"""
     if re.match('^[0-9a-fA-F]*$', tx):
         tx = binascii.unhexlify(tx)
     if re.match('^[0-9a-fA-F]*$', script):
@@ -392,32 +392,10 @@ def verify_tx_input(tx, i, script, sig, pub):
     if not re.match('^[0-9a-fA-F]*$', sig):
         sig = safe_hexlify(sig)
     hashcode = decode(sig[-2:], 16)
+    if hashcode == '00':    # RARE case: erroneous SIGHASH_ALL (should be 1)
+        hashcode = '01'
     modtx = signature_form(tx, int(i), script, hashcode)
     return ecdsa_tx_verify(modtx, sig, pub, hashcode)
-
-# def verify_tx_input(tx, i, script=None, sig=None, pub=None):
-#     """UPDATED: verify Tx input of signed Txs;
-#     without needing spkey, pubkey, der sig"""
-#     i = int(i)
-#     if re.match('^[0-9a-fA-F]*$', tx):
-#         tx = binascii.unhexlify(tx)
-#     if script is not None:
-#         if re.match('^[0-9a-fA-F]*$', script):
-#             script = binascii.unhexlify(script)
-#     else:
-#         script = safe_unhexlify(
-#             get_scriptpubkey(get_outpoints(safe_hexlify(tx), i)))
-#     if sig is not None:
-#         if not re.match('^[0-9a-fA-F]*$', sig):
-#             sig = safe_hexlify(sig)
-#     else:
-#         sig, pubkey = deserialize_script(
-#             get_scriptsig(get_outpoints(safe_hexlify(tx), i)))
-#     if pub is None:
-#         pub = pubkey
-#     hashcode = decode(sig[-2:], 16)
-#     modtx = signature_form(safe_hexlify(tx), i, script, hashcode)
-#     return ecdsa_tx_verify(modtx, sig, pub, hashcode)
 
 
 def sign(tx, i, priv, hashcode=SIGHASH_ALL):
@@ -572,19 +550,16 @@ def mksend(*args, **kwargs):
 
 	
 def create_signable_tx(rawtx, i, hashcode=SIGHASH_ALL):
-    # rawtx = empty input scriptSigs
+    # signable rawtx: input's scriptPubKey inserted at index i
     if isinstance(rawtx, dict) or not re.match('^[0-9a-fA-F]*$', rawtx):
         rawtx = serialize(rawtx)
         return create_signable_tx(rawtx, i, hashcode)
     i = int(i)
-    rawtx = deserialize(rawtx)
-    outpoints = [max(x.values()) + ":%d" % min(x.values()) \
-                 for x in multiaccess(rawtx['ins'], 'outpoint')]  # getting input reference txs
-    # ['a1075d...f5d48d:0']
-    outpoint = outpoints[i]
+    newtx = copy.deepcopy(deserialize(rawtx))
+    outpoint = "%s:%d" % (newtx['ins'][int(i)]["outpoint"]["hash"], newtx['ins'][int(i)]["outpoint"]["index"])
     for tx in rawtx['ins']:
         tx['script'] = ''        # asserting all inputs' scriptSigs are deleted
-    rawtx['ins'][i]['script'] = get_scriptpubkey(outpoint)
+    newtx['ins'][i]['script'] = get_scriptpubkey(outpoint)
     return serialize(rawtx) + safe_hexlify(encode(hashcode, 256, 4)[::-1])
 
 def get_script(*args):
@@ -596,9 +571,11 @@ def get_script(*args):
     else: source = None
     if isinstance(args[0], str) and ':' in args[0]:
         txid, vout = args[0].split(':')
+    #elif isinstance(args[0], str) and re.match('^[0-9a-fA-F]*$', args[0]) and str(args[0]).startswith("01000000"):
+    #    
     elif len(args) == 2:
-        txid = filter(lambda x: len(str(x))==64, list(args))[0]
-        vout = filter(lambda x: len(str(x))<=5,  list(args))[0]
+        txid = args[0]
+        vout = args[1]
     try:    txo = deserialize(fetchtx(txid))
     except: txo = deserialize(fetchtx(txid, 'testnet'))
     scriptsig = reduce(access, ["ins", vout, "script"],  txo)
@@ -607,61 +584,87 @@ def get_script(*args):
         return {'ins': scriptsig, 'outs': script_pubkey}
     return scriptsig if source == 'ins' else script_pubkey
 
-def get_scriptsig(*args):
-    # takes txid, vout or "txid:0"
-    if len(args) == 1 and ':' in args[0]:
-        txid, vout = args[0].split(':')
-    elif len(args) == 2:
-        txid = filter(lambda x: len(str(x))==64, list(args))[0]
-        vout = filter(lambda x: len(str(x))<=5, list(args))[0]
+# takes "txid:vout"
+def get_scriptsig(outpoint):
+    """Return scriptSig for 'txid:index'"""
+    if ':' in outpoint:
+        txid, vout = outpoint.split(':')
     try:    txo = deserialize(fetchtx(txid))
     except: txo = deserialize(fetchtx(txid, 'testnet'))
     scriptsig = reduce(access, ["ins", vout, "script"], txo)
     return scriptsig
 
-def get_scriptpubkey(*args):
-    # takes txid, vout or "txid:0"
-    if len(args) == 1 and ':' in args[0]:
-        txid, vout = args[0].split(':')
-    elif len(args) == 2:
-        txid = filter(lambda x: len(str(x))==64, list(args))[0]
-        vout = filter(lambda x: len(str(x))<=5, list(args))[0]
+# takes "txid:vout" 
+def get_scriptpubkey(outpoint):
+    """Return scriptPubKey for 'txid:index'"""
+    if ':' in outpoint:
+        txid, vout = outpoint.split(':')
     try:    txo = deserialize(fetchtx(txid))
     except: txo = deserialize(fetchtx(txid, 'testnet'))
     script_pubkey = reduce(access, ["outs", vout, "script"], txo)
     return script_pubkey
 
+# get "TXID:vout" from raw Tx
 def get_outpoints(rawtx, i=None):
-    if not re.match('^[0-9a-fA-F]*$', rawtx) and isinstance(rawtx, str):    # binary
+    """get rawtx spendable inputs as 'txid:0' """
+    if isinstance(rawtx, str) and not re.match('^[0-9a-fA-F]*$', rawtx):    # binary
         return get_outpoints(safe_hexlify(rawtx), i)
-    rawtx = deserialize(rawtx)
+    elif isinstance(rawtx, dict):
+        pass
+    elif isinstance(rawtx, str) and re.match('^[0-9a-fA-F]*$', rawtx):
+        rawtx = deserialize(rawtx)
     if i is not None:
         i = int(i)
-    outpoints = [max(x.values()) + ":%d" % min(x.values()) \
-                 for x in multiaccess(rawtx['ins'], 'outpoint')]
+    outpoints = []
+    for tx in rawtx['ins']:
+        outpoints.append("%s:%d" % (tx['outpoint']['hash'], tx['outpoint']['index']))
     assert all([x[64] == ':' for x in outpoints])
     return outpoints if i is None else outpoints[i]
 
-def verify_txinput(tx, i, script=None, sig=None, pub=None):
-    """UPDATED: verify Tx input of signed Txs;
-    without needing spkey, pubkey, der sig"""
-    i = int(i)
-    if re.match('^[0-9a-fA-F]*$', tx):
-        tx = binascii.unhexlify(tx)
-    if script is not None:
-        if re.match('^[0-9a-fA-F]*$', script):
-            script = binascii.unhexlify(script)
-    else:
-        script = safe_unhexlify(
-            get_scriptpubkey(get_outpoints(safe_hexlify(tx), i)))
-    if sig is not None:
-        if not re.match('^[0-9a-fA-F]*$', sig):
-            sig = safe_hexlify(sig)
-    else:
-        sig, pubkey = deserialize_script(
-            get_scriptsig(get_outpoints(safe_hexlify(tx), i)))
-    if pub is None:
-        pub = pubkey
-    hashcode = decode(sig[-2:], 16)
-    modtx = signature_form(safe_hexlify(tx), i, script, hashcode)
-    return ecdsa_tx_verify(modtx, sig, pub, hashcode)
+# def verify_txinput(tx, i, script=None, sig=None, pub=None):
+#     """UPDATED: verify Tx input of signed Txs;
+#     without needing spkey, pubkey, der sig"""
+#     i = int(i)
+#     if re.match('^[0-9a-fA-F]*$', tx):
+#         tx = binascii.unhexlify(tx)
+#     if script is not None:
+#         if re.match('^[0-9a-fA-F]*$', script):
+#             script = binascii.unhexlify(script)
+#     else:
+#         script = safe_unhexlify(
+#             get_scriptpubkey(get_outpoints(safe_hexlify(tx), i)))
+#     if sig is not None:
+#         if not re.match('^[0-9a-fA-F]*$', sig):
+#             sig = safe_hexlify(sig)
+#     else:
+#         sig, pubkey = deserialize_script(
+#             get_scriptsig(get_outpoints(safe_hexlify(tx), i)))
+#     if pub is None:
+#         pub = pubkey
+#     hashcode = decode(sig[-2:], 16)
+#     modtx = signature_form(safe_hexlify(tx), i, script, hashcode)
+#     return ecdsa_tx_verify(modtx, sig, pub, hashcode)
+
+# def verify_tx_input(tx, i, script=None, sig=None, pub=None):
+#     """UPDATED: verify Tx input of signed Txs;
+#     without needing spkey, pubkey, der sig"""
+#     i = int(i)
+#     if re.match('^[0-9a-fA-F]*$', tx):
+#         tx = binascii.unhexlify(tx)
+#     if script is not None:
+#         if re.match('^[0-9a-fA-F]*$', script):
+#             script = binascii.unhexlify(script)
+#     else:
+#         script = safe_unhexlify(
+#             get_scriptpubkey(get_outpoints(safe_hexlify(tx), i)))
+#     if sig is not None:
+#         if not re.match('^[0-9a-fA-F]*$', sig):
+#             sig = safe_hexlify(sig)
+#     else:
+#         sig, pubkey = deserialize_script(
+#             get_scriptsig(get_outpoints(safe_hexlify(tx), i)))
+#     if pub is None:
+#         pub = pubkey
+#     hashcode = decode(sig[-2:], 16)
+#     modtx = signature_form(safe_hexlify(tx), i, script, hashcode)
+#     return ecdsa_tx_verify(modtx, sig, pub, hashcode)

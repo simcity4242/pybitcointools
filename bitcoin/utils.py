@@ -1,9 +1,9 @@
 import re
 from pprint import pprint as pp
 from bitcoin.main import *
+from bitcoin.transaction import *
 from bitcoin.bci import *
 from bitcoin.pyspecials import *
-#from bitcoin.transaction import *
 
 
 
@@ -167,21 +167,20 @@ OP_ALIASES = [
     ("OP_FALSE", 0)
 ]
 
-
-
 OPname = dict([(k[3:], v) for k, v in OPCODE_LIST + OP_ALIASES]);OPname.update(dict([(k,v) for k,v in OPCODE_LIST + OP_ALIASES]))
 OPint = dict([(v,k) for k,v in OPCODE_LIST])
 OPhex = dict([(encode(k, 16, 2), v) for v,k in OPCODE_LIST])
-getop = lambda o: OPname.get(o.upper() if not o.startswith("OP_") else str(o[2:]).upper(), 0)
 
 def get_op(s):
     """Returns OP_CODE for integer, or integer for OP_CODE"""
+    getop = lambda o: OPname.get(o.upper() if not o.startswith("OP_") else str(o[2:]).upper(), 0)
     if isinstance(s, int):
         return OPint.get(s, '')
     elif isinstance(s, basestring):
         return getop(s)
 
 def parse_script(s):
+    from bitcoin.transaction import serialize_script
     r = []
     for word in s.split():
         if word.isdigit() or (word[0] == '-' and word[1:].isdigit()):
@@ -197,13 +196,34 @@ def parse_script(s):
             r.append(OPname[word])  # r.append(get_op(v[3:]))
     return serialize_script(r)
 
-#addr="n1hjyVvYQPQtejJcANd5ZJM5rmxHCCgWL7"
+priv, pub, addr = '', '', ''
+
+def mk_privpubaddr(privkey, compressed=False, magicbyte=0):
+    global priv, pub, addr
+    priv = encode_privkey(decode_privkey(privkey), 'hex')
+    pub = privtopub(compress(priv)) if compressed else privtopub(priv)
+    addr = pubtoaddr(pub, int(magicbyte))
+
+def is_tx_hex(txhex):
+    if not isinstance(txhex, basestring):
+        return False
+    elif not re.match('^[0-9a-fA-F]*$', txhex):
+        return safe_unhexlify(is_tx_hex(safe_hexlify(txhex)))
+    txhex = st(txhex)
+    return txhex.startswith('01000000')
+
+def is_tx_obj(txobj):
+    if not isinstance(txobj, dict):
+        return False
+    elif isinstance(txobj, list) and len(txobj) == 1:
+        return is_tx_obj(txobj[0]) if isinstance(txobj[0], dict) else False
+    return set(txobj.keys()) > set(['locktime', 'version'])
+
+             #addr="n1hjyVvYQPQtejJcANd5ZJM5rmxHCCgWL7"
 
 #SIG64="G8kH/WEgiATGXSy78yToe36IF9AUlluY3bMdkDFD1XyyDciIbXkfiZxk/qmjGdMeP6/BQJ/C5U/pbQUZv1HGkn8="
 
-tpriv = priv = sha256("mrbubby"*3+"!")
-tpub = pub = privtopub(priv)
-taddr = addr = privtoaddr(priv, 111)
+tpriv = sha256("mrbubby"*3+"!"); tpub = privtopub(priv); taddr = privtoaddr(priv, 111)
 #tpkh = pkh = mk_pubkey_script(addr)[6:-4]
 
 masterpriv = sha256("master"*42)
@@ -211,15 +231,15 @@ masterpub = compress(privtopub(masterpriv))
 masteraddr = pubtoaddr(masterpub, 111)
 
 ops = [
-       OPname['IF'], 
-       masterpub, 
-       OPname['CHECKSIGVERIFY'], 
+       OPname['IF'],
+       masterpub,
+       OPname['CHECKSIGVERIFY'],
        OPname['ELSE'],
        '80bf07', #safe_hexlify(from_int_to_le_bytes(507776)), # '80bf07'
-       OPname['NOP2'], 
-       OPname['DROP'], 
-       OPname['ENDIF'], 
-       pub, 
+       OPname['NOP2'],
+       OPname['DROP'],
+       OPname['ENDIF'],
+       pub,
        OPname['CHECKSIG']
        ]
 
@@ -257,3 +277,5 @@ inspk = "76a91446af3fb481837fadbb421727f9959c2d32a3682988ac"
 inaddr = "17SkEw2md5avVNyYgj6RiXuQKNwkXaxFyQ";
 tx = "01000000018dd4f5fbd5e980fc02f35c6ce145935b11e284605bf599a13c6d415db55d07a1000000001976a91446af3fb481837fadbb421727f9959c2d32a3682988acffffffff0200719a81860000001976a914df1bd49a6c9e34dfa8631f2c54cf39986027501b88ac009f0a5362000000434104cd5e9726e6afeae357b1806be25a4c3d3811775835d235417ea746b7db9eeab33cf01674b944c64561ce3388fa1abd0fa88b06c44ce81e2234aa70fe578d455dac00000000"
 txh = "01000000018dd4f5fbd5e980fc02f35c6ce145935b11e284605bf599a13c6d415db55d07a1000000008b4830450221009908144ca6539e09512b9295c8a27050d478fbb96f8addbc3d075544dc41328702201aa528be2b907d316d2da068dd9eb1e23243d97e444d59290d2fddf25269ee0e0141042e930f39ba62c6534ee98ed20ca98959d34aa9e057cda01cfd422c6bab3667b76426529382c23f42b9b08d7832d4fee1d6b437a8526e59667ce9c4e9dcebcabbffffffff0200719a81860000001976a914df1bd49a6c9e34dfa8631f2c54cf39986027501b88ac009f0a5362000000434104cd5e9726e6afeae357b1806be25a4c3d3811775835d235417ea746b7db9eeab33cf01674b944c64561ce3388fa1abd0fa88b06c44ce81e2234aa70fe578d455dac00000000"
+
+#wif_re = re.compile(r"[1-9a-km-zA-LMNP-Z]{51,111}")

@@ -11,7 +11,7 @@ from bitcoin.ripemd import *
 from bitcoin.mnemonic import bip39_check, bip39_to_mn, bip39_to_seed
 from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, st, by, from_str_to_bytes, from_bytes_to_str
 from bitcoin.deterministic import electrum_mpubk, bip32_master_key
-
+from bitcoin.utils import *
 
 class TestECCArithmetic(unittest.TestCase):
 
@@ -207,6 +207,7 @@ class TestSerialize(unittest.TestCase):
         )
 
     def test_serialize_script(self):
+        hexvals = [encode(random.randrange(0, 0xffff), 16, 4) for x in range(20)]
         script = '47304402200c40fa58d3f6d5537a343cf9c8d13bc7470baf1d13867e0de3e535cd6b4354c80220' \
                  '0f2b48f67494835b060d0b2ff85657d2ba2d9ea4e697888c8cb580e8658183a801483045022056' \
                  'f488c59849a4259e7cef70fe5d6d53a4bd1c59a195b0577bd81cb76044beca022100a735b319fa' \
@@ -221,6 +222,12 @@ class TestSerialize(unittest.TestCase):
             script,
             "Script serialize roundtrip failed"
         )
+        for v in hexvals:
+            self.assertEqual(
+                deserialize_script(serialize_script([v])),
+                [v],
+                "Script serialize roundtrip failed"
+            )
 
 
 class TestTransaction(unittest.TestCase):
@@ -759,6 +766,24 @@ class BitcoinCore_Base58_encode_decode(unittest.TestCase):
                 "Calculated: %s\nResult:%s" % (result_to_hex, base16)
             )
 
+class Test_DER_Sigs(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        print("Testing DER Signatures....")
+
+    def test_all(self):
+
+        str_r = (0x123456)
+        str_s = (0x89abcd)
+        str_v = tuple([0] * len(str_r))
+        str_der = (b'300b020312345602040089abcd')
+
+        for t in zip(str_v, str_r, str_s, str_der):
+            v, r, s, dersig = t
+            self.assertEqual(der_encode_sig(v,r,s), dersig)
+
+
 # class BitcoinCore_TransactionValid(unittest.TestCase):
 #
 #     @classmethod
@@ -801,6 +826,41 @@ class BitcoinCore_Base58_encode_decode(unittest.TestCase):
 #                 if n == -1:
 #                     n = 0xffffffff
 #                 prevout =
+
+class BitcoinCore_TransactionValid(unittest.TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        print("Testing BitcoinCore Transactions (Valid)")
+
+    #def load_test_vectors(self, name):
+
+    def test_all(self):
+
+        # VECTOR #4
+        # ["[[[prevout hash, prevout index, prevout scriptPubKey], [input 2], ...],"]
+        # ["serializedTransaction, enforceP2SH]
+        # [[["0000000000000000000000000000000000000000000000000000000000000100", 0, "DUP HASH160 0x14 0x5b6462475454710f3c22f5fdf0b40704c92f25c3 EQUALVERIFY CHECKSIGVERIFY 1"]]
+        # "01000000010001000000000000000000000000000000000000000000000000000000000000000000006a473044022067288ea50aa799543a536ff9306f8e1cba05b9c6b10951175b924f96732555ed022026d7b5265f38d21541519e4a1e55044d5b9e17e15cdbaf29ae3792e99e883e7a012103ba8c8b86dea131c22ab967e6dd99bdae8eff7a1f75a2c35f1f944109e3fe5e22ffffffff010000000000000000015100000000"
+
+        prevout_hash = "0000000000000000000000000000000000000000000000000000000000000100"
+        prevout_vout = 0
+        prevout_scriptpk = "76a9145b6462475454710f3c22f5fdf0b40704c92f25c388ad51" #parse_script("DUP HASH160 0x14 0x5b6462475454710f3c22f5fdf0b40704c92f25c3 EQUALVERIFY CHECKSIGVERIFY 1")
+        signed_tx = "01000000010001000000000000000000000000000000000000000000000000000000000000" \
+                    "000000006a473044022067288ea50aa799543a536ff9306f8e1cba05b9c6b10951175b924f" \
+                    "96732555ed022026d7b5265f38d21541519e4a1e55044d5b9e17e15cdbaf29ae3792e99e88" \
+                    "3e7a012103ba8c8b86dea131c22ab967e6dd99bdae8eff7a1f75a2c35f1f944109e3fe5e22" \
+                    "ffffffff010000000000000000015100000000"
+
+        #ins = ["%s:%d" % (prevout_hash, prevout_vout)]
+        #outs = [{'script': '51', 'value': 0}]           # from serializedTransaction
+        #unsigned_tx = mktx(ins, outs)                   # same as signed_tx with scriptsig deleted
+
+        final_scriptsig = deserialize(signed_tx)['ins'][0]['script']
+        sig, pub = deserialize_script(final_scriptsig)
+
+        assert verify_tx_input(signed_tx, 0, prevout_scriptpk, sig, pub)
+        # assert verify_tx_input(unsigned_tx, 0, prevout_scriptpk,  *deserialize_script(final_scriptsig))
 
 
 
