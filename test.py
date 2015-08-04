@@ -790,61 +790,67 @@ class BitcoinCore_TransactionValid(unittest.TestCase):
     def setUpClass(cls):
         print("Testing BitcoinCore Transactions (Valid)")
 
-    def load_test_vectors(self, name):
-        fo = open("tests/%s" % name, 'r').read()
-        for test_case in json.loads(fo):
-            if len(test_case) == 1:  # commented object
-                continue
-            assert len(test_case) == 3  # test_case
-
-            prevouts = []
-            for json_prevout in test_case[0]:
-                assert len(json_prevout) == 3  # prevout hash, prevout vout, prevout scriptPubKey
-                n = json_prevout[1]
-                if n == -1:
-                    n = 0xffffffff
-                prevout = "%s:%d" % (json_prevout[0], n)
-                prevouts.append(dict(script=json_prevout[-1], txid=prevout))
-                    #{'script': json_prevout[-1], 'txid': prevout}  #{'script': parse_script(json_prevout[-1]), 'txid': prevout})
-                )
-
-            serialized_tx, p2sh_flag = test_case[1], test_case[2]
-            yield (prevouts, serialized_tx, p2sh_flag)
-
-    def parse_script(self, s):
-        from bitcoin.transaction import serialize_script; from bitcoin.utils import OPname
-        r = []
-        for word in s.split():
-            if word.isdigit() or (word[0] == '-' and word[1:].isdigit()):
-                r.append(int(word, 0))
-            elif word.startswith('0x') and ishex(word[2:]):
-                if int(word[2:], 16) < 0x4c:
-                    continue
-                else:
-                    r.append(word[2:])
-            elif len(word) >= 2 and word[0] == "'" and word[-1] == "'":
-                r.append(word[1:-1])
-            elif word in OPname:
-                r.append(OPname[word])  # r.append(get_op(v[3:]))
-        return serialize_script(r)
-
     def test_all(self):
 
-        fo = open("tests/tx_valid.json", "r").read()
-        for test_case in json.loads(fo):
-            if len(test_case) == 1:  # commented object
-                continue
-            assert len(test_case) == 3  # test_case
+        def load_test_vectors(self, name):
+            fo = open("tests/%s" % name, 'r').read()
+            for test_case in json.loads(fo):
+                if len(test_case) == 1: continue # commented object
+                assert len(test_case) == 3  # test_case
 
-            prevouts = []
-            for json_prevout in test_case[0]:
-                assert len(json_prevout) == 3  # prevout hash, prevout vout, prevout scriptPubKey
-                n = json_prevout[1]
-                if n == -1:
-                    n = 0xffffffff
-                prevout = "%s:%d" % (json_prevout[0], n)
-                prevouts.append(
-                    {'script': parse_script(json_prevout[-1]), 'txid': prevout})
+                prevouts = []
+                for json_prevout in test_case[0]:
+                    assert len(json_prevout) == 3  # prevout hash, prevout vout, prevout scriptPubKey
+                    n = json_prevout[1]
+                    if n == -1: n = 0xffffffff
+                    prevout = "%s:%d" % (json_prevout[0], n)
+                    prevouts.append(dict(script=parse_script(json_prevout[-1]), txid=prevout))  # {'script': json_prevout[-1], 'txid': prevout}
+
+                serialized_tx, p2sh_flag = test_case[1], test_case[2]
+                yield (prevouts, serialized_tx, p2sh_flag)
+
+        def parse_script(self, s):
+            from bitcoin.transaction import serialize_script;
+            from bitcoin.utils import OPname
+            r = []
+            for word in s.split():
+                if word.isdigit() or (word[0] == '-' and word[1:].isdigit()):
+                    r.append(int(word, 0))
+                elif word.startswith('0x') and ishex(word[2:]):
+                    if int(word[2:], 16) < 0x4c:
+                        continue
+                    else:
+                        r.append(word[2:])
+                elif len(word) >= 2 and word[0] == "'" and word[-1] == "'":
+                    r.append(word[1:-1])
+                elif word in OPname:
+                    r.append(OPname[word])  # r.append(get_op(v[3:]))
+            return serialize_script(r)
+
+        for prevouts, signed_tx, p2shflag in load_test_vectors("tx_valid.json"):
+            possible_pubs = []
+            #prevout_txid, prevout_vout = str(prevouts['txid']).split(":")
+            prevout_spk = prevouts['script']
+            for i, v in enumerate(prevouts):    # for multiple prevouts
+                final_scriptsig = deserialize_script(deserialize(signed_tx)['ins'][i]['script'])
+                if len(final_scriptsig) == 2 and all(map(filter(lambda s: str(s)[:2] in ('02', '03', '04'), final_scriptsig))):
+                    der_sig, pub = final_scriptsig
+                elif final_scriptsig[0] is None and len(final_scriptsig) > 1:
+                    der_sig = final_scriptsig[1]
+                    possible_pubs.extend(filter(lambda s: str(s)[:2] in ('02', '03', '04'),
+                                                deserialize_script(prevout_spk)))
+                else: pass
+
+                pubkey_index = 0
+                for j in range(len(possible_pubs)):
+                    if verify_tx_input(signed_tx, i, prevout_spk, der_sig, possible_pubs[j]):
+                        pubkey_index = j
+                    else: continue
+
+                self.assertTrue(
+                    verify_tx_input(signed_tx, i, prevout_spk, der_sig, possible_pubs[pubkey_index]),
+                    "Could not verify Tx input: %s\n%s\n%s\n%s" % (prevout_spk, signed_tx, str(i), str(v))
+                )
 
         # VECTOR #4
         # ["[[[prevout hash, prevout index, prevout scriptPubKey], [input 2], ...],"]
