@@ -136,13 +136,13 @@ class TestElectrumWalletInternalConsistency(unittest.TestCase):
 #
 #             sig = os.popen('electrum -w %s signmessage %s %s' % (self.wallet, addy, msg)).readlines()[-1].strip()
 #             self.assertTrue(
-#                 ecdsa_verify(msg, sig, pub),
+#                 ecdsa_msg_verify(msg, sig, pub),
 #                 "Verification error. Details:\nmsg: %s\nsig: %s\npriv: %s\naddy: %s\npub: %s" % (
 #                     msg, sig, priv, addy, pub
 #                 )
 #             )
 #
-#             rec = ecdsa_recover(msg, sig)
+#             rec = ecdsa_msg_recover(msg, sig)
 #             self.assertEqual(
 #                 pub,
 #                 rec,
@@ -151,7 +151,7 @@ class TestElectrumWalletInternalConsistency(unittest.TestCase):
 #                 )
 #             )
 #
-#             mysig = ecdsa_sign(msg, priv)
+#             mysig = ecdsa_msg_sign(msg, priv)
 #             self.assertEqual(
 #                 os.popen('electrum -w %s verifymessage %s %s %s' % (self.wallet, addy, mysig, msg)).read().strip(),
 #                 "true",
@@ -733,7 +733,7 @@ class BitcoinCore_SignatureValidation(unittest.TestCase):
             pkwif, sig, addr = str(test['wif']), str(test['signature']), str(test['address'])
             priv = encode_privkey(decode_privkey(pkwif), 'hex')
             pubkey = privtopub(priv)
-            pub_recovered = ecdsa_recover(addr, sig)
+            pub_recovered = ecdsa_msg_recover(addr, sig)
             self.assertEqual(
                 pubkey,
                 pub_recovered,
@@ -784,58 +784,67 @@ class Test_DER_Sigs(unittest.TestCase):
             self.assertEqual(der_encode_sig(v,r,s), dersig)
 
 
-# class BitcoinCore_TransactionValid(unittest.TestCase):
-#
-#     @classmethod
-#     def setUpClass(cls):
-#         print("Testing BitcoinCore Transactions (Valid)")
-#
-#     def load_test_vectors(self, name):
-#         with open("b:/pybtc/python-bitcoinlib/bitcoin/tests/data/%s" % name, 'r') as fd:
-#             for test_case in json.load(fd):
-#                 # Comments designated by single length strings
-#                 if len(test_case) == 1:
-#                     continue
-#                 assert len(test_case) == 3
-#
-#                 prevouts = []
-#                 for json_prevout in test_case[0]:
-#                     assert len(json_prevout) == 3
-#                     n = json_prevout[1]
-#                     if n == -1: n = 0xffffffff
-#                     prevout = "%s:%d" % (json_prevout[0], n)
-#                     prevouts.append(dict(script=json_prevout[-1], txid=prevout))
-#
-#                 tx = deserialize(test_case[1])
-#                 enforceP2SH = test_case[2]
-#
-#                 yield (prevouts, tx, enforceP2SH)
-#
-#     def test_all(self):
-#
-#         fo = open("tests/tx_valid.json", "r").read()
-#         for test_case in json.loads(fo):
-#             if len(test_case) == 1:     # commented object
-#                 continue
-#             assert len(test_case) == 3  # test_case
-#
-#             prevouts = {}
-#             for json_prevout in test_case[0]:
-#                 assert len(json_prevout) == 3   # prevout hash, prevout vout, prevout scriptPubKey
-#                 n = json_prevout[1]
-#                 if n == -1:
-#                     n = 0xffffffff
-#                 prevout =
-
 class BitcoinCore_TransactionValid(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
         print("Testing BitcoinCore Transactions (Valid)")
 
-    #def load_test_vectors(self, name):
+    def load_test_vectors(self, name):
+        fo = open("tests/%s" % name, 'r').read()
+        for test_case in json.loads(fo):
+            if len(test_case) == 1:  # commented object
+                continue
+            assert len(test_case) == 3  # test_case
+
+            prevouts = []
+            for json_prevout in test_case[0]:
+                assert len(json_prevout) == 3  # prevout hash, prevout vout, prevout scriptPubKey
+                n = json_prevout[1]
+                if n == -1:
+                    n = 0xffffffff
+                prevout = "%s:%d" % (json_prevout[0], n)
+                prevouts.append(dict(script=json_prevout[-1], txid=prevout))
+                    #{'script': json_prevout[-1], 'txid': prevout}  #{'script': parse_script(json_prevout[-1]), 'txid': prevout})
+                )
+
+            serialized_tx, p2sh_flag = test_case[1], test_case[2]
+            yield (prevouts, serialized_tx, p2sh_flag)
+
+    def parse_script(self, s):
+        from bitcoin.transaction import serialize_script; from bitcoin.utils import OPname
+        r = []
+        for word in s.split():
+            if word.isdigit() or (word[0] == '-' and word[1:].isdigit()):
+                r.append(int(word, 0))
+            elif word.startswith('0x') and ishex(word[2:]):
+                if int(word[2:], 16) < 0x4c:
+                    continue
+                else:
+                    r.append(word[2:])
+            elif len(word) >= 2 and word[0] == "'" and word[-1] == "'":
+                r.append(word[1:-1])
+            elif word in OPname:
+                r.append(OPname[word])  # r.append(get_op(v[3:]))
+        return serialize_script(r)
 
     def test_all(self):
+
+        fo = open("tests/tx_valid.json", "r").read()
+        for test_case in json.loads(fo):
+            if len(test_case) == 1:  # commented object
+                continue
+            assert len(test_case) == 3  # test_case
+
+            prevouts = []
+            for json_prevout in test_case[0]:
+                assert len(json_prevout) == 3  # prevout hash, prevout vout, prevout scriptPubKey
+                n = json_prevout[1]
+                if n == -1:
+                    n = 0xffffffff
+                prevout = "%s:%d" % (json_prevout[0], n)
+                prevouts.append(
+                    {'script': parse_script(json_prevout[-1]), 'txid': prevout})
 
         # VECTOR #4
         # ["[[[prevout hash, prevout index, prevout scriptPubKey], [input 2], ...],"]

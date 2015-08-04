@@ -621,6 +621,42 @@ def get_outpoints(rawtx, i=None):
     assert all([x[64] == ':' for x in outpoints])
     return outpoints if i is None else outpoints[i]
 
+# https://github.com/richardkiss/pycoin/blob/master/tests/bc_transaction_test.py#L177-L210	
+def check_transaction(tx):
+    """
+    Basic checks that don't depend on any context.
+    Adapted from Bicoin Code: main.cpp
+    """
+    if not tx.txs_in:
+        raise ValidationFailureError("tx.txs_in = []")
+    if not tx.txs_out:
+        raise ValidationFailureError("tx.txs_out = []")
+    # Size limits
+    f = io.BytesIO()
+    tx.stream(f)
+    size = len(f.getvalue())
+    if size > MAX_BLOCK_SIZE:
+        raise ValidationFailureError("size > MAX_BLOCK_SIZE")
+    # Check for negative or overflow output values
+    nValueOut = 0
+    for txout in tx.txs_out:
+        if txout.coin_value < 0 or txout.coin_value > MAX_MONEY:
+            raise ValidationFailureError("txout value negative or out of range")
+        nValueOut += txout.coin_value
+        if nValueOut > MAX_MONEY:
+            raise ValidationFailureError("txout total out of range")
+    # Check for duplicate inputs
+    if [x for x in tx.txs_in if tx.txs_in.count(x) > 1]:
+        raise ValidationFailureError("duplicate inputs")
+    if(tx.is_coinbase()):
+        if len(tx.txs_in[0].script) < 2 or len(tx.txs_in[0].script) > 100:
+            raise ValidationFailureError("bad coinbase script size")
+    else:
+        for txin in tx.txs_in:
+            if not txin:
+                raise ValidationFailureError("prevout is null")
+    return True
+	
 # def verify_txinput(tx, i, script=None, sig=None, pub=None):
 #     """UPDATED: verify Tx input of signed Txs;
 #     without needing spkey, pubkey, der sig"""

@@ -527,9 +527,12 @@ def deterministic_generate_k(msghash, priv):
     res = hmac_sha256(k, v).digest()
     return decode(by(res), 256)
 
+
 # MSG SIGNING
+
 def ecdsa_raw_sign(msghash, priv, low_s=True):
-    """Deterministically sign binary msghash (z) with k, returning (vbyte, r, s) as ints"""
+    """sign msg hash (z) with privkey & RFC6979 (k);
+    returns signature (v,r,s) with low s (BIP66) by default"""
     z = hash_to_int(msghash)
     k = deterministic_generate_k(msghash, priv)
 
@@ -541,7 +544,7 @@ def ecdsa_raw_sign(msghash, priv, low_s=True):
     return 27+(y % 2), r, s		# vbyte, r, s
 
 
-def ecdsa_sign(msg, priv):
+def ecdsa_msg_sign(msg, priv):
     """Sign a msg with privkey, returning base64 signature"""
     sighash = electrum_sig_hash(msg)
     v, r, s = ecdsa_raw_sign(sighash, priv)
@@ -549,7 +552,7 @@ def ecdsa_sign(msg, priv):
 
 
 def ecdsa_raw_verify(msghash, vrs, pub):
-    """Takes msghash, tuple of (vbyte, r, s) and pubkey as hex, verifies signature"""
+    """Boolean sig ver'n using msghash, signature (v,r,s) and pubkey"""
     v, r, s = vrs
 
     w = inv(s, N)
@@ -561,8 +564,14 @@ def ecdsa_raw_verify(msghash, vrs, pub):
 
     return r == x
 
+def ecdsa_addr_verify(addr, msg, b64sig):
+    sig = base64.b64decode(b64sig)
+    msg_hash = electrum_sig_hash(msg)
+    pubkey_recovered = ecdsa_msg_recover(msg_hash, sig)
+    magic = get_version_byte(addr)
+    return addr == pubtoaddr(pubkey_recovered, magicbyte=magic)
 
-def ecdsa_verify(msg, sig, pub):
+def ecdsa_msg_verify(msg, sig, pub):
     """Verify (base64) signature of a message using pubkey"""
     sighash = electrum_sig_hash(msg)
     vrs = decode_sig(sig)
@@ -570,7 +579,7 @@ def ecdsa_verify(msg, sig, pub):
 
 
 def ecdsa_raw_recover(msghash, vrs):
-    """Recovers (x,y) point from msghash and DER values (v,r,s)"""
+    """Recovers (x,y) point from msghash and sig values (v,r,s)"""
     v, r, s = vrs
 
     x = r
@@ -593,7 +602,7 @@ def ecdsa_raw_recover(msghash, vrs):
     return Q
 
 
-def ecdsa_recover(msg, sig):
+def ecdsa_msg_recover(msg, sig):
     """Recover pubkey from message and base64 signature"""
     sighash = electrum_sig_hash(msg)
     vrs = decode_sig(sig)
@@ -631,10 +640,3 @@ def pbkdf2_hmac_sha512(password, salt):
 
 hmac_sha256 = lambda k, s: hmac.new(k, s, hashlib.sha256)
 hmac_sha512 = lambda k, s: hmac.new(k, s, hashlib.sha512)
-
-
-
-
-# PK = """3081d30201010420{0:064x}a081a53081a2020101302c06072a8648ce3d0101022100{1:064x}3006040100040107042102{2:064x}022100{3:064x}020101a124032200"""
-# PK.strip().format(rki, P, Gx, N)+ compress(privtopub(rk))
-# https://gist.github.com/simcity4242/b0bb0f0281fcf58deec2

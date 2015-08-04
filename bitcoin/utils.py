@@ -279,3 +279,45 @@ tx = "01000000018dd4f5fbd5e980fc02f35c6ce145935b11e284605bf599a13c6d415db55d07a1
 txh = "01000000018dd4f5fbd5e980fc02f35c6ce145935b11e284605bf599a13c6d415db55d07a1000000008b4830450221009908144ca6539e09512b9295c8a27050d478fbb96f8addbc3d075544dc41328702201aa528be2b907d316d2da068dd9eb1e23243d97e444d59290d2fddf25269ee0e0141042e930f39ba62c6534ee98ed20ca98959d34aa9e057cda01cfd422c6bab3667b76426529382c23f42b9b08d7832d4fee1d6b437a8526e59667ce9c4e9dcebcabbffffffff0200719a81860000001976a914df1bd49a6c9e34dfa8631f2c54cf39986027501b88ac009f0a5362000000434104cd5e9726e6afeae357b1806be25a4c3d3811775835d235417ea746b7db9eeab33cf01674b944c64561ce3388fa1abd0fa88b06c44ce81e2234aa70fe578d455dac00000000"
 
 #wif_re = re.compile(r"[1-9a-km-zA-LMNP-Z]{51,111}")
+
+
+# PK = """3081d30201010420{0:064x}a081a53081a2020101302c06072a8648ce3d0101022100{1:064x}3006040100040107042102{2:064x}022100{3:064x}020101a124032200"""
+# PK.strip().format(rki, P, Gx, N)+ compress(privtopub(rk))
+# https://gist.github.com/simcity4242/b0bb0f0281fcf58deec2
+
+
+# https://github.com/richardkiss/pycoin/blob/master/tests/bc_transaction_test.py#L177-L210	
+def check_transaction(tx):
+    """
+    Basic checks that don't depend on any context.
+    Adapted from Bicoin Code: main.cpp
+    """
+    if not tx.txs_in:
+        raise ValidationFailureError("tx.txs_in = []")
+    if not tx.txs_out:
+        raise ValidationFailureError("tx.txs_out = []")
+    # Size limits
+    f = io.BytesIO()
+    tx.stream(f)
+    size = len(f.getvalue())
+    if size > MAX_BLOCK_SIZE:
+        raise ValidationFailureError("size > MAX_BLOCK_SIZE")
+    # Check for negative or overflow output values
+    nValueOut = 0
+    for txout in tx.txs_out:
+        if txout.coin_value < 0 or txout.coin_value > MAX_MONEY:
+            raise ValidationFailureError("txout value negative or out of range")
+        nValueOut += txout.coin_value
+        if nValueOut > MAX_MONEY:
+            raise ValidationFailureError("txout total out of range")
+    # Check for duplicate inputs
+    if [x for x in tx.txs_in if tx.txs_in.count(x) > 1]:
+        raise ValidationFailureError("duplicate inputs")
+    if(tx.is_coinbase()):
+        if len(tx.txs_in[0].script) < 2 or len(tx.txs_in[0].script) > 100:
+            raise ValidationFailureError("bad coinbase script size")
+    else:
+        for txin in tx.txs_in:
+            if not txin:
+                raise ValidationFailureError("prevout is null")
+    return True
