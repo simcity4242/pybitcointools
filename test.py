@@ -792,65 +792,47 @@ class BitcoinCore_TransactionValid(unittest.TestCase):
 
     def test_all(self):
 
-        def load_test_vectors(self, name):
-            fo = open("tests/%s" % name, 'r').read()
-            for test_case in json.loads(fo):
-                if len(test_case) == 1: continue # commented object
-                assert len(test_case) == 3  # test_case
+        tx_valid_test_vectors = [
+            # [[[prevout_txid, prevout_vout, prevout_spk], ... ], serialized_tx]
+            [["60a20bd93aa49ab4b28d514ec10b06e1829ce6818ec06cd3aabd013ebcdc4bb1", 0,
+              "514104cc71eb30d653c0c3163990c47b976f3fb3f37cccdcbedb169a1dfef58bbfbfaff7d8a473e7e2e6d317b87bafe8bde97e3cf8f065dec022b51d11fcdd0d348ac4410461cbdcc5409fb4b4d42b51d33381354d80e550078cb532a34bfa2fcfdeb7d76519aecc62770f5b0e4ef8551946d8a540911abe3e7854a26f39f58b25c15342af52ae"],
+            "0100000001b14bdcbc3e01bdaad36cc08e81e69c82e1060bc14e518db2b49aa43ad90ba26000000000490047304402203f16c6f40162ab686621ef3000b04e75418a0c0cb2d8aebeac894ae360ac1e780220ddc15ecdfc3507ac48e1681a33eb60996631bf6bf5bc0a0682c4db743ce7ca2b01ffffffff0140420f00000000001976a914660d4ef3a743e3e696ad990364e555c271ad504b88ac00000000"]
 
-                prevouts = []
-                for json_prevout in test_case[0]:
-                    assert len(json_prevout) == 3  # prevout hash, prevout vout, prevout scriptPubKey
-                    n = json_prevout[1]
-                    if n == -1: n = 0xffffffff
-                    prevout = "%s:%d" % (json_prevout[0], n)
-                    prevouts.append(dict(script=parse_script(json_prevout[-1]), txid=prevout))  # {'script': json_prevout[-1], 'txid': prevout}
+            ]
 
-                serialized_tx, p2sh_flag = test_case[1], test_case[2]
-                yield (prevouts, serialized_tx, p2sh_flag)
+        for prevouts, serialized_tx in tx_valid_test_vectors:
+            txh = serialized_tx
+            for i, prevout_item in enumerate(prevouts):
+                prevout_txin, prevout_vout, prevout_spk = prevout_item
+                calculated = get_outpoints(txh)[i]
+                actual = "%s:%d" % (prevout_txin, prevout_vout)
 
-        def parse_script(self, s):
-            from bitcoin.transaction import serialize_script;
-            from bitcoin.utils import OPname
-            r = []
-            for word in s.split():
-                if word.isdigit() or (word[0] == '-' and word[1:].isdigit()):
-                    r.append(int(word, 0))
-                elif word.startswith('0x') and ishex(word[2:]):
-                    if int(word[2:], 16) < 0x4c:
-                        continue
-                    else:
-                        r.append(word[2:])
-                elif len(word) >= 2 and word[0] == "'" and word[-1] == "'":
-                    r.append(word[1:-1])
-                elif word in OPname:
-                    r.append(OPname[word])  # r.append(get_op(v[3:]))
-            return serialize_script(r)
+                self.assertEqual(actual, calculated, "get_outpoint at index %d failed" % int(i))
 
-        for prevouts, signed_tx, p2shflag in load_test_vectors("tx_valid.json"):
-            possible_pubs = []
-            #prevout_txid, prevout_vout = str(prevouts['txid']).split(":")
-            prevout_spk = prevouts['script']
-            for i, v in enumerate(prevouts):    # for multiple prevouts
-                final_scriptsig = deserialize_script(deserialize(signed_tx)['ins'][i]['script'])
-                if len(final_scriptsig) == 2 and all(map(filter(lambda s: str(s)[:2] in ('02', '03', '04'), final_scriptsig))):
-                    der_sig, pub = final_scriptsig
-                elif final_scriptsig[0] is None and len(final_scriptsig) > 1:
-                    der_sig = final_scriptsig[1]
-                    possible_pubs.extend(filter(lambda s: str(s)[:2] in ('02', '03', '04'),
-                                                deserialize_script(prevout_spk)))
-                else: pass
+                final_scriptsig = deserialize_script(deserialize(txh)['ins'][i]['script'])
 
-                pubkey_index = 0
-                for j in range(len(possible_pubs)):
-                    if verify_tx_input(signed_tx, i, prevout_spk, der_sig, possible_pubs[j]):
-                        pubkey_index = j
-                    else: continue
+                # fetch
+                if 0xae in deserialize_script(prevout_spk)[-2:]:
+                    der = final_scriptsig[0]
+                    pubs = [final_scriptsig[1]]
+                else:
+                    der = final_scriptsig[-1]
+                    pubs = filter(lambda d: isinstance(d, str), deserialize_script(prevout_spk))
+                if len(pubs) == 1:
+                    self.assertTrue(
+                        verify_tx_input(txh, int(i), prevout_spk, der, pubs[0]),
+                        "Tx Verif'n Failed:\nRawTx %s\nTxID In %s\nIndex %s\nScriptPubKey %s\nDER %s\nPub(s) %s" % (
+                            txh, prevout_txin, str(prevout_vout), prevout_spk, der, repr(pubs)
+                        )
+                    )
+                else:
+                    self.assertTrue(
+                        any([verify_tx_input(txh, int(i), prevout_spk, der, x) for x in pubs]),
+                        "Tx Verif'n Failed:\nRawTx %s\nTxID In %s\nIndex %s\nScriptPubKey %s\nDER %s\nPub(s) %s" % (
+                            txh, prevout_txin, str(prevout_vout), prevout_spk, der, repr(pubs)
+                        )
+                    )
 
-                self.assertTrue(
-                    verify_tx_input(signed_tx, i, prevout_spk, der_sig, possible_pubs[pubkey_index]),
-                    "Could not verify Tx input: %s\n%s\n%s\n%s" % (prevout_spk, signed_tx, str(i), str(v))
-                )
 
         # VECTOR #4
         # ["[[[prevout hash, prevout index, prevout scriptPubKey], [input 2], ...],"]

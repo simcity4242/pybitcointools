@@ -349,6 +349,26 @@ def subtract_privkeys(p1, p2):
     k2 = decode_privkey(p2, f2)
     return encode_privkey((decode_privkey(p1, f1) - k2) % N, f1)
 
+def is_privkey(priv):
+    try:
+        formt = get_privkey_format(priv)
+        return True
+    except:
+        return False
+
+def is_pubkey(pubkey):
+    if re.match('^[0-9a-fA-F]*$', pubkey):
+        pubkey = bytearray.fromhex(pubkey)
+    else:
+        pubkey = bytearray.fromhex(pubkey)
+    return pubkey[0] in xrange(2, 5) and len(pubkey) in (33, 65)
+
+def is_address(addr):
+    if addr[0] not in ('mn123'):
+        return False
+    data = changebase(addr, 58, 256)
+    return bin_dbl_sha256(data[:-4])[:4] == data[-4:]
+
 # Hashes
 
 

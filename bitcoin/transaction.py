@@ -392,8 +392,8 @@ def verify_tx_input(tx, i, script, sig, pub):
     if not re.match('^[0-9a-fA-F]*$', sig):
         sig = safe_hexlify(sig)
     hashcode = decode(sig[-2:], 16)
-    if hashcode == '00':    # RARE case: erroneous SIGHASH_ALL (should be 1)
-        hashcode = '01'
+    hashcode += (not hashcode)      # RARE: SIGHASH_ALL != 0 (change to 1)
+
     modtx = signature_form(tx, int(i), script, hashcode)
     return ecdsa_tx_verify(modtx, sig, pub, hashcode)
 
@@ -550,20 +550,19 @@ def mksend(*args, **kwargs):
 
 	
 def create_signable_tx(rawtx, i, hashcode=SIGHASH_ALL):
-    # signable rawtx: input's scriptPubKey inserted at index i
-    if isinstance(rawtx, dict) or not re.match('^[0-9a-fA-F]*$', rawtx):
-        rawtx = serialize(rawtx)
-        return create_signable_tx(rawtx, i, hashcode)
+    # signature form which automatically inserts scriptPubKey
+    if isinstance(rawtx, dict):
+        return create_signable_tx(serialize(rawtx), i, hashcode)
     i = int(i)
     newtx = copy.deepcopy(deserialize(rawtx))
-    outpoint = "%s:%d" % (newtx['ins'][int(i)]["outpoint"]["hash"], newtx['ins'][int(i)]["outpoint"]["index"])
     for tx in rawtx['ins']:
         tx['script'] = ''        # asserting all inputs' scriptSigs are deleted
+    outpoint = "%s:%d" % (newtx['ins'][int(i)]["outpoint"]["hash"], newtx['ins'][int(i)]["outpoint"]["index"])
     newtx['ins'][i]['script'] = get_scriptpubkey(outpoint)
-    return serialize(rawtx) + safe_hexlify(encode(hashcode, 256, 4)[::-1])
+    return serialize(rawtx) #+ safe_hexlify(encode(hashcode, 256, 4)[::-1])
 
+# takes "txid:0"
 def get_script(*args):
-    # takes "txid:0" or txid, vout
     # last param can be 'ins', 'outs'
     if args[-1] in ("ins", "outs"):
         source = str(args[-1])
@@ -572,17 +571,13 @@ def get_script(*args):
     if isinstance(args[0], str) and ':' in args[0]:
         txid, vout = args[0].split(':')
     #elif isinstance(args[0], str) and re.match('^[0-9a-fA-F]*$', args[0]) and str(args[0]).startswith("01000000"):
-    #    
-    elif len(args) == 2:
-        txid = args[0]
-        vout = args[1]
     try:    txo = deserialize(fetchtx(txid))
     except: txo = deserialize(fetchtx(txid, 'testnet'))
     scriptsig = reduce(access, ["ins", vout, "script"],  txo)
-    script_pubkey = reduce(access, ["outs", vout, "script"], txo)
+    script_pk = reduce(access, ["outs", vout, "script"], txo)
     if source is None:
-        return {'ins': scriptsig, 'outs': script_pubkey}
-    return scriptsig if source == 'ins' else script_pubkey
+        return {'ins': scriptsig, 'outs': script_pk}
+    return scriptsig if source == 'ins' else script_pk
 
 # takes "txid:vout"
 def get_scriptsig(outpoint):
@@ -613,7 +608,7 @@ def get_outpoints(rawtx, i=None):
         pass
     elif isinstance(rawtx, str) and re.match('^[0-9a-fA-F]*$', rawtx):
         rawtx = deserialize(rawtx)
-    if i is not None:
+    if not i:
         i = int(i)
     outpoints = []
     for tx in rawtx['ins']:
