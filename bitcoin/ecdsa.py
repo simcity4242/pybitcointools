@@ -14,7 +14,6 @@ def ecdsa_raw_sign(msghash, priv, low_s=True):
         s = N-s if s>N//2 else s
     return 27+(y % 2), r, s		# vbyte, r, s
 
-
 def ecdsa_sign(msg, priv):
     """Sign a msg with privkey, returning base64 signature"""
     sighash = electrum_sig_hash(msg)
@@ -116,63 +115,6 @@ def verify_tx_input(tx, i, script, sig, pub):
     modtx = signature_form(tx, int(i), script, hashcode)
     return ecdsa_tx_verify(modtx, sig, pub, hashcode)
 
-def create_signable_tx(rawtx, i, hashcode=SIGHASH_ALL):
-    # rawtx = empty input scriptSigs
-    if re.match('^[0-9a-fA-F]*$', rawtx):
-         serialize(create_signable_tx(deserialize(rawtx), i, hashcode))
-    i = int(i)
-    outpoints = [max(x.values()) + ":%d" % min(x.values()) \
-                 for x in multiaccess(rawtx['ins'], 'outpoint')]  # getting input reference txs
-    # ['a1075d...f5d48d:0']
-    outpoint = outpoints[i]
-    for tx in rawtx[ins]:
-        tx['script'] = ''        # asserting all inputs' scriptSigs are deleted
-    rawtx['ins'][i]['script'] = get_scriptpubkey(outpoint)
-    rawtx = serialize(rawtx) + safe_hexlify(encode(hashcode, 256, 4)[::-1])
-    return rawtx
-    
-
-def get_script(*args, **kwargs):
-    # takes txid, vout or "txid:0"
-    # kwargs "source" takes 'ins' and 'outs'
-    if len(args) == 1 and ':' in args[0]:
-        txid, vout = args[0].split(':')
-    elif len(args) == 2:
-        txid = filter(lambda x: len(str(x))==64, list(args))[0]
-        vout = filter(lambda x: len(str(x))<=5,  list(args))[0]
-    try:    txo = deserialize(fetchtx(txid))
-    except: txo = deserialize(fetchtx(txid, 'testnet'))
-    source = str(kwargs.get("source", "both")).lower()
-    scr_type = "both" if (source is None or source not in ("ins", "outs")) else source
-    scriptsig = reduce(access, ["ins",  vout, "script"], txo)
-    script_pk = reduce(access, ["outs", vout, "script"], txo)
-    if scr_type == 'both':
-        return {'ins': scriptsig, 'outs': script_pk}
-    return scriptsig if scr_type == 'ins' else script_pk
-
-def get_scriptsig(*args):
-    # takes txid, vout or "txid:0"
-    if len(args) == 1 and ':' in args[0]:
-        txid, vout = args[0].split(':')
-    elif len(args) == 2:
-        txid = filter(lambda x: len(str(x))==64, list(args))[0]
-        vout = filter(lambda x: len(str(x))<=5,  list(args))[0]
-    try:    txo = deserialize(fetchtx(txid))
-    except: txo = deserialize(fetchtx(txid, 'testnet'))
-    scriptsig = reduce(access, ["ins", vout, "script"], txo)
-    return scriptsig
-
-def get_scriptpubkey(*args):
-    # takes txid, vout or "txid:0"
-    if len(args) == 1 and ':' in args[0]:
-        txid, vout = args[0].split(':')
-    elif len(args) == 2:
-        txid = filter(lambda x: len(str(x))==64, list(args))[0]
-        vout = filter(lambda x: len(str(x))<=5,  list(args))[0]
-    try:    txo = deserialize(fetchtx(txid))
-    except: txo = deserialize(fetchtx(txid, 'testnet'))
-    script_pk = reduce(access, ["ins", vout, "script"], txo)
-    return script_pk
 
 #pizzatxid = 'cca7507897abc89628f450e8b1e0c6fca4ec3f7b34cccf55f3f531c659ff4d79'
 #verify_tx_input(tx, 0, inspk, inder, inpub)

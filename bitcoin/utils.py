@@ -5,8 +5,6 @@ from bitcoin.transaction import *
 from bitcoin.bci import *
 from bitcoin.pyspecials import *
 
-
-
 def ishex(s):
     return set(s).issubset(set('0123456789abcdefABCDEF'))
 
@@ -16,10 +14,10 @@ def isbin(s):
     if len(s)%2 == 1:
         return True
     try: 
-        unhexed = safe_unhexlify(s)
+        safe_unhexlify(s)
+        return False
     except TypeError: 
         return True
-    return True
 
 def satoshi_to_btc(val):
     return (float(val) / 1e8)
@@ -28,9 +26,9 @@ def btc_to_satoshi(val):
     return int(val*1e8 + 0.5)
 
 # Return the address and btc_amount from the parsed uri_string.
-# If either of address or amount is not found that particular
-# return value is None.
+# If either of address or amount is not found that particular return value is None.
 def parse_bitcoin_uri(uri_string):
+    # TODO: fix for new BIP70
     import urlparse
     parsed = urlparse.urlparse(uri_string)
     if parsed.scheme != 'bitcoin':
@@ -284,40 +282,3 @@ txh = "01000000018dd4f5fbd5e980fc02f35c6ce145935b11e284605bf599a13c6d415db55d07a
 # PK = """3081d30201010420{0:064x}a081a53081a2020101302c06072a8648ce3d0101022100{1:064x}3006040100040107042102{2:064x}022100{3:064x}020101a124032200"""
 # PK.strip().format(rki, P, Gx, N)+ compress(privtopub(rk))
 # https://gist.github.com/simcity4242/b0bb0f0281fcf58deec2
-
-
-# https://github.com/richardkiss/pycoin/blob/master/tests/bc_transaction_test.py#L177-L210	
-def check_transaction(tx):
-    """
-    Basic checks that don't depend on any context.
-    Adapted from Bicoin Code: main.cpp
-    """
-    if not tx.txs_in:
-        raise ValidationFailureError("tx.txs_in = []")
-    if not tx.txs_out:
-        raise ValidationFailureError("tx.txs_out = []")
-    # Size limits
-    f = io.BytesIO()
-    tx.stream(f)
-    size = len(f.getvalue())
-    if size > MAX_BLOCK_SIZE:
-        raise ValidationFailureError("size > MAX_BLOCK_SIZE")
-    # Check for negative or overflow output values
-    nValueOut = 0
-    for txout in tx.txs_out:
-        if txout.coin_value < 0 or txout.coin_value > MAX_MONEY:
-            raise ValidationFailureError("txout value negative or out of range")
-        nValueOut += txout.coin_value
-        if nValueOut > MAX_MONEY:
-            raise ValidationFailureError("txout total out of range")
-    # Check for duplicate inputs
-    if [x for x in tx.txs_in if tx.txs_in.count(x) > 1]:
-        raise ValidationFailureError("duplicate inputs")
-    if(tx.is_coinbase()):
-        if len(tx.txs_in[0].script) < 2 or len(tx.txs_in[0].script) > 100:
-            raise ValidationFailureError("bad coinbase script size")
-    else:
-        for txin in tx.txs_in:
-            if not txin:
-                raise ValidationFailureError("prevout is null")
-    return True

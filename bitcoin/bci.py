@@ -10,17 +10,21 @@ except:
     from urllib2 import build_opener
 
 BCI_API = ""
+CHAIN_API = "api-key-id=211a589ce9bbc35de662ee02d51aa860"
 
 def set_api(*args):
     """Set API code for web service"""
     # "api_hex_code_string", "service" or defaults to "bci"
-    if len(args)==2 and args[1] in ("bci"):
+    if len(args)==2 and args[1] in ("bci", "chain"):
         code, svc = args[0], args[1]
     else:
         code, svc = args[0], "bci"
     if svc == "bci":
         global BCI_API
         BCI_API = code
+    if svc == "chain":
+        global CHAIN_API
+        CHAIN_API = code
 
 # Makes a request to a given URL (first arg) and optional params (second arg)
 def make_request(*args):

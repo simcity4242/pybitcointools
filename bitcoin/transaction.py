@@ -41,12 +41,19 @@ def json_changebase(obj, changer):
     return dict((x, json_changebase(obj[x], changer)) for x in obj)
 
 
+def json_hexlify(obj):
+    return json_changebase(obj, lambda x: safe_hexlify(x))
+
+def json_unhexlify(obj):
+    return json_changebase(obj, lambda x: safe_unhexlify(x))
+
+
 # Transaction serialization and deserialization
 
 def deserialize(tx):
     if isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx):
         #tx = bytes(bytearray.fromhex(tx))
-        return json_changebase(deserialize(binascii.unhexlify(tx)),
+        return json_changebase(deserialize(safe_unhexlify(tx)),
                               lambda x: safe_hexlify(x))
     # http://stackoverflow.com/questions/4851463/python-closure-write-to-variable-in-parent-scope
     # Python's scoping rules are demented, requiring me to make pos an object
@@ -204,6 +211,7 @@ def is_bip66(sig):
 def txhash(tx, hashcode=None):
     if isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx):
         tx = safe_unhexlify(tx)
+    hashcode += not hashcode        # fix rare SIGHASH_ALL of value 0
     if hashcode:
         return dbl_sha256(from_str_to_bytes(tx) + from_int_to_bytes(int(hashcode), 4, 'little'))
     else:
@@ -414,8 +422,7 @@ def sign(tx, i, priv, hashcode=SIGHASH_ALL):
 
 
 def signall(tx, priv):
-    # if priv is a dictionary, assume format is
-    # { 'txinhash:txinidx' : privkey }
+    # if priv is a dictionary, assume format is { 'txinhash:txinidx' : privkey }
     if isinstance(priv, dict):
         for e, i in enumerate(deserialize(tx)["ins"]):
             k = priv["%s:%d" % (i["outpoint"]["hash"], i["outpoint"]["index"])]
@@ -454,6 +461,12 @@ def apply_multisignatures(*args):
 
 def is_inp(arg):
     return len(arg) > 64 or "output" in arg or "outpoint" in arg
+
+def is_outp(arg):
+    if isinstance(arg, dict):
+        return len(arg) == 2 and 'value' in arg
+    elif isinstance(arg, string_types):
+        return ':' in arg and is_address(arg.split(":")[0])
 
 
 def mktx(*args, **kwargs):
@@ -651,51 +664,3 @@ def check_transaction(tx):
             if not txin:
                 raise ValidationFailureError("prevout is null")
     return True
-	
-# def verify_txinput(tx, i, script=None, sig=None, pub=None):
-#     """UPDATED: verify Tx input of signed Txs;
-#     without needing spkey, pubkey, der sig"""
-#     i = int(i)
-#     if re.match('^[0-9a-fA-F]*$', tx):
-#         tx = binascii.unhexlify(tx)
-#     if script is not None:
-#         if re.match('^[0-9a-fA-F]*$', script):
-#             script = binascii.unhexlify(script)
-#     else:
-#         script = safe_unhexlify(
-#             get_scriptpubkey(get_outpoints(safe_hexlify(tx), i)))
-#     if sig is not None:
-#         if not re.match('^[0-9a-fA-F]*$', sig):
-#             sig = safe_hexlify(sig)
-#     else:
-#         sig, pubkey = deserialize_script(
-#             get_scriptsig(get_outpoints(safe_hexlify(tx), i)))
-#     if pub is None:
-#         pub = pubkey
-#     hashcode = decode(sig[-2:], 16)
-#     modtx = signature_form(safe_hexlify(tx), i, script, hashcode)
-#     return ecdsa_tx_verify(modtx, sig, pub, hashcode)
-
-# def verify_tx_input(tx, i, script=None, sig=None, pub=None):
-#     """UPDATED: verify Tx input of signed Txs;
-#     without needing spkey, pubkey, der sig"""
-#     i = int(i)
-#     if re.match('^[0-9a-fA-F]*$', tx):
-#         tx = binascii.unhexlify(tx)
-#     if script is not None:
-#         if re.match('^[0-9a-fA-F]*$', script):
-#             script = binascii.unhexlify(script)
-#     else:
-#         script = safe_unhexlify(
-#             get_scriptpubkey(get_outpoints(safe_hexlify(tx), i)))
-#     if sig is not None:
-#         if not re.match('^[0-9a-fA-F]*$', sig):
-#             sig = safe_hexlify(sig)
-#     else:
-#         sig, pubkey = deserialize_script(
-#             get_scriptsig(get_outpoints(safe_hexlify(tx), i)))
-#     if pub is None:
-#         pub = pubkey
-#     hashcode = decode(sig[-2:], 16)
-#     modtx = signature_form(safe_hexlify(tx), i, script, hashcode)
-#     return ecdsa_tx_verify(modtx, sig, pub, hashcode)
