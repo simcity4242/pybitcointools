@@ -817,7 +817,7 @@ class BitcoinCore_TransactionValid(unittest.TestCase):
               ["b7978cc96e59a8b13e0865d3f95657561a7f725be952438637475920bac9eb21", 1, "76a914bef80ecf3a44500fda1bc92176e442891662aed288ac"]
               ],
               "01000000023d6cf972d4dff9c519eff407ea800361dd0a121de1da8b6f4138a2f25de864b4000000008a4730440220ffda47bfc776bcd269da4832626ac332adfca6dd835e8ecd83cd1ebe7d709b0e022049cffa1cdc102a0b56e0e04913606c70af702a1149dc3b305ab9439288fee090014104266abb36d66eb4218a6dd31f09bb92cf3cfa803c7ea72c1fc80a50f919273e613f895b855fb7465ccbc8919ad1bd4a306c783f22cd3227327694c4fa4c1c439affffffff21ebc9ba20594737864352e95b727f1a565756f9d365083eb1a8596ec98c97b7010000008a4730440220503ff10e9f1e0de731407a4a245531c9ff17676eda461f8ceeb8c06049fa2c810220c008ac34694510298fa60b3f000df01caa244f165b727d4896eb84f81e46bcc4014104266abb36d66eb4218a6dd31f09bb92cf3cfa803c7ea72c1fc80a50f919273e613f895b855fb7465ccbc8919ad1bd4a306c783f22cd3227327694c4fa4c1c439affffffff01f0da5200000000001976a914857ccd42dded6df32949d4646dfa10a92458cfaa88ac00000000"
-             ],
+             ]
 
         ]
 
@@ -828,34 +828,37 @@ class BitcoinCore_TransactionValid(unittest.TestCase):
                 prevout_txin, prevout_vout, prevout_spk = prevout_item
                 calculated = get_outpoints(txh, i)
                 actual = "%s:%d" % (prevout_txin, prevout_vout)
-
                 self.assertEqual(actual, calculated, "get_outpoint at index %d failed" % int(i))
-
+                #assert actual == calculated
                 final_scriptsig = deserialize_script(deserialize(txh)['ins'][i]['script'])
 
                 # fetch
                 txtype = None
-                if str(final_scriptsig[0])[:2] == '30' and is_pubkey(str(final_scriptsig[1])):
+                if all([x in deserialize_script(prevout_spk) for x in [118, 169, 136]]):
                     txtype = 'p2pkh'
-                elif 0xae in final_scriptsig:
+                elif (deserialize_script(prevout_spk)[-1] == 0xae) or (0xae in deserialize_script(prevout_spk)):
                     txtype = 'p2sh'
                     
                 if txtype == 'p2pkh':
+                    der, pub = final_scriptsig
+                    #assert verify_tx_input(txh, int(i), prevout_spk, der, pub)
                     self.assertTrue(
-                        verify_tx_input(txh, int(i), prevout_spk, *final_scriptsig),
+                        verify_tx_input(txh, int(i), prevout_spk, der, pub),
                         "Tx Verif'n Failed:\nRawTx %s\nTxID In %s\nIndex %s\nScriptPubKey %s\nDER %s\nPub(s) %s" % (
-                            txh, prevout_txin, str(prevout_vout), prevout_spk, final_scriptsig[0], final_scriptsig[1]
+                            txh, prevout_txin, str(prevout_vout), prevout_spk, der, pub)
                         )
-                    )
                 elif txtype == 'p2sh':
                     der = final_scriptsig[1] if final_scriptsig[0] is None else final_scriptsig[0]
-                    pubs = [final_scriptsig[-1]]
+                    pubs = [x for x in deserialize_script(prevout_spk) if is_pubkey(x)]
+                    #assert any([verify_tx_input(txh, int(i), prevout_spk, der, x) for x in pubs])
                     self.assertTrue(
                         any([verify_tx_input(txh, int(i), prevout_spk, der, x) for x in pubs]),
                         "Tx Verif'n Failed:\nRawTx %s\nTxID In %s\nIndex %s\nScriptPubKey %s\nDER %s\nPub(s) %s" % (
                             txh, prevout_txin, str(prevout_vout), prevout_spk, der, repr(pubs)
                         )
                     )
+                else:
+                    raise Exception("Unknown Tx Type")
 
 if __name__ == '__main__':
     unittest.main()                    

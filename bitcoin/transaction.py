@@ -211,10 +211,9 @@ def is_bip66(sig):
 def txhash(tx, hashcode=None):
     if isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx):
         tx = safe_unhexlify(tx)
-    hashcode += not hashcode        # fix rare SIGHASH_ALL of value 0
     if hashcode:
         return dbl_sha256(from_str_to_bytes(tx) + from_int_to_bytes(int(hashcode), 4, 'little'))
-    else:
+    else:       # if SIGHASH_ALL = 0
         return safe_hexlify(bin_dbl_sha256(tx)[::-1])
 
 
@@ -287,7 +286,7 @@ def script_to_address(script, vbyte=0):
         if vbyte in [111, 196]:     # Testnet
             scripthash_byte = 196
         else:
-            scripthash_byte = 5
+            scripthash_byte = 0x05 if not vbyte else vbyte
         return bin_to_b58check(script[2:-1], scripthash_byte)   # BIP0016 scripthash addresses
 
 
@@ -301,8 +300,7 @@ scriptaddr = p2sh_scriptaddr
 
 def deserialize_script(script):
     if isinstance(script, str) and re.match('^[0-9a-fA-F]*$', script):
-       return json_changebase(deserialize_script(binascii.unhexlify(script)),
-                              lambda x: safe_hexlify(x))
+       return json_hexlify(deserialize_script(binascii.unhexlify(script)))
     out, pos = [], 0
     while pos < len(script):
         code = from_byte_to_int(script[pos])
@@ -400,11 +398,8 @@ def verify_tx_input(tx, i, script, sig, pub):
     if not re.match('^[0-9a-fA-F]*$', sig):
         sig = safe_hexlify(sig)
     hashcode = decode(sig[-2:], 16)
-    hashcode += (not hashcode)      # RARE: SIGHASH_ALL != 0 (change to 1)
-
     modtx = signature_form(tx, int(i), script, hashcode)
     return ecdsa_tx_verify(modtx, sig, pub, hashcode)
-
 
 def sign(tx, i, priv, hashcode=SIGHASH_ALL):
     i = int(i)
@@ -562,18 +557,6 @@ def mksend(*args, **kwargs):
     return mktx(ins, outputs2, **kwargs)
 
 	
-def create_signable_tx(rawtx, i, hashcode=SIGHASH_ALL):
-    # signature form which automatically inserts scriptPubKey
-    if isinstance(rawtx, dict):
-        return create_signable_tx(serialize(rawtx), i, hashcode)
-    i = int(i)
-    newtx = copy.deepcopy(deserialize(rawtx))
-    for tx in rawtx['ins']:
-        tx['script'] = ''        # asserting all inputs' scriptSigs are deleted
-    outpoint = "%s:%d" % (newtx['ins'][int(i)]["outpoint"]["hash"], newtx['ins'][int(i)]["outpoint"]["index"])
-    newtx['ins'][i]['script'] = get_scriptpubkey(outpoint)
-    return serialize(rawtx) #+ safe_hexlify(encode(hashcode, 256, 4)[::-1])
-
 # takes "txid:0"
 def get_script(*args):
     # last param can be 'ins', 'outs'
@@ -592,6 +575,7 @@ def get_script(*args):
         return {'ins': scriptsig, 'outs': script_pk}
     return scriptsig if source == 'ins' else script_pk
 
+
 # takes "txid:vout"
 def get_scriptsig(outpoint):
     """Return scriptSig for 'txid:index'"""
@@ -602,6 +586,7 @@ def get_scriptsig(outpoint):
     scriptsig = reduce(access, ["ins", vout, "script"], txo)
     return scriptsig
 
+
 # takes "txid:vout" 
 def get_scriptpubkey(outpoint):
     """Return scriptPubKey for 'txid:index'"""
@@ -611,6 +596,7 @@ def get_scriptpubkey(outpoint):
     except: txo = deserialize(fetchtx(txid, 'testnet'))
     script_pubkey = reduce(access, ["outs", vout, "script"], txo)
     return script_pubkey
+
 
 # get "TXID:vout" from raw Tx
 def get_outpoints(rawtx, i=None):
@@ -629,30 +615,39 @@ def get_outpoints(rawtx, i=None):
     assert all([x[64] == ':' for x in outpoints])
     return outpoints if i is None else outpoints[i]
 
+
 # https://github.com/richardkiss/pycoin/blob/master/tests/bc_transaction_test.py#L177-L210	
 def check_transaction(tx):
     """
     Basic checks that don't depend on any context.
     Adapted from Bicoin Code: main.cpp
     """
-    if not tx.txs_in:
-        raise ValidationFailureError("tx.txs_in = []")
-    if not tx.txs_out:
-        raise ValidationFailureError("tx.txs_out = []")
+    MAX_BLOCK_SIZE = 1000000
+    MAX_MONEY = 21000000 * 100000000
+    if isinstance(tx, string_types) and re.match('^[0-9a-fA-F]*$', tx):
+        txo = deserialize(tx)
+    elif isinstance(tx, dict):
+        txo = tx
+
+    if 'ins' not in txo:
+        raise Exception("TxIns missing")
+    if 'outs' not in txo:
+        raise Exception("TxOuts missing")
+
     # Size limits
-    f = io.BytesIO()
-    tx.stream(f)
-    size = len(f.getvalue())
-    if size > MAX_BLOCK_SIZE:
-        raise ValidationFailureError("size > MAX_BLOCK_SIZE")
+    #f = io.BytesIO(); tx.stream(f); size = len(f.getvalue())
+    if len(tx) > MAX_BLOCK_SIZE:
+        raise Exception("size > MAX_BLOCK_SIZE")
+
     # Check for negative or overflow output values
     nValueOut = 0
-    for txout in tx.txs_out:
-        if txout.coin_value < 0 or txout.coin_value > MAX_MONEY:
-            raise ValidationFailureError("txout value negative or out of range")
-        nValueOut += txout.coin_value
+    for txout in txo['outs']:
+        if txout['value'] < 0 or txout['value'] > MAX_MONEY:
+            raise Exception("txout value negative or out of range")
+        nValueOut += txout['value']
         if nValueOut > MAX_MONEY:
-            raise ValidationFailureError("txout total out of range")
+            raise Exception("txout total out of range")
+
     # Check for duplicate inputs
     if [x for x in tx.txs_in if tx.txs_in.count(x) > 1]:
         raise ValidationFailureError("duplicate inputs")

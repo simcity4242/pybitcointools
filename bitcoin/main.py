@@ -349,20 +349,34 @@ def subtract_privkeys(p1, p2):
     k2 = decode_privkey(p2, f2)
     return encode_privkey((decode_privkey(p1, f1) - k2) % N, f1)
 
+
+def wif_to_sec(wif):
+    formt = get_privkey_format(wif)
+    sec_formt = 'hex_compressed' if 'compressed' in formt else 'hex'
+    return encode_privkey(decode_privkey(wif), sec_formt)
+
+
 def is_privkey(priv):
-    try:    get_privkey_format(priv)
-    except: return False
-    return True
+    try:
+        get_privkey_format(str(priv))
+        return True
+    except:
+        return False
 
 def is_pubkey(pubkey):
-    pubkey = bytearray.fromhex(pubkey) if re.match('^[0-9a-fA-F]*$', pubkey) else bytearray(pubkey)
-    return pubkey[0] in (2, 3, 4) and len(pubkey) in (33, 65)
+    try:
+        get_pubkey_format(pubkey)
+        return True
+    except:
+        return False
 
 def is_address(addr):
-    if addr[0] not in ('mn123'):
+    try:
+        b58check_to_hex(str(addr))
+        return True
+    except AssertionError:
         return False
-    data = changebase(addr, 58, 256)
-    return bin_dbl_sha256(data[:-4])[:4] == data[-4:]
+
 
 # Hashes
 
