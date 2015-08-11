@@ -136,13 +136,13 @@ class TestElectrumWalletInternalConsistency(unittest.TestCase):
 #
 #             sig = os.popen('electrum -w %s signmessage %s %s' % (self.wallet, addy, msg)).readlines()[-1].strip()
 #             self.assertTrue(
-#                 ecdsa_msg_verify(msg, sig, pub),
+#                 ecdsa_verify(msg, sig, pub),
 #                 "Verification error. Details:\nmsg: %s\nsig: %s\npriv: %s\naddy: %s\npub: %s" % (
 #                     msg, sig, priv, addy, pub
 #                 )
 #             )
 #
-#             rec = ecdsa_msg_recover(msg, sig)
+#             rec = ecdsa_recover(msg, sig)
 #             self.assertEqual(
 #                 pub,
 #                 rec,
@@ -151,7 +151,7 @@ class TestElectrumWalletInternalConsistency(unittest.TestCase):
 #                 )
 #             )
 #
-#             mysig = ecdsa_msg_sign(msg, priv)
+#             mysig = ecdsa_sign(msg, priv)
 #             self.assertEqual(
 #                 os.popen('electrum -w %s verifymessage %s %s %s' % (self.wallet, addy, mysig, msg)).read().strip(),
 #                 "true",
@@ -733,7 +733,7 @@ class BitcoinCore_SignatureValidation(unittest.TestCase):
             pkwif, sig, addr = str(test['wif']), str(test['signature']), str(test['address'])
             priv = encode_privkey(decode_privkey(pkwif), 'hex')
             pubkey = privtopub(priv)
-            pub_recovered = ecdsa_msg_recover(addr, sig)
+            pub_recovered = ecdsa_recover(addr, sig)
             self.assertEqual(
                 pubkey,
                 pub_recovered,
@@ -800,11 +800,11 @@ class BitcoinCore_TransactionValid(unittest.TestCase):
             "0100000001b14bdcbc3e01bdaad36cc08e81e69c82e1060bc14e518db2b49aa43ad90ba26000000000490047304402203f16c6f40162ab686621ef3000b04e75418a0c0cb2d8aebeac894ae360ac1e780220ddc15ecdfc3507ac48e1681a33eb60996631bf6bf5bc0a0682c4db743ce7ca2b01ffffffff0140420f00000000001976a914660d4ef3a743e3e696ad990364e555c271ad504b88ac00000000"
            ],
            
-           [
-            [["406b2b06bcd34d3c8733e6b79f7a394c8a431fbf4ff5ac705c93f4076bb77602", 0, "76a914dc44b1164188067c3a32d4780f5996fa14a4f2d988ac"]
-             ],
-             "01000000010276b76b07f4935c70acf54fbf1f438a4c397a9fb7e633873c4dd3bc062b6b40000000008c493046022100d23459d03ed7e9511a47d13292d3430a04627de6235b6e51a40f9cd386f2abe3022100e7d25b080f0bb8d8d5f878bba7d54ad2fda650ea8d158a33ee3cbd11768191fd004104b0e2c879e4daf7b9ab68350228c159766676a14f5815084ba166432aab46198d4cca98fa3e9981d0a90b2effc514b76279476550ba3663fdcaff94c38420e9d5000000000100093d00000000001976a9149a7b0f3b80c6baaeedce0a0842553800f832ba1f88ac00000000"
-            ],
+           # [
+           #  [["406b2b06bcd34d3c8733e6b79f7a394c8a431fbf4ff5ac705c93f4076bb77602", 0, "76a914dc44b1164188067c3a32d4780f5996fa14a4f2d988ac"]
+           #   ],
+           #   "01000000010276b76b07f4935c70acf54fbf1f438a4c397a9fb7e633873c4dd3bc062b6b40000000008c493046022100d23459d03ed7e9511a47d13292d3430a04627de6235b6e51a40f9cd386f2abe3022100e7d25b080f0bb8d8d5f878bba7d54ad2fda650ea8d158a33ee3cbd11768191fd004104b0e2c879e4daf7b9ab68350228c159766676a14f5815084ba166432aab46198d4cca98fa3e9981d0a90b2effc514b76279476550ba3663fdcaff94c38420e9d5000000000100093d00000000001976a9149a7b0f3b80c6baaeedce0a0842553800f832ba1f88ac00000000"
+           #  ],
             
             [
              [["0000000000000000000000000000000000000000000000000000000000000100", 0,  "76a9145b6462475454710f3c22f5fdf0b40704c92f25c388ad51"]
@@ -836,19 +836,19 @@ class BitcoinCore_TransactionValid(unittest.TestCase):
                 txtype = None
                 if all([x in deserialize_script(prevout_spk) for x in [118, 169, 136]]):
                     txtype = 'p2pkh'
-                elif (deserialize_script(prevout_spk)[-1] == 0xae) or (0xae in deserialize_script(prevout_spk)):
+                elif 0xae in deserialize_script(prevout_spk):
                     txtype = 'p2sh'
                     
                 if txtype == 'p2pkh':
                     der, pub = final_scriptsig
                     #assert verify_tx_input(txh, int(i), prevout_spk, der, pub)
                     self.assertTrue(
-                        verify_tx_input(txh, int(i), prevout_spk, der, pub),
-                        "Tx Verif'n Failed:\nRawTx %s\nTxID In %s\nIndex %s\nScriptPubKey %s\nDER %s\nPub(s) %s" % (
-                            txh, prevout_txin, str(prevout_vout), prevout_spk, der, pub)
+                        verify_tx_input(txh, int(i), prevout_spk, *final_scriptsig),
+                        "Tx Verif'n Failed:\nRawTx %s\nTxID In %s:%s\nScriptPubKey %s\nSigning Index %s\nDER %s\nPub(s) %s" % (
+                            txh, prevout_txin, str(prevout_vout), prevout_spk, str(i), final_scriptsig[0], final_scriptsig[1])
                         )
                 elif txtype == 'p2sh':
-                    der = final_scriptsig[1] if final_scriptsig[0] is None else final_scriptsig[0]
+                    der = final_scriptsig[1]
                     pubs = [x for x in deserialize_script(prevout_spk) if is_pubkey(x)]
                     #assert any([verify_tx_input(txh, int(i), prevout_spk, der, x) for x in pubs])
                     self.assertTrue(

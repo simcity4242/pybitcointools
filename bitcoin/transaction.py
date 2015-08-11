@@ -223,7 +223,7 @@ def bin_txhash(tx, hashcode=None):
 
 def ecdsa_tx_sign(tx, priv, hashcode=SIGHASH_ALL):
     """Returns DER sig for rawtx w/ hashcode apppended"""
-    rawsig = ecdsa_raw_sign(bin_txhash(tx, hashcode), priv)
+    rawsig = ecdsa_raw_sign(bin_txhash(tx, hashcode), priv, low_s=True)
     return der_encode_sig(*rawsig) + encode(hashcode, 16, 2)
 
 
@@ -616,46 +616,46 @@ def get_outpoints(rawtx, i=None):
     return outpoints if i is None else outpoints[i]
 
 
-# https://github.com/richardkiss/pycoin/blob/master/tests/bc_transaction_test.py#L177-L210	
-def check_transaction(tx):
-    """
-    Basic checks that don't depend on any context.
-    Adapted from Bicoin Code: main.cpp
-    """
-    MAX_BLOCK_SIZE = 1000000
-    MAX_MONEY = 21000000 * 100000000
-    if isinstance(tx, string_types) and re.match('^[0-9a-fA-F]*$', tx):
-        txo = deserialize(tx)
-    elif isinstance(tx, dict):
-        txo = tx
-
-    if 'ins' not in txo:
-        raise Exception("TxIns missing")
-    if 'outs' not in txo:
-        raise Exception("TxOuts missing")
-
-    # Size limits
-    #f = io.BytesIO(); tx.stream(f); size = len(f.getvalue())
-    if len(tx) > MAX_BLOCK_SIZE:
-        raise Exception("size > MAX_BLOCK_SIZE")
-
-    # Check for negative or overflow output values
-    nValueOut = 0
-    for txout in txo['outs']:
-        if txout['value'] < 0 or txout['value'] > MAX_MONEY:
-            raise Exception("txout value negative or out of range")
-        nValueOut += txout['value']
-        if nValueOut > MAX_MONEY:
-            raise Exception("txout total out of range")
-
-    # Check for duplicate inputs
-    if [x for x in tx.txs_in if tx.txs_in.count(x) > 1]:
-        raise ValidationFailureError("duplicate inputs")
-    if(tx.is_coinbase()):
-        if len(tx.txs_in[0].script) < 2 or len(tx.txs_in[0].script) > 100:
-            raise ValidationFailureError("bad coinbase script size")
-    else:
-        for txin in tx.txs_in:
-            if not txin:
-                raise ValidationFailureError("prevout is null")
-    return True
+# https://github.com/richardkiss/pycoin/blob/master/tests/bc_transaction_test.py#L177-L210
+# def check_transaction(tx):
+#     """
+#     Basic checks that don't depend on any context.
+#     Adapted from Bicoin Code: main.cpp
+#     """
+#     MAX_BLOCK_SIZE = 1000000
+#     MAX_MONEY = 21000000 * 100000000
+#     if isinstance(tx, string_types) and re.match('^[0-9a-fA-F]*$', tx):
+#         txo = deserialize(tx)
+#     elif isinstance(tx, dict):
+#         txo = tx
+#
+#     if 'ins' not in txo:
+#         raise Exception("TxIns missing")
+#     if 'outs' not in txo:
+#         raise Exception("TxOuts missing")
+#
+#     # Size limits
+#     #f = io.BytesIO(); tx.stream(f); size = len(f.getvalue())
+#     if len(tx) > MAX_BLOCK_SIZE:
+#         raise Exception("size > MAX_BLOCK_SIZE")
+#
+#     # Check for negative or overflow output values
+#     nValueOut = 0
+#     for txout in txo['outs']:
+#         if txout['value'] < 0 or txout['value'] > MAX_MONEY:
+#             raise Exception("txout value negative or out of range")
+#         nValueOut += txout['value']
+#         if nValueOut > MAX_MONEY:
+#             raise Exception("txout total out of range")
+#
+#     # Check for duplicate inputs
+#     if [x for x in tx.txs_in if tx.txs_in.count(x) > 1]:
+#         raise ValidationFailureError("duplicate inputs")
+#     if(tx.is_coinbase()):
+#         if len(tx.txs_in[0].script) < 2 or len(tx.txs_in[0].script) > 100:
+#             raise ValidationFailureError("bad coinbase script size")
+#     else:
+#         for txin in tx.txs_in:
+#             if not txin:
+#                 raise ValidationFailureError("prevout is null")
+#     return True

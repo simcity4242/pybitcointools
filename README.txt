@@ -101,9 +101,9 @@ Fun stuff with json:
 * add                  : (key1, key2) -> key1 + key2 (works on privkeys or pubkeys)
 * multiply             : (pubkey, privkey) -> returns pubkey * privkey
 
-* ecdsa_msg_sign           : (message, privkey) -> sig
-* ecdsa_msg_verify         : (message, sig, pubkey) -> True/False
-* ecdsa_msg_recover        : (message, sig) -> pubkey
+* ecdsa_sign           : (message, privkey) -> sig
+* ecdsa_verify         : (message, sig, pubkey) -> True/False
+* ecdsa_recover        : (message, sig) -> pubkey
 
 * random_key           : () -> privkey
 * random_electrum_seed : () -> electrum seed

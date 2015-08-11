@@ -529,7 +529,6 @@ pubtoaddr = pubkey_to_address
 
 # EDCSA
 
-
 def encode_sig(v, r, s):
     """Takes vbyte and (r,s) as ints, returns base64 string"""
     vb, rb, sb = from_int_to_byte(v), encode(r, 256, 32), encode(s, 256, 32)
@@ -559,7 +558,8 @@ def deterministic_generate_k(msghash, priv):
 
 # MSG SIGNING
 
-def ecdsa_raw_sign(msghash, priv, low_s=True):
+# FIXME: rename functions?
+def ecdsa_raw_sign(msghash, priv, low_s=False):
     """sign msg hash (z) with privkey & RFC6979 (k);
     returns signature (v,r,s) with low s (BIP66) by default"""
     z = hash_to_int(msghash)
@@ -567,21 +567,22 @@ def ecdsa_raw_sign(msghash, priv, low_s=True):
 
     r, y = fast_multiply(G, k)
     priv = decode_privkey(priv)
-    s = inv(k, N) * (z + r * priv) % N
+    s = inv(k, N) * (z + r*priv) % N
     if low_s:
         s = N-s if s>N//2 else s
     return 27+(y % 2), r, s		# vbyte, r, s
 
 
-def ecdsa_msg_sign(msg, priv):
+def ecdsa_sign(msg, priv):
     """Sign a msg with privkey, returning base64 signature"""
     sighash = electrum_sig_hash(msg)
     v, r, s = ecdsa_raw_sign(sighash, priv)
+    #return encode_sig(*ecdsa_raw_sign(electrum_sig_hash(msg), priv))
     return encode_sig(v, r, s)
 
 
 def ecdsa_raw_verify(msghash, vrs, pub):
-    """Boolean sig ver'n using msghash, signature (v,r,s) and pubkey"""
+    """Verifies signature against pubkey for digest hash (msghash)"""
     v, r, s = vrs
 
     w = inv(s, N)
@@ -593,24 +594,24 @@ def ecdsa_raw_verify(msghash, vrs, pub):
 
     return r == x
 
-def ecdsa_addr_verify(addr, msg, b64sig):
-    sig = base64.b64decode(b64sig)
-    msg_hash = electrum_sig_hash(msg)
-    pubkey_recovered = ecdsa_msg_recover(msg_hash, sig)
-    magic = get_version_byte(addr)
-    return addr == pubtoaddr(pubkey_recovered, magicbyte=magic)
+# FIXME:
+# def ecdsa_addr_verify(addr, b64sig, msg=''):
+#     msghash = electrum_sig_hash(msg)
+#     pubkey_recovered = ecdsa_recover(msghash, b64sig)
+#     magic = get_version_byte(addr)
+#     return addr == pubtoaddr(pubkey_recovered, magicbyte=magic)
 
-def ecdsa_msg_verify(msg, sig, pub):
+def ecdsa_verify(msg, sig, pub):
     """Verify (base64) signature of a message using pubkey"""
     sighash = electrum_sig_hash(msg)
     vrs = decode_sig(sig)
+    #return ecdsa_raw_verify(electrum_sig_hash(msg), decode_sig(sig), pub)
     return ecdsa_raw_verify(sighash, vrs, pub)
 
 
 def ecdsa_raw_recover(msghash, vrs):
     """Recovers (x,y) point from msghash and sig values (v,r,s)"""
     v, r, s = vrs
-
     x = r
     xcubedaxb = (x*x*x+A*x+B) % P
     beta = pow(xcubedaxb, (P+1)//4, P)
@@ -631,11 +632,12 @@ def ecdsa_raw_recover(msghash, vrs):
     return Q
 
 
-def ecdsa_msg_recover(msg, sig):
+def ecdsa_recover(msg, sig):
     """Recover pubkey from message and base64 signature"""
     sighash = electrum_sig_hash(msg)
     vrs = decode_sig(sig)
     Q = ecdsa_raw_recover(sighash, vrs)
+    # return encode_pubkey(ecdsa_raw_recover(electrum_sig_hash(msg), decode_sig(sig)), 'hex')
     return encode_pubkey(Q, 'hex')
 
 
