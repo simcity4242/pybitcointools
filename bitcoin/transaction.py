@@ -182,13 +182,23 @@ def der_decode_sig(sig):
     #assert 3*2 + leftlen + 3*2 + rightlen + 1*2 == len(sig) 	
     return (None, decode(left, 16), decode(right, 16))
 
+def deserialize_der(sig):
+    sig = bytes(bytearray.fromhex(sig)) if re.match('^[0-9a-fA-F]*$', sig) else bytes(bytearray(from_string_to_bytes(sig)))
+    totallen = decode(sig[1], 256) + 2
+    rlen = decode(sig[3], 256)
+    slen = decode(sig[5+rlen], 256)
+    sighashlen = len(sig) - totallen
+    r = changebase(sig[4:4+rlen], 256, 16, rlen*2)
+    s = changebase(sig[6+rlen:6+slen+rlen], 256, 16, slen*2)
+    sighash = changebase(sig[6+rlen+slen:], 256, 16, sighashlen*2)
+    return [r, s, sighash]
 
 def is_bip66(sig):
     """Checks hex DER sig for BIP66 consistency"""
     sig = bytearray.fromhex(sig) if re.match('^[0-9a-fA-F]*$', sig) else bytearray(from_string_to_bytes(sig))
     if (sig[0] == 0x30) and (sig[1] == len(sig)-2):
         sig.extend(b"\1")		# add SIGHASH for BIP66 check
-    #assert (sig[-1] & 124 == 0) and (not not sig[-1]), "Bad SIGHASH value"
+    #assert sig[-1] & 124 == 0, "Bad SIGHASH value, 0x%s" % (changebase(str(sig[-1]), 10, 16, 2))
     
     if len(sig) < 9 or len(sig) > 73: return False
     if (sig[0] != 0x30): return False
@@ -209,8 +219,7 @@ def is_bip66(sig):
     return True
 
 def txhash(tx, hashcode=None):
-    if isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx):
-        tx = safe_unhexlify(tx)
+    tx = safe_unhexlify(tx) if (isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx)) else tx
     if hashcode:
         return dbl_sha256(from_str_to_bytes(tx) + from_int_to_bytes(int(hashcode), 4, 'little'))
     else:       # if SIGHASH_ALL = 0
@@ -624,10 +633,7 @@ def get_outpoints(rawtx, i=None):
 #     """
 #     MAX_BLOCK_SIZE = 1000000
 #     MAX_MONEY = 21000000 * 100000000
-#     if isinstance(tx, string_types) and re.match('^[0-9a-fA-F]*$', tx):
-#         txo = deserialize(tx)
-#     elif isinstance(tx, dict):
-#         txo = tx
+#     txo = deserialize(tx) if (isinstance(tx, string_types) and re.match('^[0-9a-fA-F]*$', tx)) else tx
 #
 #     if 'ins' not in txo:
 #         raise Exception("TxIns missing")
@@ -635,18 +641,17 @@ def get_outpoints(rawtx, i=None):
 #         raise Exception("TxOuts missing")
 #
 #     # Size limits
-#     #f = io.BytesIO(); tx.stream(f); size = len(f.getvalue())
-#     if len(tx) > MAX_BLOCK_SIZE:
-#         raise Exception("size > MAX_BLOCK_SIZE")
+#     if len(safe_unhexlify(serialize(txo))) > MAX_BLOCK_SIZE:
+#         raise Exception("size > %d" % MAX_BLOCK_SIZE)
 #
 #     # Check for negative or overflow output values
 #     nValueOut = 0
-#     for txout in txo['outs']:
-#         if txout['value'] < 0 or txout['value'] > MAX_MONEY:
-#             raise Exception("txout value negative or out of range")
+#     for i, txout in enumerate(txo['outs']):
+#         if not (0 <= txout['value'] < MAX_MONEY):
+#             raise Exception("TxOut %d: value negative or out of range" % i)
 #         nValueOut += txout['value']
 #         if nValueOut > MAX_MONEY:
-#             raise Exception("txout total out of range")
+#             raise Exception("TxOuts' total out of range")
 #
 #     # Check for duplicate inputs
 #     if [x for x in tx.txs_in if tx.txs_in.count(x) > 1]:
