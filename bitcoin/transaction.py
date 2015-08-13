@@ -252,13 +252,11 @@ def ecdsa_tx_recover(tx, sig, hashcode=SIGHASH_ALL):
 
 def mk_pubkey_script(addr):
     # Keep the auxiliary functions around for altcoins' sake
-    hash160 = b58check_to_bin(addr)
-    return safe_hexlify('\x76\xa9\x14' + hash160 + '\x88\xac')
+    return '76a914' + b58check_to_hex(addr) + '88ac'
 
 
 def mk_scripthash_script(addr):
-    hash160 = b58check_to_bin(addr)
-    return safe_hexlify('\xa9\x14' + hash160 + '\x87')
+    return 'a914' + b58check_to_hex(addr) + '87'
 
 def mk_opreturn(msg, *args):
     orhex = serialize_script([0x6a, msg])
