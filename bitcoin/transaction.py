@@ -1,60 +1,17 @@
 #!/usr/bin/python
-import binascii, re, json, copy, sys
+import binascii, re, json, copy, sys, binascii
 from bitcoin.main import *
 from _functools import reduce
-from bitcoin.pyspecials import st, by, safe_hexlify, safe_unhexlify, from_int_to_byte, from_str_to_bytes, from_bytes_to_int, from_int_to_bytes, string_types
+from bitcoin.pyspecials import *
 from bitcoin.bci import fetchtx
 #from bitcoin.utils import create_signable_tx, get_script, get_scriptpubkey, get_scriptsig, get_outpoints
-
-### Hex to bin converter and vice versa for objects
-
-def json_is_base(obj, base):
-    if not is_python2 and isinstance(obj, bytes):
-        return False
-    alpha = get_code_string(base)
-    if isinstance(obj, string_types):
-        for i in range(len(obj)):
-            if alpha.find(obj[i]) == -1:
-                return False
-        return True
-    elif isinstance(obj, int_types) or obj is None:
-        return True
-    elif isinstance(obj, list):
-        for i in range(len(obj)):
-            if not json_is_base(obj[i], base):
-                return False
-        return True
-    else:
-        for x in obj:
-            if not json_is_base(obj[x], base):
-                return False
-        return True
-
-
-def json_changebase(obj, changer):
-    if isinstance(obj, string_or_bytes_types):
-        return changer(obj)
-    elif isinstance(obj, int_types) or obj is None:
-        return obj
-    elif isinstance(obj, list):
-        return [json_changebase(x, changer) for x in obj]
-    return dict((x, json_changebase(obj[x], changer)) for x in obj)
-
-
-def json_hexlify(obj):
-    return json_changebase(obj, lambda x: safe_hexlify(x))
-
-def json_unhexlify(obj):
-    return json_changebase(obj, lambda x: safe_unhexlify(x))
-
 
 # Transaction serialization and deserialization
 
 def deserialize(tx):
     if isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx):
         #tx = bytes(bytearray.fromhex(tx))
-        return json_changebase(deserialize(safe_unhexlify(tx)),
-                              lambda x: safe_hexlify(x))
+        return json_hexlify(deserialize(binascii.unhexlify(tx)))
     # http://stackoverflow.com/questions/4851463/python-closure-write-to-variable-in-parent-scope
     # Python's scoping rules are demented, requiring me to make pos an object
     # so that it is call-by-reference
@@ -624,41 +581,44 @@ def get_outpoints(rawtx, i=None):
 
 
 # https://github.com/richardkiss/pycoin/blob/master/tests/bc_transaction_test.py#L177-L210
-# def check_transaction(tx):
-#     """
-#     Basic checks that don't depend on any context.
-#     Adapted from Bicoin Code: main.cpp
-#     """
-#     MAX_BLOCK_SIZE = 1000000
-#     MAX_MONEY = 21000000 * 100000000
-#     txo = deserialize(tx) if (isinstance(tx, string_types) and re.match('^[0-9a-fA-F]*$', tx)) else tx
-#
-#     if 'ins' not in txo:
-#         raise Exception("TxIns missing")
-#     if 'outs' not in txo:
-#         raise Exception("TxOuts missing")
-#
-#     # Size limits
-#     if len(safe_unhexlify(serialize(txo))) > MAX_BLOCK_SIZE:
-#         raise Exception("size > %d" % MAX_BLOCK_SIZE)
-#
-#     # Check for negative or overflow output values
-#     nValueOut = 0
-#     for i, txout in enumerate(txo['outs']):
-#         if not (0 <= txout['value'] < MAX_MONEY):
-#             raise Exception("TxOut %d: value negative or out of range" % i)
-#         nValueOut += txout['value']
-#         if nValueOut > MAX_MONEY:
-#             raise Exception("TxOuts' total out of range")
-#
-#     # Check for duplicate inputs
-#     if [x for x in tx.txs_in if tx.txs_in.count(x) > 1]:
-#         raise ValidationFailureError("duplicate inputs")
-#     if(tx.is_coinbase()):
-#         if len(tx.txs_in[0].script) < 2 or len(tx.txs_in[0].script) > 100:
-#             raise ValidationFailureError("bad coinbase script size")
-#     else:
-#         for txin in tx.txs_in:
-#             if not txin:
-#                 raise ValidationFailureError("prevout is null")
-#     return True
+def check_transaction(tx):
+    MAX_BLOCK_SIZE = 1000000
+    MAX_MONEY = 21000000 * 100000000
+    if isinstance(tx, string_types):
+        if re.match('^[0-9a-fA-F]*$', tx):
+            txo = json_unhexlify(deserialize(tx))
+        else:
+            txo = deserialize(tx)
+    elif isinstance(tx, dict) and json_is_base(tx, 16):
+        txo = json_unhexlify(tx)
+    else: raise Exception("JSON must be base16)")  # Dict with base256 *values*
+
+    if 'ins' not in txo:
+        raise Exception("TxIns missing")
+    if 'outs' not in txo:
+        raise Exception("TxOuts missing")
+
+    #Size limits
+    if len(serialize(txo)) > MAX_BLOCK_SIZE:
+        raise Exception("size > %d" % MAX_BLOCK_SIZE)
+
+    #Check for negative or overflow output values
+    nValueOut = 0
+    for i, txout in enumerate(txo['outs']):
+        if not (0 <= txout['value'] <= MAX_MONEY):
+            raise Exception("TxOut %d: value negative or out of range" % i)
+        nValueOut += txout['value']
+        if nValueOut > MAX_MONEY:
+            raise Exception("TxOuts' total out of range")
+
+    #Check for duplicate inputs
+    #if [x for x in tx.txs_in if tx.txs_in.count(x) > 1]:
+    #    raise ValidationFailureError("duplicate inputs")
+    #if(tx.is_coinbase()):
+    #    if len(tx.txs_in[0].script) < 2 or len(tx.txs_in[0].script) > 100:
+    #        raise ValidationFailureError("bad coinbase script size")
+    #else:
+    #    for txin in tx.txs_in:
+    #        if not txin:
+    #            raise ValidationFailureError("prevout is null")
+    return True

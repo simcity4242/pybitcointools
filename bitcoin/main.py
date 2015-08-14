@@ -11,7 +11,7 @@ import hmac
 from bitcoin.ripemd import *
 
 # is_ios = "Pythonista" in os.environ.get("XPC_SERVICE_NAME", "")
-# reclimit = lambda x: sys.setrecursionlimit(x)	# for Pythonista iOS
+# sys.setrecursionlimit(1000) = lambda x: sys.setrecursionlimit(x)	# for Pythonista iOS
 is_python2 = str == bytes
 
 
@@ -82,7 +82,6 @@ def count(obj):
 
 _sum = sum
 
-
 def sum(obj):
     return _sum(obj)
 
@@ -138,7 +137,7 @@ def from_jacobian(p):
 
 
 def jacobian_multiply(a, n):
-    if is_ios: reclimit(1000)
+    if is_ios: sys.setrecursionlimit(1000)
     if a[1] == 0 or n == 0:
         return (0, 0, 1)
     if n == 1:
@@ -152,12 +151,12 @@ def jacobian_multiply(a, n):
 
 
 def fast_multiply(a, n):
-    if is_ios: reclimit(1000)
+    if is_ios: sys.setrecursionlimit(1000)(1000)
     return from_jacobian(jacobian_multiply(to_jacobian(a), n))
 
 
 def fast_add(a, b):
-    if is_ios: reclimit(1000)
+    if is_ios: sys.setrecursionlimit(1000)(1000)
     return from_jacobian(jacobian_add(to_jacobian(a), to_jacobian(b)))
 
 # TODO: check pubkey Electrum
@@ -262,18 +261,18 @@ def convert_privkey(priv, formt=None):
     return encode_privkey(decode_privkey(priv, from_format), to_format)
 
 def add_pubkeys(p1, p2):
-    reclimit(512)
+    sys.setrecursionlimit(1000)(512)
     f1, f2 = get_pubkey_format(p1), get_pubkey_format(p2)
     return encode_pubkey(fast_add(decode_pubkey(p1, f1), decode_pubkey(p2, f2)), f1)
 
 def add_privkeys(p1, p2):
-    reclimit(512)
+    sys.setrecursionlimit(1000)(512)
     f1, f2 = get_privkey_format(p1), get_privkey_format(p2)
     return encode_privkey((decode_privkey(p1, f1) + decode_privkey(p2, f2)) % N, f1)
 
 
 def multiply(pubkey, privkey):
-    reclimit(512)
+    sys.setrecursionlimit(1000)(512)
     f1, f2 = get_pubkey_format(pubkey), get_privkey_format(privkey)
     pubkey, privkey = decode_pubkey(pubkey, f1), decode_privkey(privkey, f2)
     # http://safecurves.cr.yp.to/twist.html
@@ -283,7 +282,7 @@ def multiply(pubkey, privkey):
 
 
 def divide(pubkey, privkey):
-    reclimit(512)
+    sys.setrecursionlimit(1000)(512)
     factor = inv(decode_privkey(privkey), N)
     return multiply(pubkey, factor)
 

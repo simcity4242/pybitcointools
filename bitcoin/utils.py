@@ -3,7 +3,7 @@ from pprint import pprint as pp
 from bitcoin.main import *
 from bitcoin.transaction import *
 from bitcoin.bci import *
-from bitcoin.pyspecials import *
+
 
 def ishex(s):
     return set(s).issubset(set('0123456789abcdefABCDEF'))
@@ -14,7 +14,7 @@ def isbin(s):
     if len(s)%2 == 1:
         return True
     try: 
-        safe_unhexlify(s)
+        binascii.unhexlify(s)
         return False
     except TypeError: 
         return True
@@ -167,7 +167,6 @@ OP_ALIASES = [
 
 OPname = dict([(k[3:], v) for k, v in OPCODE_LIST + OP_ALIASES]);OPname.update(dict([(k,v) for k,v in OPCODE_LIST + OP_ALIASES]))
 OPint = dict([(v,k) for k,v in OPCODE_LIST])
-OPhex = dict([(encode(k, 16, 2), v) for v,k in OPCODE_LIST])
 
 def get_op(s):
     """Returns OP_CODE for integer, or integer for OP_CODE"""
@@ -194,7 +193,7 @@ def parse_script(s):
             r.append(OPname[word])  # r.append(get_op(v[3:]))
     return serialize_script(r)
 
-priv, pub, addr = '', '', ''
+#priv, pub, addr = '', '', ''
 
 def mk_privpubaddr(privkey, compressed=False, magicbyte=0):
     global priv, pub, addr
@@ -206,7 +205,7 @@ def is_tx_hex(txhex):
     if not isinstance(txhex, basestring):
         return False
     elif not re.match('^[0-9a-fA-F]*$', txhex):
-        return safe_unhexlify(is_tx_hex(safe_hexlify(txhex)))
+        return binascii.unhexlify(is_tx_hex(binascii.hexlify(txhex)))
     txhex = st(txhex)
     return txhex.startswith('01000000')
 
@@ -215,31 +214,33 @@ def is_tx_obj(txobj):
         return False
     elif isinstance(txobj, list) and len(txobj) == 1:
         return is_tx_obj(txobj[0]) if isinstance(txobj[0], dict) else False
-    return set(txobj.keys()) > set(['locktime', 'version'])
+    return {txobj.keys()} > {['locktime', 'version']}
 
              #addr="n1hjyVvYQPQtejJcANd5ZJM5rmxHCCgWL7"
 
 #SIG64="G8kH/WEgiATGXSy78yToe36IF9AUlluY3bMdkDFD1XyyDciIbXkfiZxk/qmjGdMeP6/BQJ/C5U/pbQUZv1HGkn8="
 
-tpriv = sha256("mrbubby"*3+"!"); tpub = privtopub(tpriv); taddr = privtoaddr(tpriv, 111)
+tpriv = hashlib.sha256("mrbubby"*3+"!")
+# tpub = privtopub(tpriv)
+# taddr = privtoaddr(tpriv, 111)
 #tpkh = pkh = mk_pubkey_script(addr)[6:-4]
 
-masterpriv = sha256("master"*42)
-masterpub = compress(privtopub(masterpriv))
-masteraddr = pubtoaddr(masterpub, 111)
+masterpriv = hashlib.sha256("master"*42)
+# masterpub = compress(privtopub(masterpriv))
+# masteraddr = pubtoaddr(masterpub, 111)
 
-ops = [
-       OPname['IF'],
-       masterpub,
-       OPname['CHECKSIGVERIFY'],
-       OPname['ELSE'],
-       '80bf07', #safe_hexlify(from_int_to_le_bytes(507776)), # '80bf07'
-       OPname['NOP2'],
-       OPname['DROP'],
-       OPname['ENDIF'],
-       pub,
-       OPname['CHECKSIG']
-       ]
+# ops = [
+#        OPname['IF'],
+#        masterpub,
+#        OPname['CHECKSIGVERIFY'],
+#        OPname['ELSE'],
+#        '80bf07', #binascii.hexlify(from_int_to_le_bytes(507776)), # '80bf07'
+#        OPname['NOP2'],
+#        OPname['DROP'],
+#        OPname['ENDIF'],
+#        tpub,
+#        OPname['CHECKSIG']
+#        ]
 
 myscript = "63210330ed33784ee1891122bc608b89da2da45194efaca68564051e5a7be9bee7f63fad670380bf07" \
            "b1756841042daa93315eebbe2cb9b5c3505df4c6fb6caca8b756786098567550d4820c09db988fe999" \
@@ -248,6 +249,16 @@ myscript = "63210330ed33784ee1891122bc608b89da2da45194efaca68564051e5a7be9bee7f6
 msaddr = "2NBrWPN37wvZhMYb66h23v5rScuVRDDFNsR"
 
 pushedtx_txid = "2e7f518ce5ab61c1c959d25e396bc9d3d684d22ea86dc477b1a90329c6ca354f"
+
+txid = pizzatxid = 'cca7507897abc89628f450e8b1e0c6fca4ec3f7b34cccf55f3f531c659ff4d79';vout=i=0
+#verify_tx_input(tx, 0, inspk, inder, inpub)
+inder = "30450221009908144ca6539e09512b9295c8a27050d478fbb96f8addbc3d075544dc41328702201aa528be2b907d316d2da068dd9eb1e23243d97e444d59290d2fddf25269ee0e01"
+inpub = "042e930f39ba62c6534ee98ed20ca98959d34aa9e057cda01cfd422c6bab3667b76426529382c23f42b9b08d7832d4fee1d6b437a8526e59667ce9c4e9dcebcabb"
+inspk = "76a91446af3fb481837fadbb421727f9959c2d32a3682988ac"
+inaddr = "17SkEw2md5avVNyYgj6RiXuQKNwkXaxFyQ";
+modtx = signing_tx = tx = "01000000018dd4f5fbd5e980fc02f35c6ce145935b11e284605bf599a13c6d415db55d07a1000000001976a91446af3fb481837fadbb421727f9959c2d32a3682988acffffffff0200719a81860000001976a914df1bd49a6c9e34dfa8631f2c54cf39986027501b88ac009f0a5362000000434104cd5e9726e6afeae357b1806be25a4c3d3811775835d235417ea746b7db9eeab33cf01674b944c64561ce3388fa1abd0fa88b06c44ce81e2234aa70fe578d455dac00000000"
+txh = "01000000018dd4f5fbd5e980fc02f35c6ce145935b11e284605bf599a13c6d415db55d07a1000000008b4830450221009908144ca6539e09512b9295c8a27050d478fbb96f8addbc3d075544dc41328702201aa528be2b907d316d2da068dd9eb1e23243d97e444d59290d2fddf25269ee0e0141042e930f39ba62c6534ee98ed20ca98959d34aa9e057cda01cfd422c6bab3667b76426529382c23f42b9b08d7832d4fee1d6b437a8526e59667ce9c4e9dcebcabbffffffff0200719a81860000001976a914df1bd49a6c9e34dfa8631f2c54cf39986027501b88ac009f0a5362000000434104cd5e9726e6afeae357b1806be25a4c3d3811775835d235417ea746b7db9eeab33cf01674b944c64561ce3388fa1abd0fa88b06c44ce81e2234aa70fe578d455dac00000000"
+
 
 #raw = mktx(
 #    ["2e7f518ce5ab61c1c959d25e396bc9d3d684d22ea86dc477b1a90329c6ca354f:1"],
@@ -266,15 +277,6 @@ pushedtx_txid = "2e7f518ce5ab61c1c959d25e396bc9d3d684d22ea86dc477b1a90329c6ca354
 #               "00000000001976a914660d4ef3a743e3e696ad990364e555c271ad504b88ac00000000"
 
 #txo = txo23b = deserialize(txh23b)
-
-txid = pizzatxid = 'cca7507897abc89628f450e8b1e0c6fca4ec3f7b34cccf55f3f531c659ff4d79';vout=i=0
-#verify_tx_input(tx, 0, inspk, inder, inpub)
-inder = "30450221009908144ca6539e09512b9295c8a27050d478fbb96f8addbc3d075544dc41328702201aa528be2b907d316d2da068dd9eb1e23243d97e444d59290d2fddf25269ee0e01"
-inpub = "042e930f39ba62c6534ee98ed20ca98959d34aa9e057cda01cfd422c6bab3667b76426529382c23f42b9b08d7832d4fee1d6b437a8526e59667ce9c4e9dcebcabb"
-inspk = "76a91446af3fb481837fadbb421727f9959c2d32a3682988ac"
-inaddr = "17SkEw2md5avVNyYgj6RiXuQKNwkXaxFyQ";
-tx = "01000000018dd4f5fbd5e980fc02f35c6ce145935b11e284605bf599a13c6d415db55d07a1000000001976a91446af3fb481837fadbb421727f9959c2d32a3682988acffffffff0200719a81860000001976a914df1bd49a6c9e34dfa8631f2c54cf39986027501b88ac009f0a5362000000434104cd5e9726e6afeae357b1806be25a4c3d3811775835d235417ea746b7db9eeab33cf01674b944c64561ce3388fa1abd0fa88b06c44ce81e2234aa70fe578d455dac00000000"
-txh = "01000000018dd4f5fbd5e980fc02f35c6ce145935b11e284605bf599a13c6d415db55d07a1000000008b4830450221009908144ca6539e09512b9295c8a27050d478fbb96f8addbc3d075544dc41328702201aa528be2b907d316d2da068dd9eb1e23243d97e444d59290d2fddf25269ee0e0141042e930f39ba62c6534ee98ed20ca98959d34aa9e057cda01cfd422c6bab3667b76426529382c23f42b9b08d7832d4fee1d6b437a8526e59667ce9c4e9dcebcabbffffffff0200719a81860000001976a914df1bd49a6c9e34dfa8631f2c54cf39986027501b88ac009f0a5362000000434104cd5e9726e6afeae357b1806be25a4c3d3811775835d235417ea746b7db9eeab33cf01674b944c64561ce3388fa1abd0fa88b06c44ce81e2234aa70fe578d455dac00000000"
 
 #wif_re = re.compile(r"[1-9a-km-zA-LMNP-Z]{51,111}")
 

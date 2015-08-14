@@ -5,13 +5,11 @@ import os
 import hashlib
 import struct
 
-is_python2 = str == bytes or sys.version_info.major == 2
-# for Pythonista iOS
-is_ios = "Pythonista" in os.environ.get("XPC_SERVICE_NAME", "")
-reclimit = lambda x: sys.setrecursionlimit(x)
 
-#   PYTHON 2 FUNCTIONS
-#
+is_python2 = str == bytes or sys.version_info.major == 2
+is_ios = "Pythonista" in os.environ.get("XPC_SERVICE_NAME", "")		# for Pythonista iOS
+
+# PYTHON 2 FUNCTIONS
 if is_python2:
     
     python2 = bytes == str
@@ -32,6 +30,50 @@ if is_python2:
         58: '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz',
         256: ''.join([chr(x) for x in range(256)])
     }
+
+
+    ### Hex to bin converter and vice versa for objects
+
+    def json_is_base(obj, base):
+        if int(base) == 256:
+            return True
+        if not is_python2 and isinstance(obj, bytes):
+            return False
+
+        alpha = get_code_string(base)
+        if isinstance(obj, string_types):
+            return {obj} < {alpha}
+            # for i in range(len(obj)):
+            #     if alpha.find(obj[i]) == -1:
+            #         return False
+        elif isinstance(obj, int_types) or obj is None:
+            pass
+        elif isinstance(obj, list):
+            for i in range(len(obj)):
+                if not json_is_base(obj[i], base):
+                    return False
+        else:
+            for x in obj:
+                if not json_is_base(obj[x], base):
+                    return False
+        return True
+
+
+    def json_changebase(obj, changer):
+        if isinstance(obj, string_or_bytes_types):
+            return changer(obj)
+        elif isinstance(obj, int_types) or obj is None:
+            return obj
+        elif isinstance(obj, list):
+            return [json_changebase(x, changer) for x in obj]
+        return dict((x, json_changebase(obj[x], changer)) for x in obj)
+
+
+    def json_hexlify(obj):
+        return json_changebase(obj, lambda x: binascii.hexlify(x))
+
+    def json_unhexlify(obj):
+        return json_changebase(obj, lambda x: binascii.unhexlify(x))
 
     def bin_dbl_sha256(s):
         bytes_to_hash = from_string_to_bytes(s)
@@ -74,10 +116,29 @@ if is_python2:
         return changebase(inp_fmtd + checksum, 256, 58)
         
     def safe_hexlify(b):
-        return binascii.hexlify(b)
+        if not (isinstance(b, (dict, list, int_types, string_or_bytes_types))) or b is None:
+            return
+        elif isinstance(b, string_or_bytes_types):
+            return binascii.hexlify(b)
+        elif isinstance(b, dict):
+            return json_hexlify(b)
+        elif isinstance(b, int_types) or b is None:
+            return b
+        elif isinstance(b, list):
+            return [safe_hexlify(x) for x in b]
+
 
     def safe_unhexlify(s):
-        return binascii.unhexlify(s)
+        if not (isinstance(s, (dict, list, int_types, string_or_bytes_types))) or s is None:
+            return
+        elif isinstance(s, string_or_bytes_types):
+            return binascii.unhexlify(s)
+        elif isinstance(s, dict):
+            return json_unhexlify(s)
+        elif isinstance(s, int_types) or s is None:
+            return s
+        elif isinstance(s, list):
+            return [safe_unhexlify(x) for x in s]
         
     def from_int_repr_to_bytes(a):
         return str(a)
