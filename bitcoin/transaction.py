@@ -179,7 +179,7 @@ def is_bip66(sig):
 def txhash(tx, hashcode=None):
     if isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx):
         tx = changebase(tx, 16, 256)
-    if hashcode:
+    if hashcode is not None:
         return dbl_sha256(from_str_to_bytes(tx) + from_int_to_bytes(int(hashcode), 4, 'little'))
     else:       # if SIGHASH_ALL = 0  ????
         return safe_hexlify(bin_dbl_sha256(tx)[::-1])
@@ -312,14 +312,13 @@ def serialize_script_unit(unit):
 if is_python2:
     def serialize_script(script):
         if json_is_base(script, 16):
-            script_bin = json_unhexlify(script)
-            return safe_hexlify(serialize_script(script_bin))
-        else:
-            return ''.join(map(serialize_script_unit, script))
+            json_changebase = json_unhexlify(script)
+            return binascii.hexlify(serialize_script(json_changebase))
+        return ''.join(map(serialize_script_unit, script))
 else:
     def serialize_script(script):
         if json_is_base(script, 16):
-            script_bin = json_changebase(script, lambda x: binascii.unhexlify(x))
+            script_bin = json_unhexlify(script)
             return safe_hexlify(serialize_script(script_bin))
         else:
             result = bytes()

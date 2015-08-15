@@ -10,8 +10,6 @@ import random
 import hmac
 from bitcoin.ripemd import *
 
-# is_ios = "Pythonista" in os.environ.get("XPC_SERVICE_NAME", "")
-# sys.setrecursionlimit(1000) = lambda x: sys.setrecursionlimit(x)	# for Pythonista iOS
 is_python2 = str == bytes
 
 

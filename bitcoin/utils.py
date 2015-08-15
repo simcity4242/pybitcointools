@@ -220,12 +220,12 @@ def is_tx_obj(txobj):
 
 #SIG64="G8kH/WEgiATGXSy78yToe36IF9AUlluY3bMdkDFD1XyyDciIbXkfiZxk/qmjGdMeP6/BQJ/C5U/pbQUZv1HGkn8="
 
-tpriv = hashlib.sha256("mrbubby"*3+"!")
+tpriv = hashlib.sha256("mrbubby"*3+"!").hexdigest()
 # tpub = privtopub(tpriv)
 # taddr = privtoaddr(tpriv, 111)
 #tpkh = pkh = mk_pubkey_script(addr)[6:-4]
 
-masterpriv = hashlib.sha256("master"*42)
+masterpriv = hashlib.sha256("master"*42).hexdigest()
 # masterpub = compress(privtopub(masterpriv))
 # masteraddr = pubtoaddr(masterpub, 111)
 
@@ -250,7 +250,6 @@ msaddr = "2NBrWPN37wvZhMYb66h23v5rScuVRDDFNsR"
 
 pushedtx_txid = "2e7f518ce5ab61c1c959d25e396bc9d3d684d22ea86dc477b1a90329c6ca354f"
 
-txid = pizzatxid = 'cca7507897abc89628f450e8b1e0c6fca4ec3f7b34cccf55f3f531c659ff4d79';vout=i=0
 #verify_tx_input(tx, 0, inspk, inder, inpub)
 inder = "30450221009908144ca6539e09512b9295c8a27050d478fbb96f8addbc3d075544dc41328702201aa528be2b907d316d2da068dd9eb1e23243d97e444d59290d2fddf25269ee0e01"
 inpub = "042e930f39ba62c6534ee98ed20ca98959d34aa9e057cda01cfd422c6bab3667b76426529382c23f42b9b08d7832d4fee1d6b437a8526e59667ce9c4e9dcebcabb"
