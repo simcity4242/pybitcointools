@@ -1,6 +1,5 @@
 #!/usr/bin/python
-from bitcoin.pyspecials import st, by, safe_hexlify, safe_unhexlify
-from bitcoin.main import access, multiaccess, slice, sum
+from bitcoin.pyspecials import st, by, hexify, unhexify
 import json, re
 import random
 import sys
@@ -74,7 +73,7 @@ def bci_unspent(*args, **kwargs):
         try:
             jsonobj = json.loads(data)
             for o in jsonobj["unspent_outputs"]:
-                h = safe_hexlify(safe_unhexlify(o['tx_hash'])[::-1])
+                h = hexify(unhexify(o['tx_hash'])[::-1])
                 u.append({
                     "output": h+':'+str(o['tx_output_n']),
                     "value": o['value']
@@ -247,12 +246,12 @@ def history(*args):
 # Pushes a transaction to the network using https://blockchain.info/pushtx
 def bci_pushtx(tx):
     if not re.match('^[0-9a-fA-F]*$', tx): 
-        tx = safe_hexlify(tx)
+        tx = hexify(tx)
     return make_request('https://blockchain.info/pushtx', 'tx='+tx)
 
 
 def eligius_pushtx(tx):
-    if not re.match('^[0-9a-fA-F]*$', tx): tx = safe_hexlify(tx)
+    if not re.match('^[0-9a-fA-F]*$', tx): tx = hexify(tx)
     s = make_request(
         'http://eligius.st/~wizkid057/newstats/pushtxn.php',
         'transaction='+tx+'&send=Push')
@@ -273,13 +272,13 @@ def blockr_pushtx(tx, network='btc'):
             'Unsupported network {0} for blockr_pushtx'.format(network))
 
     if not re.match('^[0-9a-fA-F]*$', tx):
-        tx = safe_hexlify(tx)
+        tx = hexify(tx)
     return make_request(blockr_url, '{"hex":"%s"}' % tx)
 
 
 def helloblock_pushtx(tx):
     if not re.match('^[0-9a-fA-F]*$', tx):
-        tx = safe_hexlify(tx)
+        tx = hexify(tx)
     return make_request('https://mainnet.helloblock.io/v1/transactions',
                         'rawTxHex='+tx)
 
@@ -293,7 +292,7 @@ def webbtc_pushtx(tx, network='btc'):
             'Unsupported network {0} for blockr_pushtx'.format(network))
 
     if not re.match('^[0-9a-fA-F]*$', tx):
-        tx = safe_hexlify(tx)
+        tx = hexify(tx)
     return json.loads(make_request(webbtc_url, 'tx=%s' % tx))
 
 pushtx_getters = {
@@ -325,7 +324,7 @@ def bci_fetchtx(txhash):
     if isinstance(txhash, list):
         return [bci_fetchtx(h) for h in txhash]
     if not re.match('^[0-9a-fA-F]*$', txhash):
-        txhash = safe_hexlify(txhash)
+        txhash = hexify(txhash)
     data = make_request('https://blockchain.info/rawtx/'+txhash+'?format=hex')
     return data
 
@@ -339,20 +338,20 @@ def blockr_fetchtx(txhash, network='btc'):
         raise Exception(
             'Unsupported network {0} for blockr_fetchtx'.format(network))
     if isinstance(txhash, list):
-        txhash = ','.join([safe_hexlify(x) if not re.match('^[0-9a-fA-F]*$', x)
+        txhash = ','.join([hexify(x) if not re.match('^[0-9a-fA-F]*$', x)
                            else x for x in txhash])
         jsondata = json.loads(make_request(blockr_url + txhash))
         return [d['tx']['hex'] for d in jsondata['data']]
     else:
         if not re.match('^[0-9a-fA-F]*$', txhash):
-            txhash = safe_hexlify(txhash)
+            txhash = hexify(txhash)
         jsondata = json.loads(make_request(blockr_url+txhash))
         return st(jsondata['data']['tx']['hex'])    # added st() to repair unicode return hex strings for python 2
 
 
 def helloblock_fetchtx(txhash, network='btc'):
     if not re.match('^[0-9a-fA-F]*$', txhash):
-        txhash = safe_hexlify(txhash)
+        txhash = hexify(txhash)
     if network == 'testnet':
         url = 'https://testnet.helloblock.io/v1/transactions/'
     elif network == 'btc':
@@ -396,7 +395,7 @@ def webbtc_fetchtx(txhash, network='btc'):
         raise Exception(
             'Unsupported network {0} for webbtc_fetchtx'.format(network))
     if not re.match('^[0-9a-fA-F]*$', txhash):
-        txhash = safe_hexlify(txhash)
+        txhash = hexify(txhash)
     hexdata = make_request(webbtc_url + txhash + ".hex")
     return st(hexdata)
 
@@ -516,7 +515,7 @@ def get_block_height(txhash):
 def get_block_coinbase(txval):
     # TODO: use translation table for coinbase fields
     j = _get_block(inp=txval)
-    cb = safe_unhexlify(st(j['tx'][0]['inputs'][0]['script']))
+    cb = unhexify(st(j['tx'][0]['inputs'][0]['script']))
     alpha = set(map(chr, list(range(32, 126))))
     cbtext = ''.join(list(map(chr, filter(lambda x: chr(x) in alpha, bytearray(cb)))))
     return cbtext

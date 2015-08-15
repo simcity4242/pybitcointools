@@ -2,7 +2,7 @@ from bitcoin.main import *
 import hmac
 import hashlib
 from binascii import hexlify
-from bitcoin.pyspecials import st, by, string_types, from_str_to_bytes, from_bytes_to_str, safe_hexlify, safe_unhexlify
+from bitcoin.pyspecials import st, by, string_types, from_str_to_bytes, from_bytes_to_str, hexify, unhexify
 from bitcoin.mnemonic import prepare_elec2_seed, is_elec1_seed, is_elec2_seed
 
 # TODO: detect Elec 1, 2 & BIP39
@@ -17,12 +17,12 @@ def bin_electrum_extract_seed(mn_seed, password=b''):
 
     mn_seed = from_str_to_bytes(mn_seed)
     password = from_str_to_bytes("electrum{}".format(password))
-    rootseed = safe_unhexlify(pbkdf2_hmac_sha512(mn_seed, password))
+    rootseed = unhexify(pbkdf2_hmac_sha512(mn_seed, password))
     assert len(rootseed) == 64
     return rootseed
 
 def electrum_extract_seed(mn_seed, password=''):
-    return safe_hexlify(bin_electrum_extract_seed(mn_seed, password))
+    return hexify(bin_electrum_extract_seed(mn_seed, password))
 
 def electrum_mprvk(mnemonic, password=''):
     return bip32_master_key(bin_electrum_extract_seed(mnemonic, password))
@@ -160,7 +160,7 @@ def bip32_bin_extract_key(data):
 
 
 def bip32_extract_key(data):
-    return safe_hexlify(bip32_deserialize(data)[-1])
+    return hexify(bip32_deserialize(data)[-1])
 
 # Exploits the same vulnerability as above in Electrum wallets
 # Takes a BIP32 pubkey and one of the child privkeys of its corresponding
@@ -204,6 +204,7 @@ def coinvault_priv_to_bip32(*args):
     return bip32_serialize((MAINNET_PRIVATE, 0, b'\x00'*4, 0, I2, I3+b'\x01'))
 
 
+# TODO: rename new 'descend' funcs
 def bip32_descend(*args):
     if len(args) == 2 and isinstance(args[1], list):
         key, path = args
@@ -216,6 +217,7 @@ def bip32_descend(*args):
     for p in path:
         key = bip32_ckd(key, p)
     return bip32_extract_key(key)
+
 
 def bip32_path(*args, **kwargs):
     """Same as bip32_descend but returns masterkey instead of hex privkey"""
@@ -252,6 +254,7 @@ def parse_bip32_path(path):
         patharr.append(v)
     return patharr
 
+# TODO: fix below bip44
 def bip44_descend(masterkey, network='btc', account=0, for_change=0, index=0):
     # 44'/NETWORK'/ACCOUNT'/internal_or_change?/index
     network = "0H" if network == 'btc' else "1H"

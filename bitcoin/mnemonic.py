@@ -1,8 +1,8 @@
 #!/usr/bin/python
+import string, unicodedata, random, hmac, re, math
 
 from bitcoin.main import *
-from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, from_str_to_bytes, st, by, changebase
-import string, unicodedata, random, hmac, re, math
+from bitcoin.pyspecials import *
 try:
     from bitcoin._wordlists import WORDS
 except ImportError:
@@ -36,11 +36,6 @@ def get_wordlists(lang=None):
     if lang is not None:
         return WORDS[lang.lower()]
     return WORDS
-
-#def binary_search(a, x, lo=0, hi=None):	# can't use a to specify default for hi
-#    hi = hi if hi is not None else len(a)	# hi defaults to len(a)
-#    pos = bisect.bisect_left(a, x, lo, hi)	# find insertion point
-#    return (pos if pos != hi and a[pos] == x else -1)
 
 #ELECWORDS, BIP39ENG, BIP39JAP = WORDS['electrum1'], WORDS['english'], WORDS['japanese']
 
@@ -84,9 +79,9 @@ def bip39_to_mn(hexstr, lang=None):
     lang = 'english' if lang is None else str(lang)
     BIP39 = WORDS[lang.lower()]
 
-    hexstr = safe_unhexlify(hexstr)
+    hexstr = unhexify(hexstr)
     cs = sha256(hexstr)     # sha256 hexdigest
-    bstr = (changebase(safe_hexlify(hexstr), 16, 2, len(hexstr)*8) +
+    bstr = (changebase(hexify(hexstr), 16, 2, len(hexstr)*8) +
             changebase(cs, 16, 2, 256)[ : len(hexstr) * 8 // 32])
     wordarr = []
     for i in range(0, len(bstr), 11):
@@ -121,10 +116,10 @@ def bip39_to_entropy(mnem_str):
     
     bd = binstr[:L // 33 * 32]
     cs = binstr[-L // 33:]
-    hexd = safe_unhexlify(changebase(bd, 2, 16, L // 33 * 8))
+    hexd = unhexify(changebase(bd, 2, 16, L // 33 * 8))
     hexd_cs = changebase(sha256(hexd), 16, 2, 256)[:L // 33]
     if hexd_cs == cs:
-        return safe_hexlify(hexd)
+        return hexify(hexd)
     raise Exception("Checksums don't match!!")
 
 def bip39_check(mnem_phrase, lang=None):
@@ -147,7 +142,7 @@ def bip39_check(mnem_phrase, lang=None):
     L = len(binstr)
     bd = binstr[:L // 33 * 32]
     cs = binstr[-L // 33:]
-    hexd = safe_unhexlify(changebase(bd, 2, 16, L // 33 * 8))
+    hexd = unhexify(changebase(bd, 2, 16, L // 33 * 8))
     hexd_cs = changebase(hashlib.sha256(hexd).hexdigest(), 16, 2, 256)[:L // 33]
     return cs == hexd_cs
 
@@ -156,7 +151,7 @@ def random_bip39_pair(bits=128, lang=None):
     lang = 'english' if lang is None else str(lang)
     if int(bits) % 32 != 0:
         raise Exception('%d not divisible by 32! Try 128 bits' % bits)
-    hexseed = safe_hexlify(by(safe_unhexlify(
+    hexseed = hexify(by(unhexify(
                             random_key()+random_key())[:bits // 8]))
     return hexseed, bip39_to_mn(hexseed, lang=lang)
 
@@ -262,7 +257,7 @@ def is_elec1_seed(seed):
     except Exception:
         uses_electrum_words = False
     try:
-        safe_unhexlify(seed)
+        unhexify(seed)
         is_hex = (len(seed) == 32 or len(seed) == 64)
     except Exception:
         is_hex = False

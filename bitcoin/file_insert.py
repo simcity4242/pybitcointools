@@ -3,7 +3,7 @@ from binascii import crc32, unhexlify, hexlify
 from bitcoin.main import *
 from bitcoin.bci import *
 from bitcoin.transaction import *
-from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, st, by
+#from bitcoin.pyspecials import hexify, unhexify, by
 
 
 def _mk_multisig_scriptpubkey(fo):
@@ -25,12 +25,12 @@ def _mk_multisig_scriptpubkey(fo):
             chunk += by(bytearray(65-len(chunk)))
         script_pubkeys.append(chunk)
 
-    pubz = list(map(safe_hexlify, script_pubkeys))
+    pubz = list(map(hexify, script_pubkeys))
     return mk_multisig_script(pubz, 1)
 
 def _mk_txouts(fo, value=None):
     value = 547 if not value else int(value)
-    hexval = safe_hexlify(struct.pack('<Q', value))	# make 8 byte LE value 
+    hexval = hexify(struct.pack('<Q', value))	# make 8 byte LE value
     txouts = []
     while True:
         scriptPubKey = _mk_multisig_scriptpubkey(fo)
@@ -98,7 +98,7 @@ def decode_file(txid, network='btc'):
     outs2 = filter(lambda l: l[-1] == 174, outs1)	# TODO: check for _non-p2sh_ outputs
     outs3 = map(lambda l: l[1:-2], outs2)
 
-    data = safe_unhexlify(''.join([item for sublist in outs3 for item in sublist]))	# base 256 of encoded data
+    data = unhexify(''.join([item for sublist in outs3 for item in sublist]))	# base 256 of encoded data
     
     # TODO: are length & crc32 prepended?
     length = struct.unpack('<I', data[0:4])[0]		# TODO: check length == len(data)

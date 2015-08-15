@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-
 import json
 import os
 import random
@@ -7,11 +6,11 @@ import unittest
 import unicodedata
 
 from bitcoin import *
-from bitcoin.ripemd import *
-from bitcoin.mnemonic import bip39_check, bip39_to_mn, bip39_to_seed
-from bitcoin.pyspecials import safe_hexlify, safe_unhexlify, st, by, from_str_to_bytes, from_bytes_to_str
-from bitcoin.deterministic import electrum_mpubk, bip32_master_key
-from bitcoin.utils import *
+# from bitcoin.ripemd import *
+# from bitcoin.mnemonic import bip39_check, bip39_to_mn, bip39_to_seed
+# from bitcoin.pyspecials import hexify, unhexify, st, by, from_str_to_bytes, from_bytes_to_str
+# from bitcoin.deterministic import electrum_mpubk, bip32_master_key
+# from bitcoin.utils import *
 
 class TestECCArithmetic(unittest.TestCase):
 
@@ -668,13 +667,14 @@ class TestBIP39English(unittest.TestCase):
 
     def test_all(self):
 
-        fo = open("test_EN_BIP39.json", "r").read()
-        BIP39_VECTORS = json.loads(fo)
+        with open("tests/test_EN_BIP39.json", "r") as fo:
+            BIP39_VECTORS = json.loads(fo.read())
 
         for v in BIP39_VECTORS:
-            mnem, pwd, entropy, seed, xprv = v['mnemonic'], v['passphrase'], v['entropy'], v['seed'], v['bip32_xprv']
+            mnem, pwd, entropy, seed, xprv = v['mnemonic'], v['passphrase'], \
+                                             v['entropy'], v['seed'], v['bip32_xprv']
             self.assertEqual(bip39_detect_lang(mnem), 'english', "English language detection failed")
-            self.assertTrue(bip39_check(mnem))
+            self.assertTrue( bip39_check(mnem))
             self.assertEqual(bip39_to_mn(entropy), mnem, "Mnemonic ==> Entropy failure")
             self.assertEqual(bip39_to_seed(mnem, pwd), seed)
             self.assertEqual(bip32_master_key(safe_unhexlify(seed)), xprv)
@@ -687,13 +687,14 @@ class TestBIP39Jap(unittest.TestCase):
 
     def test_all(self):
 
-        fo = open("test_JP_BIP39.json", "r").read()
-        BIP39_VECTORS = json.loads(fo)
+        with open("tests/test_JP_BIP39.json", "r") as fo:
+            BIP39_VECTORS = json.loads(fo.read())
 
         for v in BIP39_VECTORS:
-            mnem, pwd, entropy, seed, xprv = v['mnemonic'], v['passphrase'], v['entropy'], v['seed'], v['bip32_xprv']
+            mnem, pwd, entropy, seed, xprv = v['mnemonic'], v['passphrase'], \
+                                             v['entropy'], v['seed'], v['bip32_xprv']
             self.assertEqual(bip39_detect_lang(mnem), 'japanese', "Japanese language detection failed")
-            self.assertTrue(bip39_check(mnem))
+            self.assertTrue( bip39_check(mnem))
             self.assertEqual(bip39_to_mn(entropy, lang='japanese'), mnem, "Mnemonic ==> Entropy failure")
             self.assertEqual(bip39_to_seed(mnem, pwd), seed)
             self.assertEqual(bip32_master_key(safe_unhexlify(seed)), xprv)
@@ -726,8 +727,8 @@ class BitcoinCore_SignatureValidation(unittest.TestCase):
 
     def test_all(self):
 
-        fo = open("tests/signmessage.json", "r").read()
-        SIG_TESTS = json.loads(fo)
+        with open("tests/signmessage.json", "r") as fo:
+            SIG_TESTS = json.loads(fo.read())
 
         for test in SIG_TESTS:
             pkwif, sig, addr = str(test['wif']), str(test['signature']), str(test['address'])
@@ -748,8 +749,8 @@ class BitcoinCore_Base58_encode_decode(unittest.TestCase):
 
     def test_all(self):
 
-        fo = open("tests/base58_encode_decode.json", "r").read()
-        BASE58_TESTS = json.loads(fo)
+        with open("tests/base58_encode_decode.json", "r") as fo:
+            BASE58_TESTS = json.loads(fo.read())
 
         for test in BASE58_TESTS:
             base16, base58 = test

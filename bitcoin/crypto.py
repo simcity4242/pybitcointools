@@ -1,6 +1,6 @@
 import hashlib, hmac, struct
 from bitcoin import *
-from bitcoin.pyspecials import safe_unhexlify, safe_hexlify, from_bytes_to_string, from_string_to_bytes
+from bitcoin.pyspecials import unhexify, hexify, from_bytes_to_string, from_string_to_bytes
 
 # def pbkdf2_hmac(name, password, salt, rounds, dklen=None):
 #     """Returns the result of the Password-Based Key Derivation Function 2"""
@@ -58,7 +58,7 @@ def pbkdf2_hmac_sha512(password, salt):
         b = hashlib.pbkdf2_hmac('sha512', password, salt, 2048, 64)
     else:
         b = bin_pbkdf2_hmac('sha512', password, salt, 2048, 64)
-    return safe_hexlify(b)
+    return hexify(b)
 
 hmac_sha256 = lambda k, s: hmac.new(k, s, hashlib.sha256)
 hmac_sha512 = lambda k, s: hmac.new(k, s, hashlib.sha512)

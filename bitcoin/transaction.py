@@ -1,10 +1,10 @@
 #!/usr/bin/python
-import binascii, re, json, copy, sys, binascii
+import binascii, re, json, sys, binascii
 from bitcoin.main import *
 from _functools import reduce
 from bitcoin.pyspecials import *
 from bitcoin.bci import fetchtx
-#from bitcoin.utils import create_signable_tx, get_script, get_scriptpubkey, get_scriptsig, get_outpoints
+
 
 # Transaction serialization and deserialization
 
@@ -63,7 +63,7 @@ def serialize(txobj):
     #    txobj = bytes_to_hex_string(txobj)
     o = []
     if json_is_base(txobj, 16):
-        json_changedbase = json_changebase(txobj, lambda x: binascii.unhexlify(x))
+        json_changedbase = json_unhexlify(txobj)
         hexlified = safe_hexlify(serialize(json_changedbase))
         return hexlified
     o.append(encode(txobj["version"], 256, 4)[::-1])
@@ -92,6 +92,7 @@ SIGHASH_ANYONECANPAY = 0x81
 
 
 def signature_form(tx, i, script, hashcode=SIGHASH_ALL):
+    import copy
     i, hashcode = int(i), int(hashcode)
     if isinstance(tx, string_or_bytes_types):
         return serialize(signature_form(deserialize(tx), i, script, hashcode))
@@ -102,9 +103,10 @@ def signature_form(tx, i, script, hashcode=SIGHASH_ALL):
     if hashcode == SIGHASH_NONE:
         newtx["outs"] = []
     elif hashcode == SIGHASH_SINGLE:
-        newtx["outs"] = newtx["outs"][:len(newtx["ins"])]
-        for out in newtx["outs"][:len(newtx["ins"]) - 1]:
-            out['value'] = 2**64 - 1	# 0xffffffffffffffff
+        num_ins = len(newtx["ins"])
+        newtx["outs"] = newtx["outs"][:num_ins]
+        for out in newtx["outs"][:num_ins - 1]:     # del outs @ lower index
+            out['value'] = 2**64 - 1
             out['script'] = ""
     elif hashcode == SIGHASH_ANYONECANPAY:
         newtx["ins"] = [newtx["ins"][i]]
@@ -112,12 +114,11 @@ def signature_form(tx, i, script, hashcode=SIGHASH_ALL):
         pass
     return newtx
 
-# Making the actual signatures
 
+# Making the actual signatures
 
 def der_encode_sig(v, r, s):
     """Takes (vbyte, r, s) as ints and returns hex der encode sig"""
-    #s = N-s if s>N//2 else s	# BIP62 low s
     b1, b2 = encode(r, 256), encode(s, 256)
     if ord(b1[0]) & 0x80:		# add null bytes if leading byte interpreted as negative
         b1 = b'\x00' + b1
@@ -140,7 +141,7 @@ def der_decode_sig(sig):
     return (None, decode(left, 16), decode(right, 16))
 
 def deserialize_der(sig):
-    sig = bytes(bytearray.fromhex(sig)) if re.match('^[0-9a-fA-F]*$', sig) else bytes(bytearray(from_string_to_bytes(sig)))
+    sig = bytes(bytearray.fromhex(sig)) if re.match('^[0-9a-fA-F]*$', sig) else bytes(bytearray(sig))
     totallen = decode(sig[1], 256) + 2
     rlen = decode(sig[3], 256)
     slen = decode(sig[5+rlen], 256)
@@ -152,10 +153,10 @@ def deserialize_der(sig):
 
 def is_bip66(sig):
     """Checks hex DER sig for BIP66 consistency"""
-    sig = bytearray.fromhex(sig) if re.match('^[0-9a-fA-F]*$', sig) else bytearray(from_string_to_bytes(sig))
-    if (sig[0] == 0x30) and (sig[1] == len(sig)-2):
-        sig.extend(b"\1")		# add SIGHASH for BIP66 check
-    #assert sig[-1] & 124 == 0, "Bad SIGHASH value, 0x%s" % (changebase(str(sig[-1]), 10, 16, 2))
+    if isinstance(sig, string_types) and re.match('^[0-9a-fA-F]*$', sig):
+        sig = safe_unhexlify(sig)
+    sig = bytearray(sig)
+    if ord(sig[1]) == len(sig)-2: sig.extend(b"\1")		# add SIGHASH for BIP66 check
     
     if len(sig) < 9 or len(sig) > 73: return False
     if (sig[0] != 0x30): return False
@@ -167,19 +168,20 @@ def is_bip66(sig):
     if (sig[2] != 0x02): return False
     if (rlen == 0): return False
     if (sig[4] & 0x80): return False
-    if (rlen > 1 and (sig[4] == 0x00) and not (sig[5] & 0x80)): return False
+    if (rlen > 1 and (sig[4] == 0) and not (sig[5] & 0x80)): return False
     if (sig[4+rlen] != 0x02): return False
     if (slen == 0): return False
     if (sig[rlen+6] & 0x80): return False
-    if (slen > 1 and (sig[6+rlen] == 0x00) and not (sig[7+rlen] & 0x80)): return False
+    if (slen > 1 and (sig[6+rlen] == 0) and not (sig[7+rlen] & 0x80)): return False
     
     return True
 
 def txhash(tx, hashcode=None):
-    tx = safe_unhexlify(tx) if (isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx)) else tx
+    if isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx):
+        tx = changebase(tx, 16, 256)
     if hashcode:
         return dbl_sha256(from_str_to_bytes(tx) + from_int_to_bytes(int(hashcode), 4, 'little'))
-    else:       # if SIGHASH_ALL = 0
+    else:       # if SIGHASH_ALL = 0  ????
         return safe_hexlify(bin_dbl_sha256(tx)[::-1])
 
 
@@ -226,7 +228,7 @@ def mk_opreturn(msg, *args):
             txo = args[0]
     assert 'outs' in txo, "Outputs cannot be empty"
     txo['outs'].append({'script': orhex, 'value': 0})
-    #if len(json_changebase(multiaccess(txo['outs'], 'script'), lambda x: safe_unhexlify(x))) != 1:
+    #if len(json_changebase(multiaccess(txo['outs'], 'script'), lambda x: unhexify(x))) != 1:
     #    sys.stderr.write(("Outputs cannot have >1 OP_RETURN"))
     return txo
 
@@ -264,7 +266,7 @@ scriptaddr = p2sh_scriptaddr
 
 def deserialize_script(script):
     if isinstance(script, str) and re.match('^[0-9a-fA-F]*$', script):
-       return json_hexlify(deserialize_script(binascii.unhexlify(script)))
+       return json_hexlify(deserialize_script(safe_unhexlify(script)))
     out, pos = [], 0
     while pos < len(script):
         code = from_byte_to_int(script[pos])
@@ -310,7 +312,7 @@ def serialize_script_unit(unit):
 if is_python2:
     def serialize_script(script):
         if json_is_base(script, 16):
-            script_bin = json_changebase(script, lambda x: binascii.unhexlify(str(x)))
+            script_bin = json_unhexlify(script)
             return safe_hexlify(serialize_script(script_bin))
         else:
             return ''.join(map(serialize_script_unit, script))
@@ -325,22 +327,6 @@ else:
                 result += b if isinstance(b, bytes) else bytes(b, 'utf-8')
             return result
 
-# def serialize_script(script):
-#     if is_python2:
-#         if json_is_base(script, 16):
-#             script_bin = json_changebase(script, lambda x: binascii.unhexlify(str(x)))
-#             return safe_hexlify(serialize_script(script_bin))
-#         else:
-#             return ''.join(map(serialize_script_unit, script))
-#     else:
-#         if json_is_base(script, 16):
-#             script_bin = json_changebase(script, lambda x: binascii.unhexlify(x))
-#             return safe_hexlify(serialize_script(script_bin))
-#         else:
-#             result = bytes()
-#             for b in map(serialize_script_unit, script):
-#                 result += b if isinstance(b, bytes) else bytes(b, 'utf-8')
-#             return result
 
 def mk_multisig_script(*args):  
     # [pubs],k or pub1,pub2...pub[n],k
@@ -611,12 +597,13 @@ def check_transaction(tx):
         if nValueOut > MAX_MONEY:
             raise Exception("TxOuts' total out of range")
 
+    # TODO: fix below code
     #Check for duplicate inputs
     #if [x for x in tx.txs_in if tx.txs_in.count(x) > 1]:
-    #    raise ValidationFailureError("duplicate inputs")
+    #    raise Exception("duplicate inputs")
     #if(tx.is_coinbase()):
     #    if len(tx.txs_in[0].script) < 2 or len(tx.txs_in[0].script) > 100:
-    #        raise ValidationFailureError("bad coinbase script size")
+    #        raise Exception("bad coinbase script size")
     #else:
     #    for txin in tx.txs_in:
     #        if not txin:

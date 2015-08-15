@@ -399,11 +399,3 @@ def RMD160Final(ctx):
     RMD160Update(ctx, PADDING, padlen-8)
     RMD160Update(ctx, size, 8)
     return struct.pack("<5L", *ctx.state)
-
-
-assert '37f332f68db77bd9d7edd4969571ad671cf9dd3b' == \
-       new('The quick brown fox jumps over the lazy dog').hexdigest()
-assert '132072df690933835eb8b6ad0b77e7b6f14acad7' == \
-       new('The quick brown fox jumps over the lazy cog').hexdigest()
-assert '9c1185a5c5e9fc54612808977ee8f548b2258d31' == \
-       new('').hexdigest()

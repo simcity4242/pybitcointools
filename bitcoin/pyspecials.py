@@ -16,9 +16,8 @@ if is_python2:
     st = lambda u: str(u)
     by = lambda v: bytes(v)
 
-    string_types = (str, unicode)
+    string_types = basestring
     string_or_bytes_types = (str, unicode)
-    bytestring_types = bytearray
     int_types = (int, float, long)
 
     # Base switching
@@ -31,43 +30,33 @@ if is_python2:
         256: ''.join([chr(x) for x in range(256)])
     }
 
-
     ### Hex to bin converter and vice versa for objects
 
     def json_is_base(obj, base):
-        if int(base) == 256:
-            return True
-        if not is_python2 and isinstance(obj, bytes):
-            return False
-
         alpha = get_code_string(base)
         if isinstance(obj, string_types):
-            return {obj} < {alpha}
-            # for i in range(len(obj)):
-            #     if alpha.find(obj[i]) == -1:
-            #         return False
+            return set(obj.lower()) < set(alpha)
         elif isinstance(obj, int_types) or obj is None:
-            pass
+            return True
         elif isinstance(obj, list):
             for i in range(len(obj)):
                 if not json_is_base(obj[i], base):
                     return False
+            return True
         else:
             for x in obj:
                 if not json_is_base(obj[x], base):
                     return False
-        return True
-
+            return True
 
     def json_changebase(obj, changer):
-        if isinstance(obj, string_or_bytes_types):
+        if isinstance(obj, string_types):
             return changer(obj)
         elif isinstance(obj, int_types) or obj is None:
             return obj
         elif isinstance(obj, list):
             return [json_changebase(x, changer) for x in obj]
         return dict((x, json_changebase(obj[x], changer)) for x in obj)
-
 
     def json_hexlify(obj):
         return json_changebase(obj, lambda x: binascii.hexlify(x))
@@ -76,7 +65,7 @@ if is_python2:
         return json_changebase(obj, lambda x: binascii.unhexlify(x))
 
     def bin_dbl_sha256(s):
-        bytes_to_hash = from_string_to_bytes(s)
+        bytes_to_hash = from_str_to_bytes(s)
         return hashlib.sha256(hashlib.sha256(bytes_to_hash).digest()).digest()
 
     def lpad(msg, symbol, length):
@@ -85,10 +74,9 @@ if is_python2:
         return symbol * (length - len(msg)) + msg
 
     def get_code_string(base):
-        if base in code_strings:
-            return code_strings[base]
-        else:
-            raise ValueError("Invalid base!")
+        if int(base) in code_strings:
+            return code_strings[int(base)]
+        else: raise ValueError("Invalid base!")
 
     def changebase(string, frm, to, minlen=0):
         if frm == to:
@@ -96,50 +84,47 @@ if is_python2:
         elif frm in (16, 256) and to == 58:
             if frm == 16:
                 nblen = len(re.match('^(00)*', string).group(0))//2
-                padding = lpad('', '1', nblen)
             else:
                 nblen = len(re.match('^(\x00)*', string).group(0))
-                padding = lpad('', '1', nblen)
-            return padding + encode(decode(string, frm), to)
+            padding = lpad('', '1', nblen)
+            return padding + encode(decode(string, frm), 58)
         elif frm == 58 and to in (16, 256):
             nblen = len(re.match('^(1)*', string).group(0))
             if to == 16:
                 padding = lpad('', '00', nblen)
             else:
                 padding = lpad('', '\0', nblen)
-            return padding + encode(decode(string, frm), to)
-        return encode(decode(string, frm), to, minlen)
+            return padding + encode(decode(string, 58), to)
+        return encode(decode(string, 58), to, minlen)
 
     def bin_to_b58check(inp, magicbyte=0):
         inp_fmtd = from_int_to_byte(int(magicbyte)) + inp
         checksum = bin_dbl_sha256(inp_fmtd)[:4]
         return changebase(inp_fmtd + checksum, 256, 58)
         
-    def safe_hexlify(b):
-        if not (isinstance(b, (dict, list, int_types, string_or_bytes_types))) or b is None:
-            return
-        elif isinstance(b, string_or_bytes_types):
+    def hexify(b):
+        if isinstance(b, string_types):
             return binascii.hexlify(b)
         elif isinstance(b, dict):
             return json_hexlify(b)
         elif isinstance(b, int_types) or b is None:
             return b
         elif isinstance(b, list):
-            return [safe_hexlify(x) for x in b]
+            return [hexify(x) for x in b]
 
-
-    def safe_unhexlify(s):
-        if not (isinstance(s, (dict, list, int_types, string_or_bytes_types))) or s is None:
-            return
-        elif isinstance(s, string_or_bytes_types):
+    def unhexify(s):
+        if isinstance(s, string_or_bytes_types):
             return binascii.unhexlify(s)
         elif isinstance(s, dict):
             return json_unhexlify(s)
         elif isinstance(s, int_types) or s is None:
             return s
         elif isinstance(s, list):
-            return [safe_unhexlify(x) for x in s]
-        
+            return [unhexify(x) for x in s]
+
+    safe_unhexlify = unhex_it = unhexify
+    safe_hexlify   = hex_it   = hexify
+
     def from_int_repr_to_bytes(a):
         return str(a)
 
@@ -160,11 +145,10 @@ if is_python2:
 
     def from_int_to_byte(a):
         # return bytes([a])
-        return chr(a)
+        return chr(a) if isinstance(a, int) else ''.join([chr(o & 255) for o in a])
 
     def from_byte_to_int(a):
-        # return a
-        return ord(a)
+        return ord(a) if len(a) < 2 else [ord(c) for c in a]
 
     def from_le_bytes_to_int(bstr):
         return from_bytes_to_int(bstr, byteorder='little', signed=False)
@@ -173,21 +157,20 @@ if is_python2:
         if byteorder != 'big':
             bstr = reversed(bstr)
         v = 0
-        bytes_to_ints = (lambda x: [ord(c) for c in x]) if bytes == str else lambda x: x
+        bytes_to_ints = (lambda x: [ord(c) for c in x])
         for c in bytes_to_ints(bstr):
             v <<= 8
             v += c
-        if signed and bstr[0] & 0x80:
+        if signed and ord(bstr[0]) & 0x80:
             v = v - (1 << (8*len(bstr)))
         return v
 
     def from_str_to_bytes(a):
-        return by(a)
+        return a #by(a)
 
     def from_bytes_to_str(a):
-        return st(a)
+        return a #st(a)
 
-    from_bytestring_to_str = from_bytes_to_str
     from_string_to_bytes = from_str_to_bytes
     from_bytes_to_string = from_bytes_to_str
 
@@ -222,14 +205,11 @@ if is_python2:
         return os.urandom(x)
 
 #   PYTHON 3
-#
 elif sys.version_info.major == 3:
-    #is_python2 = bytes == str
 
     xrange = range
     string_types = str
     string_or_bytes_types = (str, bytes)
-    bytestring_types = (bytes, bytearray)
     int_types = (int, float)
 
     st = lambda s: str(s, 'utf-8') if not isinstance(s, str) else s
@@ -242,7 +222,6 @@ elif sys.version_info.major == 3:
         16: '0123456789abcdef',
         32: 'abcdefghijklmnopqrstuvwxyz234567',
         58: '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz',
-        #128: ''.join([chr(x) for x in range(128)]),
         256: ''.join([chr(x) for x in range(256)])
     }
 
@@ -256,8 +235,8 @@ elif sys.version_info.major == 3:
         return symbol * (length - len(msg)) + msg
 
     def get_code_string(base):
-        if base in code_strings:
-            return code_strings[base]
+        if int(base) in code_strings:
+            return code_strings[int(base)]
         else:
             raise ValueError("Invalid base!")
 
@@ -289,7 +268,7 @@ elif sys.version_info.major == 3:
 
     def safe_unhexlify(b):
         # 'abcde' / b'abcd' => b'\xab\xcd'
-        return bytes.fromhex(b) if isinstance(b, str) else binascii.unhexlify(b)
+        return binascii.unhexlify(b)
 
     def from_int_repr_to_bytes(a):
         return by(str(a))
@@ -318,7 +297,6 @@ elif sys.version_info.major == 3:
     def from_bytes_to_str(a):
         return st(a)
 
-    from_bytestring_to_str = from_bytes_to_str
     from_string_to_bytes = from_str_to_bytes
     from_bytes_to_string = from_bytes_to_str
 
