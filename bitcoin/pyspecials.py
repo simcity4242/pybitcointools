@@ -6,7 +6,7 @@ import hashlib
 import struct
 
 
-is_python2 = str == bytes or sys.version_info.major == 2
+is_python2 = (str == bytes) or sys.version_info.major == 2
 is_ios = "Pythonista" in os.environ.get("XPC_SERVICE_NAME", "")		# for Pythonista iOS
 
 # PYTHON 2 FUNCTIONS
@@ -35,11 +35,10 @@ if is_python2:
     def json_is_base(obj, base):
         alpha = get_code_string(base)
         if isinstance(obj, string_types):
-            # for i in range(len(obj)):
-            #     if alpha.find(obj[i]) == -1:
-            #         return False
-            # return True
-            return set(obj.lower()) < set(alpha)
+            for i in range(len(obj)):
+                if alpha.find(obj[i]) == -1:
+                    return False
+            return True
         elif isinstance(obj, int_types) or obj is None:
             return True
         elif isinstance(obj, list):
@@ -149,12 +148,10 @@ if is_python2:
 
     def from_int_to_byte(a):
         # return bytes([a])
-        #return chr(a) if isinstance(a, int) else ''.join([chr(o & 255) for o in a])
         return chr(a)
 
     def from_byte_to_int(a):
         return ord(a)
-        #return ord(a) if len(a) < 2 else [ord(c) for c in a]
 
     def from_le_bytes_to_int(bstr):
         return from_bytes_to_int(bstr, byteorder='little', signed=False)

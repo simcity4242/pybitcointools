@@ -1,6 +1,7 @@
 import re
 from pprint import pprint as pp
 from bitcoin.main import *
+from bitcoin.main import privtopub, privtoaddr, pubtoaddr
 from bitcoin.transaction import *
 from bitcoin.bci import *
 
@@ -214,33 +215,21 @@ def is_tx_obj(txobj):
         return False
     elif isinstance(txobj, list) and len(txobj) == 1:
         return is_tx_obj(txobj[0]) if isinstance(txobj[0], dict) else False
-    return {txobj.keys()} > {['locktime', 'version']}
+    return set(['locktime', 'version']).issubset(set(txobj.keys()))
 
-             #addr="n1hjyVvYQPQtejJcANd5ZJM5rmxHCCgWL7"
 
 #SIG64="G8kH/WEgiATGXSy78yToe36IF9AUlluY3bMdkDFD1XyyDciIbXkfiZxk/qmjGdMeP6/BQJ/C5U/pbQUZv1HGkn8="
 
 tpriv = hashlib.sha256("mrbubby"*3+"!").hexdigest()
-# tpub = privtopub(tpriv)
-# taddr = privtoaddr(tpriv, 111)
+tpub = privtopub(tpriv)
+taddr = privtoaddr(tpriv, 111)
 #tpkh = pkh = mk_pubkey_script(addr)[6:-4]
 
 masterpriv = hashlib.sha256("master"*42).hexdigest()
 # masterpub = compress(privtopub(masterpriv))
 # masteraddr = pubtoaddr(masterpub, 111)
 
-# ops = [
-#        OPname['IF'],
-#        masterpub,
-#        OPname['CHECKSIGVERIFY'],
-#        OPname['ELSE'],
-#        '80bf07', #binascii.hexlify(from_int_to_le_bytes(507776)), # '80bf07'
-#        OPname['NOP2'],
-#        OPname['DROP'],
-#        OPname['ENDIF'],
-#        tpub,
-#        OPname['CHECKSIG']
-#        ]
+# ops = [OPname['IF'], masterpub, OPname['CHECKSIGVERIFY'], OPname['ELSE'], '80bf07', #binascii.hexlify(from_int_to_le_bytes(507776)), # '80bf07' OPname['NOP2'], OPname['DROP'], OPname['ENDIF'], tpub, OPname['CHECKSIG']]
 
 myscript = "63210330ed33784ee1891122bc608b89da2da45194efaca68564051e5a7be9bee7f63fad670380bf07" \
            "b1756841042daa93315eebbe2cb9b5c3505df4c6fb6caca8b756786098567550d4820c09db988fe999" \

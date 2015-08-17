@@ -312,8 +312,8 @@ def serialize_script_unit(unit):
 if is_python2:
     def serialize_script(script):
         if json_is_base(script, 16):
-            json_changebase = json_unhexlify(script)
-            return binascii.hexlify(serialize_script(json_changebase))
+            script_bin = json_unhexlify(script)
+            return safe_hexlify(serialize_script(script_bin))
         return ''.join(map(serialize_script_unit, script))
 else:
     def serialize_script(script):
