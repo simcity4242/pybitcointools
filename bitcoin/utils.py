@@ -10,15 +10,21 @@ def ishex(s):
     return set(s).issubset(set('0123456789abcdefABCDEF'))
 
 def isbin(s):
-    if not (is_python2 or isinstance(s, bytes)):
+    if not (is_python2 and isinstance(s, bytes)):
         return False
     if len(s)%2 == 1:
         return True
-    try: 
-        binascii.unhexlify(s)
-        return False
-    except TypeError: 
-        return True
+    # alpha = ''.join([chr(x) for x in xrange(256)])
+    # printable = (9, 10, 13) + tuple(xrange(32, 126 + 1))
+    # n_printable, n_escaped = 0, 0
+    # for ch in s:
+    #     n_printable += (alpha.index(ch) in printable)
+    #     n_escaped   += (alpha.index(ch) in printable)
+    # assert n_escaped + n_printable == len(s)
+    # prob_printable = 99.0 / 256
+
+
+
 
 def satoshi_to_btc(val):
     return (float(val) / 1e8)
@@ -226,8 +232,8 @@ taddr = privtoaddr(tpriv, 111)
 #tpkh = pkh = mk_pubkey_script(addr)[6:-4]
 
 masterpriv = hashlib.sha256("master"*42).hexdigest()
-# masterpub = compress(privtopub(masterpriv))
-# masteraddr = pubtoaddr(masterpub, 111)
+masterpub = compress(privtopub(masterpriv))
+masteraddr = pubtoaddr(masterpub, 111)
 
 # ops = [OPname['IF'], masterpub, OPname['CHECKSIGVERIFY'], OPname['ELSE'], '80bf07', #binascii.hexlify(from_int_to_le_bytes(507776)), # '80bf07' OPname['NOP2'], OPname['DROP'], OPname['ENDIF'], tpub, OPname['CHECKSIG']]
 

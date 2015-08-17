@@ -6,11 +6,17 @@ from bitcoin.pyspecials import *
 from bitcoin.bci import fetchtx
 
 
+def rev(s):
+    """Reverse Endianess of bytes or hex string"""
+    if isinstance(s, string_or_bytes_types) and re.match('^[0-9a-fA-F]*$', s):
+        return safe_hexlify(rev(safe_unhexlify(s)))
+    return s[::-1]
+
+
 # Transaction serialization and deserialization
 
 def deserialize(tx):
     if isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx):
-        #tx = bytes(bytearray.fromhex(tx))
         return json_hexlify(deserialize(binascii.unhexlify(tx)))
     # http://stackoverflow.com/questions/4851463/python-closure-write-to-variable-in-parent-scope
     # Python's scoping rules are demented, requiring me to make pos an object
@@ -507,7 +513,7 @@ def mksend(*args, **kwargs):
 
 	
 # takes "txid:0"
-def get_script(*args):
+def get_script(*args, **kwargs):
     # last param can be 'ins', 'outs'
     if args[-1] in ("ins", "outs"):
         source = str(args[-1])
@@ -515,34 +521,45 @@ def get_script(*args):
     else: source = None
     if isinstance(args[0], str) and ':' in args[0]:
         txid, vout = args[0].split(':')
-    #elif isinstance(args[0], str) and re.match('^[0-9a-fA-F]*$', args[0]) and str(args[0]).startswith("01000000"):
-    try:    txo = deserialize(fetchtx(txid))
-    except: txo = deserialize(fetchtx(txid, 'testnet'))
-    scriptsig = reduce(access, ["ins", vout, "script"],  txo)
-    script_pk = reduce(access, ["outs", vout, "script"], txo)
+    elif (len(args) == 2 and not source) or len(args) == 3:
+        txh, vout = str(args[0]), int(args[1])
+    network = kwargs.get('network', 'btc')
+    try:    txo = deserialize(fetchtx(txid, network))
+    except: txo = deserialize(txh)
     if source is None:
+        scriptsig, script_pk = [], []
+        for inp in txo['ins']:
+            scriptsig.append(inp['script'])
+        for outp in txo['outs']:
+            script_pk.append(inp['script'])
         return {'ins': scriptsig, 'outs': script_pk}
-    return scriptsig if source == 'ins' else script_pk
+    return access(txo, "ins")[vout]['script'] if source == 'ins' else access(txo, "outs")[vout]['script']
 
 
 # takes "txid:vout"
-def get_scriptsig(outpoint):
+def get_scriptsig(*args, **kwargs):
     """Return scriptSig for 'txid:index'"""
-    if ':' in outpoint:
-        txid, vout = outpoint.split(':')
-    try:    txo = deserialize(fetchtx(txid))
-    except: txo = deserialize(fetchtx(txid, 'testnet'))
+    if len(args) == 1 and ':' in args[0]:
+        txid, vout = args[0].split(':')
+    elif len(args) == 2 and args[0][:8] == '01000000' and str(args[1]).isdigit():
+        txh, vout = args[0], int(args[1])
+    network = kwargs.get('network', 'btc')
+    try:    txo = deserialize(fetchtx(txid, network))
+    except: txo = deserialize(txh)
     scriptsig = reduce(access, ["ins", vout, "script"], txo)
     return scriptsig
 
 
-# takes "txid:vout" 
-def get_scriptpubkey(outpoint):
+# takes "txid:vout" or hex_tx, index
+def get_scriptpubkey(*args, **kwargs):
     """Return scriptPubKey for 'txid:index'"""
-    if ':' in outpoint:
-        txid, vout = outpoint.split(':')
-    try:    txo = deserialize(fetchtx(txid))
-    except: txo = deserialize(fetchtx(txid, 'testnet'))
+    if len(args) == 1 and ':' in args[0]:
+        txid, vout = args[0].split(':')
+    elif len(args) == 2 and args[0][:8] == '01000000' and str(args[1]).isdigit():
+        txh, vout = args[0], int(args[1])
+    network = kwargs.get('network', 'btc')
+    try:    txo = deserialize(fetchtx(txid, network))
+    except: txo = deserialize(txh)
     script_pubkey = reduce(access, ["outs", vout, "script"], txo)
     return script_pubkey
 
