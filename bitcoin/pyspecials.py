@@ -158,7 +158,7 @@ if is_python2:
 
     def from_bytes_to_int(bstr, byteorder='big', signed=False):
         if byteorder != 'big':
-            bstr = reversed(bstr)
+            bstr = bstr[::-1]
         v = 0
         bytes_to_ints = (lambda x: [ord(c) for c in x])
         for c in bytes_to_ints(bstr):

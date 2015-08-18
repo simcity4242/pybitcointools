@@ -567,7 +567,9 @@ def ecdsa_raw_sign(msghash, priv, low_s=False):
     s = inv(k, N) * (z + r*priv) % N
     if low_s:
         s = N-s if s>N//2 else s
-    return 27+(y % 2), r, s		# vbyte, r, s
+    # FIXME: (below) is it 31 for compressed??
+    vbyte = 27 + 4 * ('compressed' in get_privkey_format(priv))
+    return vbyte+(y % 2), r, s		# vbyte, r, s
 
 
 def ecdsa_sign(msg, priv):
