@@ -94,7 +94,8 @@ SIGHASH_NONE = 2
 SIGHASH_SINGLE = 3
 # this works like SIGHASH_ANYONECANPAY | SIGHASH_ALL, might as well make it explicit while
 # we fix the constant
-SIGHASH_ANYONECANPAY = 0x81
+SIGHASH_ACP = 0x80
+SIGHASH_ANYONECANPAY = SIGHASH_ACP | SIGHASH_ALL
 
 
 def signature_form(tx, i, script, hashcode=SIGHASH_ALL):
@@ -186,8 +187,8 @@ def txhash(tx, hashcode=None):
     if isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx):
         tx = changebase(tx, 16, 256)
     if hashcode is not None:
-        return dbl_sha256(from_str_to_bytes(tx) + from_int_to_bytes(int(hashcode), 4, 'little'))
-    else:       # if SIGHASH_ALL = 0  ????
+        return dbl_sha256(from_str_to_bytes(tx) + from_int_to_le_bytes(int(hashcode), 4))
+    else:
         return safe_hexlify(bin_dbl_sha256(tx)[::-1])
 
 
@@ -195,9 +196,13 @@ def bin_txhash(tx, hashcode=None):
     return binascii.unhexlify(txhash(tx, hashcode))
 
 
-def ecdsa_tx_sign(tx, priv, hashcode=SIGHASH_ALL):
+def ecdsa_tx_sign(tx, priv, hashcode=SIGHASH_ALL, low_s=True):
     """Returns DER sig for rawtx w/ hashcode apppended"""
-    rawsig = ecdsa_raw_sign(bin_txhash(tx, hashcode), priv, low_s=True)
+    rawsig = ecdsa_raw_sign(bin_txhash(tx, hashcode), priv)
+    if low_s:
+        v,r,s = rawsig
+        s = N-s if s>N//2 else s
+        rawsig = v,r,s
     return der_encode_sig(*rawsig) + encode(hashcode, 16, 2)
 
 
@@ -613,15 +618,14 @@ def check_transaction(tx):
         if nValueOut > MAX_MONEY:
             raise Exception("TxOuts' total out of range")
 
-    # TODO: fix below code
     #Check for duplicate inputs
-    #if [x for x in tx.txs_in if tx.txs_in.count(x) > 1]:
-    #    raise Exception("duplicate inputs")
-    #if(tx.is_coinbase()):
-    #    if len(tx.txs_in[0].script) < 2 or len(tx.txs_in[0].script) > 100:
-    #        raise Exception("bad coinbase script size")
-    #else:
-    #    for txin in tx.txs_in:
-    #        if not txin:
-    #            raise ValidationFailureError("prevout is null")
+    if set(("%s:%d" % (x["outpoint"]["hash"], x["outpoint"]["index"]) for x in txo["ins"])) < len(txo["ins"]):
+        raise Exception("duplicate inputs")
+    for x in txo['ins']:
+        if x["outpoint"]["index"] in (0xffffffff, -1):      # COINBASE; index -1, hash 00
+            if not (len(safe_unhexlify(x["script"])) in xrange(2, 101)):    # script's len 2<=len<=100
+                raise Exception("bad coinbase script size")
+    # TODO: below   check if INS are blank
+    #if any([decode(x["outpoint"].get("hash", '1', 16) == 0 for x in txo["ins"]]):
+    #    raise Exception("prevout is null")
     return True

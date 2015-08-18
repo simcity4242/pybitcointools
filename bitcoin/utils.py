@@ -226,12 +226,12 @@ def is_tx_obj(txobj):
 
 #SIG64="G8kH/WEgiATGXSy78yToe36IF9AUlluY3bMdkDFD1XyyDciIbXkfiZxk/qmjGdMeP6/BQJ/C5U/pbQUZv1HGkn8="
 
-tpriv = hashlib.sha256("mrbubby"*3+"!").hexdigest()
+tpriv = hashlib.sha256(b"mrbubby"*3+b"!").hexdigest()
 tpub = privtopub(tpriv)
 taddr = privtoaddr(tpriv, 111)
 #tpkh = pkh = mk_pubkey_script(addr)[6:-4]
 
-masterpriv = hashlib.sha256("master"*42).hexdigest()
+masterpriv = hashlib.sha256(b"master"*42).hexdigest()
 masterpub = compress(privtopub(masterpriv))
 masteraddr = pubtoaddr(masterpub, 111)
 

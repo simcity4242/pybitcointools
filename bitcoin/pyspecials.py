@@ -98,7 +98,7 @@ if is_python2:
             else:
                 padding = lpad('', '\0', nblen)
             return padding + encode(decode(string, 58), to)
-        return encode(decode(string, 58), to, minlen)
+        return encode(decode(string, frm), to, minlen)
 
     def bin_to_b58check(inp, magicbyte=0):
         inp_fmtd = from_int_to_byte(int(magicbyte)) + inp
@@ -228,6 +228,43 @@ elif sys.version_info.major == 3:
         256: ''.join([chr(x) for x in range(256)])
     }
 
+    ### Hex to bin converter and vice versa for objects
+
+    def json_is_base(obj, base):
+        alpha = get_code_string(base)
+        if isinstance(obj, string_types):
+            for i in range(len(obj)):
+                if alpha.find(obj[i]) == -1:
+                    return False
+            return True
+        elif isinstance(obj, int_types) or obj is None:
+            return True
+        elif isinstance(obj, list):
+            for i in range(len(obj)):
+                if not json_is_base(obj[i], base):
+                    return False
+            return True
+        else:
+            for x in obj:
+                if not json_is_base(obj[x], base):
+                    return False
+            return True
+
+    def json_changebase(obj, changer):
+        if isinstance(obj, string_types):
+            return changer(obj)
+        elif isinstance(obj, int_types) or obj is None:
+            return obj
+        elif isinstance(obj, list):
+            return [json_changebase(x, changer) for x in obj]
+        return dict((x, json_changebase(obj[x], changer)) for x in obj)
+
+    def json_hexlify(obj):
+        return json_changebase(obj, lambda x: binascii.hexlify(x))
+
+    def json_unhexlify(obj):
+        return json_changebase(obj, lambda x: binascii.unhexlify(x))
+
     def bin_dbl_sha256(s):
         bytes_to_hash = from_string_to_bytes(s)
         return hashlib.sha256(hashlib.sha256(bytes_to_hash).digest()).digest()
@@ -244,34 +281,56 @@ elif sys.version_info.major == 3:
             raise ValueError("Invalid base!")
 
     def changebase(string, frm, to, minlen=0):
+        string = by(string)
         if frm == to:
-            return lpad(string, get_code_string(frm)[0], minlen)
+            return lpad(string, by(get_code_string(frm)[0]), minlen)
         elif frm in (16, 256) and to == 58:
             if frm == 16:
-                nblen = len(re.match('^(00)*', string).group(0)) // 2
+                nblen = len(re.match(b'^(00)*', string).group(0))//2
             else:
-                nblen = len(from_bytes_to_str(re.match('^(\x00)*', string).group(0)))
+                nblen = len(re.match(b'^(\x00)*', string).group(0))
             return lpad('', '1', nblen) + encode(decode(string, frm), to)
         elif frm == 58 and to in (16, 256):
-            nblen = len(re.match('^(1)*', string).group(0))
+            nblen = len(re.match(b'^(1)*', string).group(0))
             if to == 16:
-                padding = lpad('', '00', nblen)
+                padding = lpad(b'', b'00', nblen)
             else:
-                padding = lpad('', '\0', nblen)
+                padding = lpad(b'', b'\0', nblen)
             return padding + encode(decode(string, frm), to)
         return encode(decode(string, frm), to, minlen)
 
     def bin_to_b58check(inp, magicbyte=0):
-        inp_fmtd = from_int_to_byte(int(magicbyte))+inp
+        inp_fmtd = from_int_to_byte(int(magicbyte)) + inp
         checksum = bin_dbl_sha256(inp_fmtd)[:4]
-        return changebase(inp_fmtd+checksum, 256, 58)
+        leadingzbytes = 0
+        for x in inp_fmtd:
+            if x != 0:
+                break
+            leadingzbytes += 1
+        return '1' * leadingzbytes + changebase(inp_fmtd+checksum, 256, 58)
 
-    def safe_hexlify(a):
-        return st(binascii.hexlify(a))
+    def hexify(b):
+        if isinstance(b, string_types):
+            return binascii.hexlify(b)
+        elif isinstance(b, dict):
+            return json_hexlify(b)
+        elif isinstance(b, int_types) or b is None:
+            return b
+        elif isinstance(b, list):
+            return [hexify(x) for x in b]
 
-    def safe_unhexlify(b):
-        # 'abcde' / b'abcd' => b'\xab\xcd'
-        return binascii.unhexlify(b)
+    def unhexify(s):
+        if isinstance(s, string_or_bytes_types):
+            return binascii.unhexlify(s)
+        elif isinstance(s, dict):
+            return json_unhexlify(s)
+        elif isinstance(s, int_types) or s is None:
+            return s
+        elif isinstance(s, list):
+            return [unhexify(x) for x in s]
+
+    safe_unhexlify = unhex_it = unhexify
+    safe_hexlify   = hex_it   = hexify
 
     def from_int_repr_to_bytes(a):
         return by(str(a))
@@ -304,26 +363,25 @@ elif sys.version_info.major == 3:
     from_bytes_to_string = from_bytes_to_str
 
     def short_hex(hexstr):
-        if len(hexstr) < 11 or not re.match('^[0-9a-fA-F]*$', hexstr):
+        if len(hexstr) < 11 or not re.match('^[0-9a-fA-F]*$', st(hexstr)):
             return hexstr
         t = by(hexstr)
         return t[0:4]+"..."+t[-4:]
-	
+
     def encode(val, base, minlen=0):
         base, minlen = int(base), int(minlen)
         code_string = get_code_string(base)
-        result_bytes = bytes()
+        result_bytes = bytearray()
         while val > 0:
             curcode = code_string[val % base]
-            result_bytes = bytes([ord(curcode)]) + result_bytes
+            result_bytes.insert(0, ord(curcode))
             val //= base
 
         pad_size = minlen - len(result_bytes)
 
-        padding_element = b'\x00' if base == 256 else b'1' \
-            if base == 58 else b'0'
+        padding_element = b'\x00' if base == 256 else b'1' if base == 58 else b'0'
         if (pad_size > 0):
-            result_bytes = padding_element*pad_size + result_bytes
+            result_bytes = padding_element*pad_size + bytes(result_bytes)
 
         result_string = ''.join([chr(y) for y in result_bytes])
         result = result_bytes if base == 256 else result_string
