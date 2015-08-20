@@ -792,7 +792,50 @@ class BitcoinCore_TransactionValid(unittest.TestCase):
         print("Testing BitcoinCore Transactions (Valid)")
 
     def test_all(self):
-        # [[[prevout_txid, prevout_vout, prevout_spk], ... ], serialized_tx]
+        def ishex(s):
+            return set(s).issubset(set('0123456789abcdefABCDEF'))
+
+        def parse_script(s):
+            from bitcoin.transaction import serialize_script
+            from bitcoin.utils import OPname
+            r = []
+            for word in s.split():
+                if word.isdigit() or (word[0] == '-' and word[1:].isdigit()):
+                    r.append(int(word, 0))
+                elif word.startswith('0x') and ishex(word[2:]):
+                    if int(word[2:], 16) < 0x4c:
+                        continue
+                    else:
+                        r.append(word[2:])
+                elif len(word) >= 2 and word[0] == "'" and word[-1] == "'":
+                    r.append(word[1:-1])
+                elif word in OPname:
+                    r.append(OPname[word])  # r.append(get_op(v[3:]))
+            return serialize_script(r)
+
+        def load_tvv():
+            with open('tests/tx_valid.json', 'r') as fo:
+                for tv in json.load(fo):
+                    if len(tv) == 1: continue
+                    assert len(tv) == 3
+
+                    prevouts = {}
+                    for json_prevout in tv[0]:
+                        assert len(json_prevout) == 3
+                        n = 0xffffffff if json_prevout[1] == -1 else json_prevout[1]
+                        prevout = "%s:%d" % (json_prevout[0], n)
+                        prevouts[prevout] = parse_script(json_prevout[2])
+
+                    tx = deserialize(str(tv[1]))
+                    flags = tv[2]
+
+                    yield (prevouts, tx, flags)
+
+        for i, (po, tx, flags) in enumerate(load_tvv()):
+            self.assertTrue(check_transaction(tx),
+                            "Check Tx Failed:\nIndex: %d\nTx hex: %s" % (i, str(tx)))
+
+                # [[[prevout_txid, prevout_vout, prevout_spk], ... ], serialized_tx]
         tx_valid_test_vectors = [
 
            [

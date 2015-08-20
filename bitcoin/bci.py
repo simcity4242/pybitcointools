@@ -10,6 +10,7 @@ except:
 
 BCI_API = ""
 CHAIN_API = "api-key-id=211a589ce9bbc35de662ee02d51aa860"
+BITEASY_API = ""
 
 def set_api(*args):
     """Set API code for web service"""
@@ -141,6 +142,35 @@ def helloblock_unspent(*args):
                 })
     return o
 
+def biteasy_unspent(*args):
+    network, addrs = parse_addr_args(*args)
+    base_url = "https://api.biteasy.com/%s/v1/"
+    url = base_url % 'testnet' if network == 'testnet' else base_url % "blockchain"
+    offset, txs = 0, []
+    for addr in addrs:
+        # TODO: fix multi address search
+        while True:
+            data = make_request(url + "/addresses/%s/unspent-outputs?per_page=20" % addr)
+            try:
+                jsondata = json.loads(data)
+            except:
+                raise Exception("Could not decode JSON data")
+            txs.extend(jsondata['data']['outputs'])
+            if jsondata['data']['pagination']['next_page'] is False:
+                break
+            offset += 20 # jsondata['data']['pagination']["per_page"]
+            sys.stderr.write("Fetching more transactions... " + str(offset) + '\n')
+        o = []
+        for utxo in txs:
+            assert utxo['to_address'] == addr and utxo['is_spent'] == 0, "Wrong address or UTXO is spent"
+            o.append({
+                "output": "%s:%d" % (utxo['transaction_hash'], utxo['transaction_index']),
+                "value": utxo['value']
+            })
+        return o
+
+
+
 # def webbtc_unspent(*args):
 #     network, addrs = parse_addr_args(*args)
 #     if network == 'testnet':
@@ -156,8 +186,9 @@ def helloblock_unspent(*args):
 unspent_getters = {
     'bci': bci_unspent,
     'blockr': blockr_unspent,
-    #'webbtc': webbtc_unspent,           #
+    #'webbtc': webbtc_unspent,           # TODO: implement webbtc unspent function
     'helloblock': helloblock_unspent
+    'biteasy': biteasy_unspent
 }
 
 

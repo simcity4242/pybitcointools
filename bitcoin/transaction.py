@@ -558,6 +558,7 @@ def get_scriptsig(*args, **kwargs):
 # takes "txid:vout" or hex_tx, index
 def get_scriptpubkey(*args, **kwargs):
     """Return scriptPubKey for 'txid:index'"""
+    # TODO: can use biteasy to retrieve a Tx's SPK
     if len(args) == 1 and ':' in args[0]:
         txid, vout = args[0].split(':')
     elif len(args) == 2 and args[0][:8] == '01000000' and str(args[1]).isdigit():
@@ -589,15 +590,13 @@ def get_outpoints(rawtx, i=None):
 
 # https://github.com/richardkiss/pycoin/blob/master/tests/bc_transaction_test.py#L177-L210
 def check_transaction(tx):
-    MAX_BLOCK_SIZE = 1000000
-    MAX_MONEY = 21000000 * 100000000
     if isinstance(tx, string_types):
         if re.match('^[0-9a-fA-F]*$', tx):
             txo = json_unhexlify(deserialize(tx))
         else:
             txo = deserialize(tx)
-    elif isinstance(tx, dict) and json_is_base(tx, 16):
-        txo = json_unhexlify(tx)
+    elif isinstance(tx, dict):
+        txo = json_unhexlify(tx) if json_is_base(tx, 16) else tx
     else: raise Exception("JSON must be base16)")  # Dict with base256 *values*
 
     if 'ins' not in txo:
@@ -606,10 +605,12 @@ def check_transaction(tx):
         raise Exception("TxOuts missing")
 
     #Size limits
+    MAX_BLOCK_SIZE = 1000000
     if len(serialize(txo)) > MAX_BLOCK_SIZE:
-        raise Exception("size > %d" % MAX_BLOCK_SIZE)
+        raise Exception("size exceeds MAX BLOCK SIZE: %d" % MAX_BLOCK_SIZE)
 
     #Check for negative or overflow output values
+    MAX_MONEY = 21000000 * 100000000
     nValueOut = 0
     for i, txout in enumerate(txo['outs']):
         if not (0 <= txout['value'] <= MAX_MONEY):
@@ -619,13 +620,16 @@ def check_transaction(tx):
             raise Exception("TxOuts' total out of range")
 
     #Check for duplicate inputs
-    if set(("%s:%d" % (x["outpoint"]["hash"], x["outpoint"]["index"]) for x in txo["ins"])) < len(txo["ins"]):
+    if len(set(("%s:%d" % (x["outpoint"]["hash"], x["outpoint"]["index"]) \
+                for x in txo["ins"]))) < len(txo["ins"]):
         raise Exception("duplicate inputs")
-    for x in txo['ins']:
-        if x["outpoint"]["index"] in (0xffffffff, -1):      # COINBASE; index -1, hash 00
-            if not (len(safe_unhexlify(x["script"])) in xrange(2, 101)):    # script's len 2<=len<=100
-                raise Exception("bad coinbase script size")
-    # TODO: below   check if INS are blank
-    #if any([decode(x["outpoint"].get("hash", '1', 16) == 0 for x in txo["ins"]]):
-    #    raise Exception("prevout is null")
+    #Check is coinbase
+    if len(txo["ins"]) == 1 and txo["ins"][0]["outpoint"]["hash"] == b'\0'*32 \
+                    and txo["ins"][0]["outpoint"]["index"] == 0xffffffff:      # COINBASE; index -1, hash 00
+        if len(txo["ins"][0]["script"] not in xrange(2, 101)):    # script's len 2<=len<=100
+            raise Exception("bad coinbase script size")
+    #Check ins aren't missing
+    if len(txo["ins"]) == 0:
+        raise Exception("prevout is null")
+
     return True

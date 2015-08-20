@@ -307,11 +307,11 @@ elif sys.version_info.major == 3:
             if x != 0:
                 break
             leadingzbytes += 1
-        return '1' * leadingzbytes + changebase(inp_fmtd+checksum, 256, 58)
+        return b'1' * leadingzbytes + changebase(inp_fmtd+checksum, 256, 58)
 
     def hexify(b):
-        if isinstance(b, string_types):
-            return binascii.hexlify(b)
+        if isinstance(b, string_or_bytes_types):
+            return st(binascii.hexlify(b))
         elif isinstance(b, dict):
             return json_hexlify(b)
         elif isinstance(b, int_types) or b is None:
@@ -381,7 +381,7 @@ elif sys.version_info.major == 3:
 
         padding_element = b'\x00' if base == 256 else b'1' if base == 58 else b'0'
         if (pad_size > 0):
-            result_bytes = padding_element*pad_size + bytes(result_bytes)
+            result_bytes = bytes(bytearray(padding_element*pad_size) + result_bytes)
 
         result_string = ''.join([chr(y) for y in result_bytes])
         result = result_bytes if base == 256 else result_string
@@ -390,10 +390,9 @@ elif sys.version_info.major == 3:
 
     def decode(string, base):
         if base == 256 and isinstance(string, str):
-            string = bytes(bytearray.fromhex(string))
+            string = bytes.fromhex(string)
         base = int(base)
         code_string = get_code_string(base)
-        result = 0
         if base == 256:
             def extract(d, cs):
                 return d
@@ -403,6 +402,7 @@ elif sys.version_info.major == 3:
 
         if base == 16:
             string = string.lower()
+        result = 0
         while len(string) > 0:
             result *= base
             result += extract(string[0], code_string)
