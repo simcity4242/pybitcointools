@@ -187,7 +187,7 @@ unspent_getters = {
     'bci': bci_unspent,
     'blockr': blockr_unspent,
     #'webbtc': webbtc_unspent,           # TODO: implement webbtc unspent function
-    'helloblock': helloblock_unspent
+    'helloblock': helloblock_unspent,
     'biteasy': biteasy_unspent
 }
 
