@@ -624,6 +624,8 @@ def check_transaction(tx):
                 for x in txo["ins"]))) < len(txo["ins"]):
         raise Exception("duplicate inputs")
     #Check is coinbase
+    #IS_NULL = ('00'*32, '\0'*32, 0, 0x80)
+    #IS_NEG_ONE = (-1, 0x81, 0xffffffff, "ff"*4)
     if len(txo["ins"]) == 1 and txo["ins"][0]["outpoint"]["hash"] == b'\0'*32 \
                     and txo["ins"][0]["outpoint"]["index"] == 0xffffffff:      # COINBASE; index -1, hash 00
         if len(txo["ins"][0]["script"] not in xrange(2, 101)):    # script's len 2<=len<=100

@@ -213,7 +213,7 @@ def bip32_descend(*args):
     try: 
         path = parse_bip32_path(path)
     except TypeError: 
-        pass
+        sys.stderr.write("Couldn't parse BIP32 path")
     for p in path:
         key = bip32_ckd(key, p)
     return bip32_extract_key(key)

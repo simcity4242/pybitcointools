@@ -544,9 +544,27 @@ def get_block_height(txhash):
 
 
 def get_block_coinbase(txval):
-    # TODO: use translation table for coinbase fields
-    j = _get_block(inp=txval)
-    cb = unhexify(st(j['tx'][0]['inputs'][0]['script']))
+    j = _get_block(txval)
+    cb = bytearray.fromhex(j['tx'][0]['inputs'][0]['script'])
     alpha = set(map(chr, list(range(32, 126))))
-    cbtext = ''.join(list(map(chr, filter(lambda x: chr(x) in alpha, bytearray(cb)))))
-    return cbtext
+    if len(cb) - 1 == ord(cb[0]):
+        return bytes(cb[1:]).decode('utf-8')
+    elif set((x for x in cb)).issubset(alpha):
+        return bytes(cb).decode('utf-8')
+    else:
+        return ''.join([chr(x) for x in cb if x in alpha])
+
+
+def biteasy_search(*args):
+    if len(args) == 2 and args[-1] in ('btc', 'testnet'):
+        q, network = args
+    else:
+        q, network = args[0], 'btc'
+    base_url = 'https://api.biteasy.com/%s/v1/search?q=' % \
+               ('blockchain' if network == 'btc' else 'testnet')
+    data = make_request(base_url + str(q))
+    data = json.loads(data)     # we're left with {'results': [...], 'type': BLOCK}
+    # TODO: parse different types, eg BLOCK
+    return data.get('data', repr(data))
+
+

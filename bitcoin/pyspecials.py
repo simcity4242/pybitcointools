@@ -307,7 +307,7 @@ elif sys.version_info.major == 3:
             if x != 0:
                 break
             leadingzbytes += 1
-        return b'1' * leadingzbytes + changebase(inp_fmtd+checksum, 256, 58)
+        return '1' * leadingzbytes + changebase(inp_fmtd+checksum, 256, 58)
 
     def hexify(b):
         if isinstance(b, string_or_bytes_types):
