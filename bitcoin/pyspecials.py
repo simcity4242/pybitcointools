@@ -285,18 +285,14 @@ elif sys.version_info.major == 3:
         if frm == to:
             return lpad(string, by(get_code_string(frm)[0]), minlen)
         elif frm in (16, 256) and to == 58:
-            if frm == 16:
-                nblen = len(re.match(b'^(00)*', string).group(0))//2
-            else:
-                nblen = len(re.match(b'^(\x00)*', string).group(0))
-            return lpad('', '1', nblen) + encode(decode(string, frm), to)
+            nblen = len(re.match(b'^(00)*', string).group(0))//2 if frm == 16 else \
+                    len(re.match(b'^(\0)*', string).group(0))
+            return lpad('', '1', nblen) + encode(decode(string, frm), 58)
         elif frm == 58 and to in (16, 256):
             nblen = len(re.match(b'^(1)*', string).group(0))
-            if to == 16:
-                padding = lpad(b'', b'00', nblen)
-            else:
-                padding = lpad(b'', b'\0', nblen)
-            return padding + encode(decode(string, frm), to)
+            padding = lpad(b'', b'00', nblen) if to == 16 else \
+                      lpad(b'', b'\0', nblen)
+            return padding + encode(decode(string, 58), to)
         return encode(decode(string, frm), to, minlen)
 
     def bin_to_b58check(inp, magicbyte=0):
@@ -314,7 +310,7 @@ elif sys.version_info.major == 3:
             return st(binascii.hexlify(b))
         elif isinstance(b, dict):
             return json_hexlify(b)
-        elif isinstance(b, int_types) or b is None:
+        elif isinstance(b, int_types) or (b is None):
             return b
         elif isinstance(b, list):
             return [hexify(x) for x in b]
@@ -324,7 +320,7 @@ elif sys.version_info.major == 3:
             return binascii.unhexlify(s)
         elif isinstance(s, dict):
             return json_unhexlify(s)
-        elif isinstance(s, int_types) or s is None:
+        elif isinstance(s, int_types) or (s is None):
             return s
         elif isinstance(s, list):
             return [unhexify(x) for x in s]

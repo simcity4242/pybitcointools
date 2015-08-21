@@ -620,18 +620,20 @@ def check_transaction(tx):
             raise Exception("TxOuts' total out of range")
 
     #Check for duplicate inputs
-    if len(set(("%s:%d" % (x["outpoint"]["hash"], x["outpoint"]["index"]) \
-                for x in txo["ins"]))) < len(txo["ins"]):
+    INS = txo['ins']
+    OUTPOINTS = multiaccess(INS, 'outpoint')
+    if len(set(("%s:%d" % (x["hash"], x["index"]) for x in OUTPOINTS))) < len(txo["ins"]):
         raise Exception("duplicate inputs")
+
     #Check is coinbase
-    #IS_NULL = ('00'*32, '\0'*32, 0, 0x80)
-    #IS_NEG_ONE = (-1, 0x81, 0xffffffff, "ff"*4)
-    if len(txo["ins"]) == 1 and txo["ins"][0]["outpoint"]["hash"] == b'\0'*32 \
-                    and txo["ins"][0]["outpoint"]["index"] == 0xffffffff:      # COINBASE; index -1, hash 00
-        if len(txo["ins"][0]["script"] not in xrange(2, 101)):    # script's len 2<=len<=100
+    NULL = (b'00'*32, b'\0'*32, 0, 0x80)
+    NEG_ONE = (-1, 0x81, 0xffffffff, b"ff"*4)
+    if len(INS) == 1 and (OUTPOINTS[0]["hash"] in NULL) and (OUTPOINTS[0]["index"] in NEG_ONE):
+        if len(INS[0]["script"]) not in xrange(2, 101):    # script's len 2<=len<=100
             raise Exception("bad coinbase script size")
+
     #Check ins aren't missing
-    if len(txo["ins"]) == 0:
+    if not len(INS):        # if len(INS) == 0
         raise Exception("prevout is null")
 
     return True
