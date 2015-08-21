@@ -1,7 +1,6 @@
 import re
 from pprint import pprint as pp
-from bitcoin.main import *
-from bitcoin.main import privtopub, privtoaddr, pubtoaddr
+from bitcoin.main import *;from bitcoin.main import privtopub, privtoaddr, pubtoaddr
 from bitcoin.transaction import *
 from bitcoin.bci import *
 
@@ -9,25 +8,15 @@ from bitcoin.bci import *
 def ishex(s):
     return set(s).issubset(set('0123456789abcdefABCDEF'))
 
+
 def isbin(s):
-    if not (is_python2 and isinstance(s, bytes)):
-        return False
-    if len(s)%2 == 1:
-        return True
-    # alpha = ''.join([chr(x) for x in xrange(256)])
-    # printable = (9, 10, 13) + tuple(xrange(32, 126 + 1))
-    # n_printable, n_escaped = 0, 0
-    # for ch in s:
-    #     n_printable += (alpha.index(ch) in printable)
-    #     n_escaped   += (alpha.index(ch) in printable)
-    # assert n_escaped + n_printable == len(s)
-    # prob_printable = 99.0 / 256
-
-
+    if not (is_python2 and isinstance(s, bytes)): return False
+    else: return True
 
 
 def satoshi_to_btc(val):
     return (float(val) / 1e8)
+
 
 def btc_to_satoshi(val):
     return int(val*1e8 + 0.5)
@@ -172,33 +161,41 @@ OP_ALIASES = [
     ("OP_FALSE", 0)
 ]
 
-OPname = dict([(k[3:], v) for k, v in OPCODE_LIST + OP_ALIASES]);OPname.update(dict([(k,v) for k,v in OPCODE_LIST + OP_ALIASES]))
+OPname = dict([(k[3:], v) for k, v in OPCODE_LIST + OP_ALIASES]); OPname.update(dict([(k,v) for k,v in OPCODE_LIST + OP_ALIASES]))
 OPint = dict([(v,k) for k,v in OPCODE_LIST])
 
 def get_op(s):
     """Returns OP_CODE for integer, or integer for OP_CODE"""
     getop = lambda o: OPname.get(o.upper() if not o.startswith("OP_") else str(o[2:]).upper(), 0)
     if isinstance(s, int):
-        return OPint.get(s, '')
-    elif isinstance(s, basestring):
+        return OPint.get(s, "")
+    elif isinstance(s, string_types):
         return getop(s)
 
-def parse_script(s):
+def parse_script(spk):
     from bitcoin.transaction import serialize_script
-    r = []
-    for word in s.split():
+    spk, res = str(spk), []
+    if all([x in spk for x in ['[', ']']]):   # HASH160 0x14 [0xdc44b1164188067c3a32d4780f5996fa14a4f2d9] EQUALVERIFY
+        spk = spk.replace('[', '0x').replace(']', '')
+    for word in spk.split():
         if word.isdigit() or (word[0] == '-' and word[1:].isdigit()):
-            r.append(int(word, 0))
-        elif word.startswith('0x') and ishex(word[2:]):
+            res.append(int(word, 0))
+        elif word.startswith('0x') and re.match('^[0-9a-fA-F]*$', word[2:]):
             if int(word[2:], 16) < 0x4c:
                 continue
             else:
-                r.append(word[2:])
+                res.append(word[2:])
         elif len(word) >= 2 and word[0] == "'" and word[-1] == "'":
-            r.append(word[1:-1])
+            res.append(word[1:-1])
+        elif word.startswith('[0x') and word.endswith(']') and re.match('^[0-9a-fA-F]*$', word[3:-1]):
+            word = word[1:-1]
+            if int(word[2:], 16) < 0x4c:
+                continue
+            else:
+                res.append(word[2:])
         elif word in OPname:
-            r.append(OPname[word])  # r.append(get_op(v[3:]))
-    return serialize_script(r)
+            res.append(OPname[word])  # r.append(get_op(v[3:]))
+    return serialize_script(res)
 
 #priv, pub, addr = '', '', ''
 
@@ -208,7 +205,7 @@ def mk_privpubaddr(privkey, compressed=False, magicbyte=0):
     pub = privtopub(compress(priv)) if compressed else privtopub(priv)
     addr = pubtoaddr(pub, int(magicbyte))
 
-def is_tx_hex(txhex):
+def is_txhex(txhex):
     if not isinstance(txhex, basestring):
         return False
     elif not re.match('^[0-9a-fA-F]*$', txhex):
@@ -216,7 +213,7 @@ def is_tx_hex(txhex):
     txhex = st(txhex)
     return txhex.startswith('01000000')
 
-def is_tx_obj(txobj):
+def is_txobj(txobj):
     if not isinstance(txobj, dict):
         return False
     elif isinstance(txobj, list) and len(txobj) == 1:
@@ -237,44 +234,11 @@ masteraddr = pubtoaddr(masterpub, 111)
 
 # ops = [OPname['IF'], masterpub, OPname['CHECKSIGVERIFY'], OPname['ELSE'], '80bf07', #binascii.hexlify(from_int_to_le_bytes(507776)), # '80bf07' OPname['NOP2'], OPname['DROP'], OPname['ENDIF'], tpub, OPname['CHECKSIG']]
 
-myscript = "63210330ed33784ee1891122bc608b89da2da45194efaca68564051e5a7be9bee7f63fad670380bf07" \
-           "b1756841042daa93315eebbe2cb9b5c3505df4c6fb6caca8b756786098567550d4820c09db988fe999" \
-           "7d049d687292f815ccd6e7fb5c1b1a91137999818d17c73d0f80aef9ac"
-
-msaddr = "2NBrWPN37wvZhMYb66h23v5rScuVRDDFNsR"
-
-pushedtx_txid = "2e7f518ce5ab61c1c959d25e396bc9d3d684d22ea86dc477b1a90329c6ca354f"
-
-#verify_tx_input(tx, 0, inspk, inder, inpub)
-inder = "30450221009908144ca6539e09512b9295c8a27050d478fbb96f8addbc3d075544dc41328702201aa528be2b907d316d2da068dd9eb1e23243d97e444d59290d2fddf25269ee0e01"
-inpub = "042e930f39ba62c6534ee98ed20ca98959d34aa9e057cda01cfd422c6bab3667b76426529382c23f42b9b08d7832d4fee1d6b437a8526e59667ce9c4e9dcebcabb"
-inspk = "76a91446af3fb481837fadbb421727f9959c2d32a3682988ac"
-inaddr = "17SkEw2md5avVNyYgj6RiXuQKNwkXaxFyQ";
-modtx = signing_tx = tx = "01000000018dd4f5fbd5e980fc02f35c6ce145935b11e284605bf599a13c6d415db55d07a1000000001976a91446af3fb481837fadbb421727f9959c2d32a3682988acffffffff0200719a81860000001976a914df1bd49a6c9e34dfa8631f2c54cf39986027501b88ac009f0a5362000000434104cd5e9726e6afeae357b1806be25a4c3d3811775835d235417ea746b7db9eeab33cf01674b944c64561ce3388fa1abd0fa88b06c44ce81e2234aa70fe578d455dac00000000"
-txh = "01000000018dd4f5fbd5e980fc02f35c6ce145935b11e284605bf599a13c6d415db55d07a1000000008b4830450221009908144ca6539e09512b9295c8a27050d478fbb96f8addbc3d075544dc41328702201aa528be2b907d316d2da068dd9eb1e23243d97e444d59290d2fddf25269ee0e0141042e930f39ba62c6534ee98ed20ca98959d34aa9e057cda01cfd422c6bab3667b76426529382c23f42b9b08d7832d4fee1d6b437a8526e59667ce9c4e9dcebcabbffffffff0200719a81860000001976a914df1bd49a6c9e34dfa8631f2c54cf39986027501b88ac009f0a5362000000434104cd5e9726e6afeae357b1806be25a4c3d3811775835d235417ea746b7db9eeab33cf01674b944c64561ce3388fa1abd0fa88b06c44ce81e2234aa70fe578d455dac00000000"
-
-
-#raw = mktx(
-#    ["2e7f518ce5ab61c1c959d25e396bc9d3d684d22ea86dc477b1a90329c6ca354f:1"],
-#    [{'value': 84480000, 'script': '76a914dd6cce9f255a8cc17bda8ba0373df8e861cb866e88ac'}])
-#
-#signing_tx = signature_form(tx, i, '<utxo_scriptPubKey>', hashcode)
-#signing_tx = signature_form(raw, 0, myscript)
-#
-#sig1 = multisign(signing_tx, 0, myscript, masterpriv)
-#sig2 = multisign(signing_tx, 0, myscript, priv)
-#signed1 = apply_multisignatures(raw, 0, myscript, sig1, sig2)
-#
-#txh = txh23b = "0100000001b14bdcbc3e01bdaad36cc08e81e69c82e1060bc14e518db2b49aa43ad90ba26000000000" \
-#               "490047304402203f16c6f40162ab686621ef3000b04e75418a0c0cb2d8aebeac894ae360ac1e780220" \
-#               "ddc15ecdfc3507ac48e1681a33eb60996631bf6bf5bc0a0682c4db743ce7ca2b01ffffffff0140420f" \
-#               "00000000001976a914660d4ef3a743e3e696ad990364e555c271ad504b88ac00000000"
-
-#txo = txo23b = deserialize(txh23b)
 
 #wif_re = re.compile(r"[1-9a-km-zA-LMNP-Z]{51,111}")
 
 
-# PK = """3081d30201010420{0:064x}a081a53081a2020101302c06072a8648ce3d0101022100{1:064x}3006040100040107042102{2:064x}022100{3:064x}020101a124032200"""
-# PK.strip().format(rki, P, Gx, N)+ compress(privtopub(rk))
+PK = "3081d30201010420{0:064x}a081a53081a2020101302c06072a8648ce3d0101022100" \
+     "{1:064x}3006040100040107042102{2:064x}022100{3:064x}020101a124032200"
+#PK.strip().format(rki, P, Gx, N)+ compress(privtopub(rk))
 # https://gist.github.com/simcity4242/b0bb0f0281fcf58deec2

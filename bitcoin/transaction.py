@@ -573,17 +573,16 @@ def get_scriptpubkey(*args, **kwargs):
 # get "TXID:vout" from raw Tx
 def get_outpoints(rawtx, i=None):
     """get rawtx spendable inputs as 'txid:0' """
-    if isinstance(rawtx, str) and not re.match('^[0-9a-fA-F]*$', rawtx):    # binary
-        return get_outpoints(safe_hexlify(rawtx), i)
-    elif isinstance(rawtx, dict):
-        pass
+    # if isinstance(rawtx, str) and not re.match('^[0-9a-fA-F]*$', rawtx):    # binary
+    #     return safe_unhexlify(get_outpoints(rawtx, i))
+    if isinstance(rawtx, dict):
+        rawtxo = rawtx
     elif isinstance(rawtx, str) and re.match('^[0-9a-fA-F]*$', rawtx):
-        rawtx = deserialize(rawtx)
-    if not i:
-        i = int(i)
+        rawtxo = deserialize(rawtx)
+    if i is not None: i = int(i)
     outpoints = []
-    for tx in rawtx['ins']:
-        outpoints.append("%s:%d" % (tx['outpoint']['hash'], tx['outpoint']['index']))
+    for tx in multiaccess(rawtxo['ins'], 'outpoint'):
+        outpoints.append("%s:%d" % (tx['hash'], tx['index']))
     assert all([x[64] == ':' for x in outpoints])
     return outpoints if i is None else outpoints[i]
 

@@ -2,11 +2,10 @@ from bitcoin.main import *
 import hmac
 import hashlib
 from binascii import hexlify
-from bitcoin.pyspecials import st, by, string_types, from_str_to_bytes, from_bytes_to_str, hexify, unhexify
 from bitcoin.mnemonic import prepare_elec2_seed, is_elec1_seed, is_elec2_seed
+# from bitcoin.pyspecials import *
 
 # TODO: detect Elec 1, 2 & BIP39
-
 # Electrum wallets
 def bin_electrum_extract_seed(mn_seed, password=b''):
     if isinstance(mn_seed, string_types):
@@ -17,7 +16,7 @@ def bin_electrum_extract_seed(mn_seed, password=b''):
 
     mn_seed = from_str_to_bytes(mn_seed)
     password = from_str_to_bytes("electrum{}".format(password))
-    rootseed = unhexify(pbkdf2_hmac_sha512(mn_seed, password))
+    rootseed = safe_unhexlify(pbkdf2_hmac_sha512(mn_seed, password))
     assert len(rootseed) == 64
     return rootseed
 
@@ -33,7 +32,7 @@ def electrum_keystretch(seed, password=None):
     if is_elec1_seed(seed):
         return slowsha(seed)
     elif is_elec2_seed(seed):
-        password = from_str_to_bytes(password) if password is not None else None
+        password = from_str_to_bytes(password) if password else None
         return electrum_extract_seed(seed, password)
     else:
         return seed
@@ -51,7 +50,7 @@ def electrum_privkey(seed, n, for_change=0):
     if len(seed) == 32:
         seed = electrum_keystretch(seed)
     mpk = electrum_mpubk(seed)
-    offset = bin_dbl_sha256(from_str_to_bytes("{}:{}:{}".format(n, for_change, binascii.unhexlify(mpk))))
+    offset = bin_dbl_sha256(from_str_to_bytes("{}:{}:{}".format(n, for_change, safe_unhexlify(mpk))))
     return add_privkeys(seed, offset)
 
 # Accepts (seed or stretched seed or master pubkey), index and secondary index
@@ -223,18 +222,23 @@ def bip32_path(*args, **kwargs):
     """Same as bip32_descend but returns masterkey instead of hex privkey"""
     # use keyword public=True or end path in .pub for public child derivation
     if len(args) == 2:
-        key, path = args[0], args[1]
+        key, path = args
     elif len(args) > 2:
-        key, path = args[0], args[1:]
-        path = "m/" + "/".join(path)
-    is_public = (path.endswith("pub") or kwargs.get("public", False))
+        key, pth = args[0], args[1:]
+        path = "/".join(pth)
+    else: raise TypeError("Path format wrong")
+    if not path.startswith("m/") and path[1] == '/':
+        path = "m/" + path
+    is_public = path.endswith("pub") or kwargs.get("public", False)
     pathlist = parse_bip32_path(path)
-    oldkey = key[:]
-    if not pathlist:    # empty list
-        return oldkey if not is_public else bip32_privtopub(oldkey)
+    if len(pathlist)==0:    # empty list
+        return key if not is_public else bip32_privtopub(key)
     for p in pathlist:
         key = bip32_ckd(key, p)
-    return key if not is_public else bip32_privtopub(key)
+    if is_public:
+        return bip32_privtopub(key)
+    else:
+        return key
 
 def parse_bip32_path(path):
     """Takes bip32 path as string "m/0'/2H" or "m/0H/1/2H/2/1000000000.pub" """
