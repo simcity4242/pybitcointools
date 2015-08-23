@@ -1,0 +1,62 @@
+...Transaction-style signing and verification tests
+.Testing DER Signatures....
+.
+======================================================================
+ERROR: test_all (__main__.BitcoinCore_TransactionValid)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "test.py", line 834, in test_all
+    for i, (po, tx, flags) in enumerate(load_tvv()):
+  File "test.py", line 827, in load_tvv
+    prevouts[prevout] = parse_script(json_prevout[2])
+  File "test.py", line 814, in parse_script
+    return serialize_script(r)
+  File "p:\pybitcointools\bitcoin\transaction.py", line 327, in serialize_script
+    return safe_hexlify(serialize_script(script_bin))
+  File "p:\pybitcointools\bitcoin\transaction.py", line 327, in serialize_script
+    return safe_hexlify(serialize_script(script_bin))
+  File "p:\pybitcointools\bitcoin\transaction.py", line 327, in serialize_script
+    return safe_hexlify(serialize_script(script_bin))
+  File "p:\pybitcointools\bitcoin\transaction.py", line 327, in serialize_script
+    return safe_hexlify(serialize_script(script_bin))
+  File "p:\pybitcointools\bitcoin\transaction.py", line 327, in serialize_script
+    return safe_hexlify(serialize_script(script_bin))
+  File "p:\pybitcointools\bitcoin\transaction.py", line 327, in serialize_script
+    return safe_hexlify(serialize_script(script_bin))
+  File "p:\pybitcointools\bitcoin\transaction.py", line 327, in serialize_script
+    return safe_hexlify(serialize_script(script_bin))
+  File "p:\pybitcointools\bitcoin\transaction.py", line 327, in serialize_script
+    return safe_hexlify(serialize_script(script_bin))
+  File "p:\pybitcointools\bitcoin\transaction.py", line 327, in serialize_script
+    return safe_hexlify(serialize_script(script_bin))
+  File "p:\pybitcointools\bitcoin\transaction.py", line 327, in serialize_script
+    return safe_hexlify(serialize_script(script_bin))
+  File "p:\pybitcointools\bitcoin\transaction.py", line 327, in serialize_script
+    return safe_hexlify(serialize_script(script_bin))
+  File "p:\pybitcointools\bitcoin\transaction.py", line 327, in serialize_script
+    return safe_hexlify(serialize_script(script_bin))
+  File "p:\pybitcointools\bitcoin\transaction.py", line 327, in serialize_script
+    return safe_hexlify(serialize_script(script_bin))
+  File "p:\pybitcointools\bitcoin\transaction.py", line 327, in serialize_script
+    return safe_hexlify(serialize_script(script_bin))
+	
+	  File "p:\pybitcointools\bitcoin\transaction.py", line 327, in serialize_script
+    return safe_hexlify(serialize_script(script_bin))
+  File "p:\pybitcointools\bitcoin\transaction.py", line 327, in serialize_script
+    return safe_hexlify(serialize_script(script_bin))
+  File "p:\pybitcointools\bitcoin\transaction.py", line 327, in serialize_script
+    return safe_hexlify(serialize_script(script_bin))
+  File "p:\pybitcointools\bitcoin\transaction.py", line 327, in serialize_script
+    return safe_hexlify(serialize_script(script_bin))
+  File "p:\pybitcointools\bitcoin\transaction.py", line 327, in serialize_script
+    return safe_hexlify(serialize_script(script_bin))
+  File "p:\pybitcointools\bitcoin\transaction.py", line 326, in serialize_script
+    script_bin = json_unhexlify(script)
+  File "p:\pybitcointools\bitcoin\pyspecials.py", line 68, in json_unhexlify
+    return json_changebase(obj, lambda x: binascii.unhexlify(x))
+  File "p:\pybitcointools\bitcoin\pyspecials.py", line 58, in json_changebase
+    elif isinstance(obj, int_types) or obj is None:
+RuntimeError: maximum recursion depth exceeded while calling a Python object
+
+----------------------------------------------------------------------
+Ran 25 tests in 52.563s

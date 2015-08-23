@@ -670,3 +670,9 @@ def pbkdf2_hmac_sha512(password, salt):
 
 hmac_sha256 = lambda k, s: hmac.new(k, s, hashlib.sha256)
 hmac_sha512 = lambda k, s: hmac.new(k, s, hashlib.sha512)
+
+def rev(s):
+    """Reverse Endianess of bytes or hex string"""
+    if isinstance(s, string_or_bytes_types) and re.match('^[0-9a-fA-F]*$', s):
+        return safe_hexlify(rev(safe_unhexlify(s)))
+    return s[::-1]

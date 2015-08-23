@@ -6,13 +6,6 @@ from bitcoin.pyspecials import *
 from bitcoin.bci import fetchtx
 
 
-def rev(s):
-    """Reverse Endianess of bytes or hex string"""
-    if isinstance(s, string_or_bytes_types) and re.match('^[0-9a-fA-F]*$', s):
-        return safe_hexlify(rev(safe_unhexlify(s)))
-    return s[::-1]
-
-
 # Transaction serialization and deserialization
 
 def deserialize(tx):
