@@ -215,45 +215,48 @@ def history(*args):
         network = "btc"
 
     if network == "testnet":
-        pass
 
-        # #utxos = []  # using https://api.biteasy.com/blockchain/v1/addresses/_ADDR_/unspent-outputs
-        # txs = []    # using https://api.biteasy.com/blockchain/v1/transactions?address=_ADDR_
-        # for addr in addrs:
-        #     offset = 0
-        #     while 1:
-        #         gathered = False
-        #         while not gathered:
-        #             try:
-        #                 data = make_request(
-        #                     "https://api.biteasy.com/%s/v1/addresses/%s/unspent-outputs" %
-        #                     ('testnet', addr))
-        #                 gathered = True
-        #             except Exception as e:
-        #                 try:
-        #                     sys.stderr.write(e.read().strip())
-        #                 except:
-        #                     sys.stderr.write(str(e))
-        #                 gathered = False
-        #         try:
-        #             jsonobj = json.loads(data)
-        #         except:
-        #             raise Exception("Failed to decode data: " + data)
-        #         txs.extend(jsonobj["data"]["transactions"])
-        #         if not jsonobj['data']['pagination']['next_page']:
-        #             break
-        #         offset += 20
-        #         sys.stderr.write("Fetching more transactions... " + str(offset) + '\n')
-        # outs = {}
-        # for tx in txs:
-        #     if tx['to_address'] in addrs:
-        #         key = str(tx["tx_index"]) + ':' + str(o["n"])
-        #         outs[key] = {
-        #             "address": o["addr"],
-        #             "value": o["value"],
-        #             "output": tx["hash"] + ':' + str(o["n"]),
-        #             "block_height": tx.get("block_height", None)
-        #         }
+        #utxos = []  # using https://chain.so/api/v2/get_tx_unspent/BTCTEST/%s
+        #stxos = []            # spent utxos: https://chain.so/api/v2/get_tx_spent/BTCTEST/_ADDR_
+        # Txs received: https://chain.so/api/v2/get_tx_received/BTCTEST/
+        txs = []    # using https://api.biteasy.com/blockchain/v1/transactions?address=_ADDR_
+        for addr in addrs:
+            offset, counter = "", 0
+            while 1:
+                gathered = False
+                while not gathered:
+                    try:
+                        data = make_request(
+                            "https://chain.so/api/v2/address/BTCTEST/%s/%s" % (addr, offset))
+                        gathered = True
+                    except Exception as e:
+                        try:
+                            sys.stderr.write(e.read().strip())
+                        except:
+                            sys.stderr.write(str(e))
+                        gathered = False
+                try:
+                    jsonobj = json.loads(data)
+                except:
+                    raise Exception("Failed to decode data: " + data)
+                assert addr in str(jsonobj['data']['address']), "Tx data doesn't match address %s" % addr
+                txs.extend(jsonobj["data"]["txs"])
+                if len(jsonobj['data']['txs']) < 100:
+                    break
+                offset = jsonobj['data']['txs'][-1]['txid']
+                counter += 1
+                sys.stderr.write("Fetching more transactions... " + str(counter * 100) + '\n')
+        outs = {}
+        present_height = last_block_height('testnet')
+        for tx in txs:
+            key = str(tx["time"]) + ':' + str(tx["input_number"])
+            outs[key] = {
+                "address": addr,
+                "value": int(1e8*(float(tx["value"]) + 5e-9)),
+                "output": tx["hash"] + ':' + str(tx["input_number"]),
+                "time": tx['time'],
+                "block_height": present_height - tx['confirmations']
+            }
         # for tx in txs:
         #     for i, inp in enumerate(tx["inputs"]):
         #         if "prev_out" in inp:
@@ -262,9 +265,8 @@ def history(*args):
         #                       ':' + str(inp["prev_out"]["n"])
         #                 if outs.get(key):
         #                     outs[key]["spend"] = tx["hash"] + ':' + str(i)
-        # return [outs[k] for k in outs]
+            return [outs[k] for k in reversed(sorted(outs))]
     elif network == "btc":
-        api = "?api=%s" % BCI_API if BCI_API else ""
         txs = []
         for addr in addrs:
             offset = 0
@@ -273,8 +275,8 @@ def history(*args):
                 while not gathered:
                     try:
                         data = make_request(
-                            'https://blockchain.info/address/%s?format=json&offset=%s%s' %
-                            (addr, offset, api))
+                            'https://blockchain.info/address/%s?format=json&offset=%s' %
+                            (addr, offset))
                         gathered = True
                     except Exception as e:
                         try:
@@ -294,7 +296,7 @@ def history(*args):
         outs = {}
         for tx in txs:
             for o in tx["out"]:
-                if o['addr'] in addrs:
+                if o.get('addr', None) in addrs:
                     key = str(tx["tx_index"])+':'+str(o["n"])
                     outs[key] = {
                         "address": o["addr"],
@@ -302,10 +304,10 @@ def history(*args):
                         "output": tx["hash"]+':'+str(o["n"]),
                         "block_height": tx.get("block_height", None)
                     }
-        for tx in txs:
+        for tx in txs:      # if output is spent adds "spend": "spending_TxID:i"
             for i, inp in enumerate(tx["inputs"]):
                 if "prev_out" in inp:
-                    if inp["prev_out"]["addr"] in addrs:
+                    if inp["prev_out"].get("addr", None) in addrs:
                         key = str(inp["prev_out"]["tx_index"]) + \
                               ':'+str(inp["prev_out"]["n"])
                         if outs.get(key):
@@ -491,14 +493,19 @@ def firstbits(address):
             'https://blockchain.info/q/resolvefirstbits/'+address)
 
 
-def get_block_at_height(height):
-    j = json.loads(st(make_request("https://blockchain.info/block-height/" +
-                   str(height)+"?format=json")))
-    for b in j['blocks']:
-        if b['main_chain'] is True:
-            return b
-    raise Exception("Block at this height not found")
-
+def get_block_at_height(height, network='btc'):
+    if network == 'btc':
+        j = json.loads(st(make_request("https://blockchain.info/block-height/" +
+                       str(height)+"?format=json")))
+        for b in j['blocks']:
+            if b['main_chain'] is True:
+                return b
+        raise Exception("Block at this height not found")
+    elif network == 'testnet':
+        j = json.loads(make_request("https://chain.so/api/v2/block/BTCTEST/" + str(height)))
+        # FIXME: add code from 'http://tbtc.blockr.io/api/v1/block/raw/%s' ??
+        return ''
+        #raise Exception("Block at this height not found")
 
 def _get_block(inp):
     if len(str(inp)) < 64:
@@ -578,19 +585,17 @@ def get_txs_in_block(inp):
 
 
 def get_block_height(txid, network='btc'):
-    if network == 'btc':
-        j = json.loads(make_request('https://blockchain.info/rawtx/%s' % txid))
-        return j['block_height']
-    else:
-        j = json.loads(make_request('http://tbtc.blockr.io/api/v1/tx/info/%s' % txid))
-        return j['data']['block']
+    base_url = 'http://%s.blockr.io/api/v1/tx/info/' % \
+               ('tbtc' if network == 'testnet' else 'btc')
+    j = json.loads(make_request(base_url + str(txid)))
+    return j['data']['block']
 
 
 def get_block_coinbase(txval):
     j = _get_block(txval)
     cb = bytearray.fromhex(j['tx'][0]['inputs'][0]['script'])
     alpha = set(map(chr, list(range(32, 126))))
-    res = ''.join([x for x in cb.decode('utf-8') if x in alpha])
+    res = ''.join([x for x in str(cb) if x in alpha])
     if ord(res[0]) == len(res)-1:
         return res[1:]
     return res
@@ -609,3 +614,12 @@ def biteasy_search(*args):
     return data.get('data', repr(data))
 
 
+def smartbits_search(q, network='btc'):
+    if network == 'testnet':
+        raise Exception("Testnet NOT supported")
+    base_url = "https://api.smartbit.com.au/v1/blockchain/search?q="
+    data = make_request(base_url + str(q))
+    jsonobj = json.loads(data)
+    assert jsonobj.get("success", False), \
+        "Input:\t%s\nSearched:\t%s" % (str(q), jsonobj.get("search", "??"))
+    return jsonobj.get("results", [])   # [x.get('data', '') for x in jsonobj.get('results', '')]

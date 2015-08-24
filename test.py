@@ -5,12 +5,14 @@ import random
 import unittest
 import unicodedata
 
+from bitcoin.ripemd import *
 from bitcoin import *
-# from bitcoin.ripemd import *
-# from bitcoin.mnemonic import bip39_check, bip39_to_mn, bip39_to_seed
-# from bitcoin.pyspecials import hexify, unhexify, st, by, from_str_to_bytes, from_bytes_to_str
-# from bitcoin.deterministic import electrum_mpubk, bip32_master_key
-# from bitcoin.utils import *
+
+from bitcoin.pyspecials import *
+from bitcoin.transaction import *
+from bitcoin.mnemonic import *
+from bitcoin.deterministic import *
+from bitcoin.utils import *
 
 class TestECCArithmetic(unittest.TestCase):
 
@@ -731,6 +733,7 @@ class BitcoinCore_SignatureValidation(unittest.TestCase):
             SIG_TESTS = json.loads(fo.read())
 
         for test in SIG_TESTS:
+            #pass	# FIXME: testing
             pkwif, sig, addr = str(test['wif']), str(test['signature']), str(test['address'])
             priv = encode_privkey(decode_privkey(pkwif), 'hex')
             pubkey = privtopub(priv)
@@ -796,8 +799,9 @@ class BitcoinCore_TransactionValid(unittest.TestCase):
             return set(s).issubset(set('0123456789abcdefABCDEF'))
 
         def parse_script(s):
-            from bitcoin.transaction import serialize_script
-            from bitcoin.utils import OPname
+            import bitcoin.transaction as tx
+            import bitcoin.utils as ut
+            OPname = ut.OPname
             r = []
             for word in s.split():
                 if word.isdigit() or (word[0] == '-' and word[1:].isdigit()):
@@ -811,7 +815,7 @@ class BitcoinCore_TransactionValid(unittest.TestCase):
                     r.append(word[1:-1])
                 elif word in OPname:
                     r.append(OPname[word])  # r.append(get_op(v[3:]))
-            return serialize_script(r)
+            return tx.serialize_script(r)
 
         def load_tvv():
             with open('tests/tx_valid.json', 'r') as fo:

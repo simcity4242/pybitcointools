@@ -209,7 +209,7 @@ def is_txhex(txhex):
     if not isinstance(txhex, basestring):
         return False
     elif not re.match('^[0-9a-fA-F]*$', txhex):
-        return binascii.unhexlify(is_tx_hex(binascii.hexlify(txhex)))
+        return binascii.unhexlify(is_txhex(binascii.hexlify(txhex)))
     txhex = st(txhex)
     return txhex.startswith('01000000')
 
@@ -217,7 +217,7 @@ def is_txobj(txobj):
     if not isinstance(txobj, dict):
         return False
     elif isinstance(txobj, list) and len(txobj) == 1:
-        return is_tx_obj(txobj[0]) if isinstance(txobj[0], dict) else False
+        return is_txobj(txobj[0]) if isinstance(txobj[0], dict) else False
     return set(['locktime', 'version']).issubset(set(txobj.keys()))
 
 
