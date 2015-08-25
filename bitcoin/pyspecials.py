@@ -12,11 +12,11 @@ is_ios = "Pythonista" in os.environ.get("XPC_SERVICE_NAME", "")		# for Pythonist
 # PYTHON 2 FUNCTIONS
 if is_python2:
     
-    python2 = bytes == str
+    is_python2 = bytes == str
     st = lambda u: str(u)
     by = lambda v: bytes(v)
 
-    string_types = basestring
+    string_types = (str, unicode)
     string_or_bytes_types = (str, unicode)
     int_types = (int, float, long)
 
@@ -33,6 +33,8 @@ if is_python2:
     ### Hex to bin converter and vice versa for objects
 
     def json_is_base(obj, base):
+        if not is_python2 and isinstance(obj, bytes):
+            return False
         alpha = get_code_string(base)
         if isinstance(obj, string_types):
             for i in range(len(obj)):
@@ -110,20 +112,20 @@ if is_python2:
             return binascii.hexlify(b)
         elif isinstance(b, dict):
             return json_hexlify(b)
-        elif isinstance(b, int_types) or b is None:
-            return b
         elif isinstance(b, list):
             return [hexify(x) for x in b]
+        else:
+            return b
 
     def unhexify(s):
         if isinstance(s, string_or_bytes_types):
             return binascii.unhexlify(s)
         elif isinstance(s, dict):
             return json_unhexlify(s)
-        elif isinstance(s, int_types) or s is None:
-            return s
         elif isinstance(s, list):
             return [unhexify(x) for x in s]
+        else:
+            return s
 
     safe_unhexlify = unhex_it = unhexify
     safe_hexlify   = hex_it   = hexify
@@ -324,6 +326,7 @@ elif sys.version_info.major == 3:
             return s
         elif isinstance(s, list):
             return [unhexify(x) for x in s]
+
 
     safe_unhexlify = unhex_it = unhexify
     safe_hexlify   = hex_it   = hexify

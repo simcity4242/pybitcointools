@@ -6,8 +6,8 @@ ERROR: test_all (__main__.BitcoinCore_TransactionValid)
 ----------------------------------------------------------------------
 Traceback (most recent call last):
   File "test.py", line 834, in test_all
-    for i, (po, tx, flags) in enumerate(load_tvv()):
-  File "test.py", line 827, in load_tvv
+    for i, (po, tx, flags) in enumerate(load_txs()):
+  File "test.py", line 827, in load_txs
     prevouts[prevout] = parse_script(json_prevout[2])
   File "test.py", line 814, in parse_script
     return serialize_script(r)

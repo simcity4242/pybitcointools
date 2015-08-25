@@ -5,7 +5,6 @@ from binascii import hexlify
 from bitcoin.mnemonic import prepare_elec2_seed, is_elec1_seed, is_elec2_seed
 # from bitcoin.pyspecials import *
 
-# TODO: detect Elec 1, 2 & BIP39
 # Electrum wallets
 def bin_electrum_extract_seed(mn_seed, password=b''):
     if isinstance(mn_seed, string_types):
@@ -23,7 +22,7 @@ def bin_electrum_extract_seed(mn_seed, password=b''):
 def electrum_extract_seed(mn_seed, password=''):
     return hexify(bin_electrum_extract_seed(mn_seed, password))
 
-def electrum_mprvk(mnemonic, password=''):
+def electrum_masterprivkey(mnemonic, password=''):
     return bip32_master_key(bin_electrum_extract_seed(mnemonic, password))
 
 def electrum_keystretch(seed, password=None):

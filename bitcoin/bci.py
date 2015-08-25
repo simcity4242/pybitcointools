@@ -249,7 +249,7 @@ def history(*args):
         outs = {}
         present_height = last_block_height('testnet')
         for tx in txs:
-            key = str(tx["time"]) + ':' + str(tx["input_number"])
+            key = str(tx.get("time", "")) + ':' + str(tx.get("input_number", ''))
             outs[key] = {
                 "address": addr,
                 "value": int(1e8*(float(tx["value"]) + 5e-9)),

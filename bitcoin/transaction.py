@@ -4,7 +4,7 @@ from bitcoin.main import *
 from _functools import reduce
 from bitcoin.pyspecials import *
 from bitcoin.bci import fetchtx
-
+import pdb
 
 # Transaction serialization and deserialization
 
@@ -316,8 +316,8 @@ def serialize_script_unit(unit):
 if is_python2:
     def serialize_script(script):
         if json_is_base(script, 16):
-            script_bin = json_unhexlify(script)
-            return safe_hexlify(serialize_script(script_bin))
+            return binascii.hexlify(serialize_script(json_changebase(script,
+                                    lambda x: binascii.unhexlify(x))))
         return ''.join(map(serialize_script_unit, script))
 else:
     def serialize_script(script):

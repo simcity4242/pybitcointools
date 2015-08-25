@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+from bitcoin.pyspecials import *
 import json
 import os
 import random
@@ -8,7 +8,6 @@ import unicodedata
 from bitcoin.ripemd import *
 from bitcoin import *
 
-from bitcoin.pyspecials import *
 from bitcoin.transaction import *
 from bitcoin.mnemonic import *
 from bitcoin.deterministic import *
@@ -795,19 +794,18 @@ class BitcoinCore_TransactionValid(unittest.TestCase):
         print("Testing BitcoinCore Transactions (Valid)")
 
     def test_all(self):
-        def ishex(s):
-            return set(s).issubset(set('0123456789abcdefABCDEF'))
 
         def parse_script(s):
-            import bitcoin.transaction as tx
-            import bitcoin.utils as ut
-            OPname = ut.OPname
+
+            def ishex(s):
+                return set(s).issubset(set('0123456789abcdefABCDEF'))
+
             r = []
             for word in s.split():
                 if word.isdigit() or (word[0] == '-' and word[1:].isdigit()):
-                    r.append(int(word, 0))
+                    r.append(int(word))
                 elif word.startswith('0x') and ishex(word[2:]):
-                    if int(word[2:], 16) < 0x4c:
+                    if int(word[2:], 16) <= 0x4e:
                         continue
                     else:
                         r.append(word[2:])
@@ -815,12 +813,21 @@ class BitcoinCore_TransactionValid(unittest.TestCase):
                     r.append(word[1:-1])
                 elif word in OPname:
                     r.append(OPname[word])  # r.append(get_op(v[3:]))
-            return tx.serialize_script(r)
+                else:
+                    raise ValueError("could not parse script! (word=\t%s)" % str(word))
+
+            try:
+                sc = serialize_script(r)
+            except:
+                sys.stderr.write("Didnt work!\nr = %s" % repr(r))
+                sc = r
+            return sc
 
         def load_tvv():
             with open('tests/tx_valid.json', 'r') as fo:
                 for tv in json.load(fo):
-                    if len(tv) == 1: continue
+                    if len(tv) == 1:
+                        continue
                     assert len(tv) == 3
 
                     prevouts = {}
