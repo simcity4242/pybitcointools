@@ -102,33 +102,28 @@ if is_python2:
             return padding + encode(decode(string, 58), to)
         return encode(decode(string, frm), to, minlen)
 
+
     def bin_to_b58check(inp, magicbyte=0):
         inp_fmtd = from_int_to_byte(int(magicbyte)) + inp
         checksum = bin_dbl_sha256(inp_fmtd)[:4]
         return changebase(inp_fmtd + checksum, 256, 58)
-        
-    def hexify(b):
-        if isinstance(b, string_types):
+
+
+    def safe_hexlify(b):
+        if isinstance(b, string_or_bytes_types):
             return binascii.hexlify(b)
         elif isinstance(b, dict):
             return json_hexlify(b)
-        elif isinstance(b, list):
-            return [hexify(x) for x in b]
         else:
-            return b
+            raise TypeError("Not bytes or a dict of bytes")
 
-    def unhexify(s):
+    def safe_unhexlify(s):
         if isinstance(s, string_or_bytes_types):
             return binascii.unhexlify(s)
         elif isinstance(s, dict):
             return json_unhexlify(s)
-        elif isinstance(s, list):
-            return [unhexify(x) for x in s]
         else:
-            return s
-
-    safe_unhexlify = unhex_it = unhexify
-    safe_hexlify   = hex_it   = hexify
+            raise TypeError("Not bytes or a dict of bytes")
 
     def from_int_repr_to_bytes(a):
         return str(a)
@@ -208,6 +203,7 @@ if is_python2:
 
     def random_string(x):
         return os.urandom(x)
+
 
 #   PYTHON 3
 elif sys.version_info.major == 3:

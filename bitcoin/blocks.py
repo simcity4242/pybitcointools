@@ -1,5 +1,5 @@
 from bitcoin.main import *
-from bitcoin.pyspecials import by, st, hexify, unhexify
+from bitcoin.pyspecials import *
 
 # test.webbtc.com/block/00000000d1145790a8694403d4063f323d499e655c83426834d4ce2f8dd4a2ee.json
 # http://webbtc.com/block/00000000d1145790a8694403d4063f323d499e655c83426834d4ce2f8dd4a2ee.json

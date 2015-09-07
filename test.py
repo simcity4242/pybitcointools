@@ -1,14 +1,6 @@
-from bitcoin.pyspecials import *
-import json
-import os
-import random
 import unittest
-import unicodedata
 
-from bitcoin.ripemd import *
 from bitcoin import *
-
-from bitcoin.transaction import *
 from bitcoin.mnemonic import *
 from bitcoin.deterministic import *
 from bitcoin.utils import *
@@ -734,8 +726,7 @@ class BitcoinCore_SignatureValidation(unittest.TestCase):
         for test in SIG_TESTS:
             #pass	# FIXME: testing
             pkwif, sig, addr = str(test['wif']), str(test['signature']), str(test['address'])
-            priv = encode_privkey(decode_privkey(pkwif), 'hex')
-            pubkey = privtopub(priv)
+            pubkey = privtopub(pkwif)
             pub_recovered = ecdsa_recover(addr, sig)
             self.assertEqual(
                 pubkey,

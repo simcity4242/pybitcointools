@@ -9,8 +9,11 @@ except:
     from urllib2 import build_opener
 
 BCI_API = ""
-CHAIN_API = "api-key-id=211a589ce9bbc35de662ee02d51aa860"
 BITEASY_API = ""
+BLOCKSTRAP_API = "?api_key=66350E08-5C41-5449-8936-3EA71EC9CD2F"
+CHAIN_API = "api-key-id=211a589ce9bbc35de662ee02d51aa860"
+
+
 
 def set_api(*args):
     """Set API code for web service"""
@@ -220,14 +223,15 @@ def history(*args):
         #stxos = []            # spent utxos: https://chain.so/api/v2/get_tx_spent/BTCTEST/_ADDR_
         # Txs received: https://chain.so/api/v2/get_tx_received/BTCTEST/
         txs = []    # using https://api.biteasy.com/blockchain/v1/transactions?address=_ADDR_
+        api = '' #"?api_key=%s" % BLOCKSTRAP_API if BLOCKSTRAP_API else ''
         for addr in addrs:
-            offset, counter = "", 0
+            offset = 0
             while 1:
                 gathered = False
                 while not gathered:
                     try:
                         data = make_request(
-                            "https://chain.so/api/v2/address/BTCTEST/%s/%s" % (addr, offset))
+                            "https://api.blockstrap.com/v0/btct/address/unspents/%s?showtxn=1?records=300%s" % (addr, api))
                         gathered = True
                     except Exception as e:
                         try:
@@ -239,24 +243,32 @@ def history(*args):
                     jsonobj = json.loads(data)
                 except:
                     raise Exception("Failed to decode data: " + data)
-                assert addr in str(jsonobj['data']['address']), "Tx data doesn't match address %s" % addr
-                txs.extend(jsonobj["data"]["txs"])
-                if len(jsonobj['data']['txs']) < 100:
+                assert addr in str(jsonobj['data']['address']['address']), \
+                    "Tx data doesn't match address %s" % addr
+                txs.extend(jsonobj['data']['address']['transactions'])
+                if len(jsonobj['data']['address']['inout_count_total']) >= 300: # because records=300
                     break
-                offset = jsonobj['data']['txs'][-1]['txid']
-                counter += 1
-                sys.stderr.write("Fetching more transactions... " + str(counter * 100) + '\n')
+                offset += 100
+                sys.stderr.write("Fetching more transactions... " + str(offset) + '\n')
         outs = {}
-        present_height = last_block_height('testnet')
         for tx in txs:
-            key = str(tx.get("time", "")) + ':' + str(tx.get("input_number", ''))
-            outs[key] = {
-                "address": addr,
-                "value": int(1e8*(float(tx["value"]) + 5e-9)),
-                "output": tx["hash"] + ':' + str(tx["input_number"]),
-                "time": tx['time'],
-                "block_height": present_height - tx['confirmations']
-            }
+            for o in tx["out"]:
+                if o.get('addr', None) in addrs:
+                    key = str(tx["tx_index"]) + ':' + str(o["n"])
+                    outs[key] = {
+                        "address": o["addr"],
+                        "value": o["value"],
+                        "output": tx["hash"] + ':' + str(o["n"]),
+                        "block_height": tx.get("block_height", None)
+                    }
+            # key = str(tx.get("time", "")) + ':' + str(tx.get("input_number", ''))
+            # outs[key] = {
+            #     "address": addr,
+            #     "value": int(1e8*(float(tx["value"]) + 5e-9)),
+            #     "output": tx["hash"] + ':' + str(tx["input_number"]),
+            #     "time": tx['time'],
+            #     "block_height":
+            # }
         # for tx in txs:
         #     for i, inp in enumerate(tx["inputs"]):
         #         if "prev_out" in inp:

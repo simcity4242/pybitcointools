@@ -10,18 +10,6 @@ def ishex(s):
     return set(s).issubset(set('0123456789abcdefABCDEF'))
 
 
-def isbin(s):
-    if not (is_python2 and isinstance(s, bytes)): return False
-    else: return True
-
-
-def satoshi_to_btc(val):
-    return (float(val) / 1e8)
-
-
-def btc_to_satoshi(val):
-    return int(val*1e8 + 0.5)
-
 # Return the address and btc_amount from the parsed uri_string.
 # If either of address or amount is not found that particular return value is None.
 def parse_bitcoin_uri(uri_string):
@@ -229,6 +217,11 @@ def is_txobj(txobj):
         return is_txobj(txobj[0]) if isinstance(txobj[0], dict) else False
     return set(['locktime', 'version']).issubset(set(txobj.keys()))
 
+def is_tx(txobj):
+    if isinstance(txobj, dict):
+        return is_txobj(txobj)
+    elif isinstance(txobj, string_types):
+        return is_txhex(txobj)
 
 #SIG64="G8kH/WEgiATGXSy78yToe36IF9AUlluY3bMdkDFD1XyyDciIbXkfiZxk/qmjGdMeP6/BQJ/C5U/pbQUZv1HGkn8="
 

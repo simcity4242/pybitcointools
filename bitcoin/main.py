@@ -3,7 +3,6 @@ from bitcoin.pyspecials import *
 import binascii
 import hashlib
 import re
-import os
 import base64
 import time
 import random
@@ -555,21 +554,21 @@ def deterministic_generate_k(msghash, priv):
 
 # MSG SIGNING
 
-# FIXME: rename functions?
 def ecdsa_raw_sign(msghash, priv, low_s=False):
     """sign msg hash (z) with privkey & RFC6979 (k);
     returns signature (v,r,s) with low s (BIP66) by default"""
     z = hash_to_int(msghash)
     k = deterministic_generate_k(msghash, priv)
 
-    r, y = fast_multiply(G, k)
+    is_compressed = 'compressed' in get_privkey_format(priv)
     priv = decode_privkey(priv)
+
+    r, y = fast_multiply(G, k)
     s = inv(k, N) * (z + r*priv) % N
     if low_s:
         s = N-s if s>N//2 else s
-    # FIXME: (below) is it 31 for compressed??
-    vbyte = 27 + 4 * ('compressed' in get_privkey_format(priv))
-    return vbyte+(y % 2), r, s		# vbyte, r, s
+    v = (31 if is_compressed else 27) + (y % 2)
+    return v, r, s
 
 
 def ecdsa_sign(msg, priv):
@@ -613,10 +612,10 @@ def ecdsa_raw_recover(msghash, vrs):
     v, r, s = vrs
     x = r
     xcubedaxb = (x*x*x+A*x+B) % P
-    beta = pow(xcubedaxb, (P+1)//4, P)
-    y = beta if ((v % 2) ^ (beta % 2)) else (P - beta)
-    # If xcubedaxb is not a quadratic residue, then r cannot be the x coord
-    # for a point on the curve, and so the sig is invalid
+    beta = pow(xcubedaxb, (P+1)//4, P)                  # determine which
+    y = beta if ((v % 2) ^ (beta % 2)) else (P - beta)  # y val from parity and v
+    # If xcubedaxb isn't a quadratic residue, the sig is invalid
+    # => r cannot be the x coord for a point on the curve
     if (xcubedaxb - y*y) % P != 0:
         return False
     z = hash_to_int(msghash)
@@ -671,8 +670,17 @@ def pbkdf2_hmac_sha512(password, salt):
 hmac_sha256 = lambda k, s: hmac.new(k, s, hashlib.sha256)
 hmac_sha512 = lambda k, s: hmac.new(k, s, hashlib.sha512)
 
+
 def rev(s):
     """Reverse Endianess of bytes or hex string"""
     if isinstance(s, string_or_bytes_types) and re.match('^[0-9a-fA-F]*$', s):
         return safe_hexlify(rev(safe_unhexlify(s)))
     return s[::-1]
+
+
+def satoshi_to_btc(val):
+    return (float(val) / 1e8)
+
+
+def btc_to_satoshi(val):
+    return int(val*1e8 + 0.5)
