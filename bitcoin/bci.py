@@ -10,8 +10,8 @@ except:
 
 BCI_API = ""
 BITEASY_API = ""
-BLOCKSTRAP_API = "?api_key=66350E08-5C41-5449-8936-3EA71EC9CD2F"
-CHAIN_API = "api-key-id=211a589ce9bbc35de662ee02d51aa860"
+BLOCKSTRAP_API = "?api_key=XXXXXXXX-5C41-5449-8936-3EA71EC9CD2F"
+CHAIN_API = "api-key-id=XXXXXXXX"
 
 
 
@@ -635,3 +635,11 @@ def smartbits_search(q, network='btc'):
     assert jsonobj.get("success", False), \
         "Input:\t%s\nSearched:\t%s" % (str(q), jsonobj.get("search", "??"))
     return jsonobj.get("results", [])   # [x.get('data', '') for x in jsonobj.get('results', '')]
+
+def fee_estimate(nblocks, network="btc"):
+    url = "https://%sblockexplorer.com/api/utils/estimatefee?nbBlocks=%d" % \
+          (".testnet" if network == "testnet" else "", int(nblocks))
+    data = json.loads(make_request(url))
+    btc_to_satoshi = lambda b: int(b*1e8 + 0.5)
+    btcfee = data.get(str(nblocks), None)
+    return btc_to_satoshi(btcfee) if btcfee else None
