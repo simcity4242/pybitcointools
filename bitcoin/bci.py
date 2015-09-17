@@ -10,18 +10,17 @@ except:
 
 BCI_API = ""
 BITEASY_API = ""
-BLOCKSTRAP_API = "?api_key=XXXXXXXX-5C41-5449-8936-3EA71EC9CD2F"
-CHAIN_API = "api-key-id=XXXXXXXX"
+BLOCKSTRAP_API = "?api_key=66350E08-5C41-5449-8936-3EA71EC9CD2F"
+CHAIN_API = "api-key-id=211a589ce9bbc35de662ee02d51aa860"
 
 
 
-def set_api(*args):
+def set_api(svc="bci", code=""):
     """Set API code for web service"""
     # "api_hex_code_string", "service" or defaults to "bci"
-    if len(args)==2 and args[1] in ("bci", "chain"):
-        code, svc = args[0], args[1]
-    else:
-        code, svc = args[0], "bci"
+    services = ("bci", "blockstrap", "biteasy", "chain.so", "chain", "blockexplorer", 
+                "webbtc", "blockcypher", "blockr", "blocktrail", "smartbit", "toshi"
+                )
     if svc == "bci":
         global BCI_API
         BCI_API = code
@@ -60,6 +59,16 @@ def parse_addr_args(*args):
 
     return network, addr_args
 
+def check_testnet(inp):
+    # add "testnet" parameter to unspent, fetchtx etc if necessary
+    if (len(inp) in xrange(26, 35+1) and inp[0] in "2mn") or \
+      json.loads(make_request("https://blockexplorer.com/api/addr-validate/%s" % inp)):
+        return inp, "testnet"
+    elif len(inp) == 64 and re.match('^[0-9a-fA-F]*$', inp):
+        pass
+    else:
+        return inp
+
 
 # Gets the unspent outputs of one or more addresses
 def bci_unspent(*args, **kwargs):
@@ -86,6 +95,31 @@ def bci_unspent(*args, **kwargs):
             raise Exception("Failed to decode data: "+data)
     return u
 
+
+def be_unspent(*args, **kwargs):
+    network, addrs = parse_addr_args(*args)
+    u = []
+    for a in addrs:
+        try:
+            data = make_request('https://%sblockexplorer.com/api/addr/%s/utxo?noCache=1' \
+                                % ("testnet." if network == "testnet" else "", a)
+                                )
+        except Exception as e:
+            if str(e) == 'No free outputs to spend':
+                continue
+            else:
+                raise Exception(e)
+        try:
+            jsonobj = json.loads(data)
+            for o in jsonobj:
+                h = o['txid']
+                u.append({
+                    "output": '%s:%d' % (o["txid"], o["vout"]),
+                    "value": int(o['amount']*1e8 + 0.5)
+                })
+        except:
+            raise Exception("Failed to decode data: "+data)
+    return u
 
 def blockr_unspent(*args):
     # Valid input formats: blockr_unspent([addr1, addr2,addr3])
@@ -189,6 +223,7 @@ def biteasy_unspent(*args):
 unspent_getters = {
     'bci': bci_unspent,
     'blockr': blockr_unspent,
+    'be': be_unspent,
     #'webbtc': webbtc_unspent,           # TODO: implement webbtc unspent function
     'helloblock': helloblock_unspent,
     'biteasy': biteasy_unspent
@@ -198,7 +233,7 @@ unspent_getters = {
 def unspent(*args, **kwargs):
     """unspent(addr, "btc", source="blockr")"""
     svc = kwargs.get('source', '')
-    f = unspent_getters.get(svc, blockr_unspent)
+    f = unspent_getters.get(svc, be_unspent)
     return f(*args)
 
 
@@ -395,12 +430,12 @@ def pushtx(*args, **kwargs):
 
 def last_block_height(network='btc'):
     if network == 'testnet':
-        data = make_request('http://tbtc.blockr.io/api/v1/block/info/last')
+        data = make_request('https://testnet.blockexplorer.com/api/status?q=getBlockCount')
         jsonobj = json.loads(data)
-        return jsonobj["data"]["nb"]
-    data = make_request('https://blockchain.info/latestblock')
+        return jsonobj["blockcount"]
+    data = make_request('https://blockexplorer.com/api/status?q=getBlockCount')
     jsonobj = json.loads(data)
-    return jsonobj["height"]
+    return jsonobj["blockcount"]
 
 
 # Gets a specific transaction
@@ -411,6 +446,18 @@ def bci_fetchtx(txhash):
         txhash = hexify(txhash)
     data = make_request('https://blockchain.info/rawtx/'+txhash+'?format=hex')
     return data
+    
+def be_fetchtx(txhash, network="btc"):
+    if isinstance(txhash, list):
+        return [be_fetchtx(h) for h in txhash]
+    if not re.match('^[0-9a-fA-F]*$', txhash):
+        txhash = hexify(txhash)
+    data = make_request('https://%sblockexplorer.com/api/rawtx/%s' % \
+                        ("testnet." if network == "testnet" else "", txhash)
+                        )
+    jsonobj = json.loads(data)
+    txh = jsonobj.get("rawtx")
+    return txh.encode("utf-8")
 
 
 def blockr_fetchtx(txhash, network='btc'):
@@ -486,6 +533,7 @@ def webbtc_fetchtx(txhash, network='btc'):
 fetchtx_getters = {
     'bci': bci_fetchtx,
     'blockr': blockr_fetchtx,
+    'be': be_fetchtx,
     'webbtc': webbtc_fetchtx,       #   http://test.webbtc.com/tx/txid.[hex,json, bin]
     'helloblock': helloblock_fetchtx
 }
@@ -597,7 +645,7 @@ def get_txs_in_block(inp):
 
 
 def get_block_height(txid, network='btc'):
-    base_url = 'http://%s.blockr.io/api/v1/tx/info/' % \
+    base_url = 'https://bitcoin.toshi.io/api/v0/blocks/1' % \
                ('tbtc' if network == 'testnet' else 'btc')
     j = json.loads(make_request(base_url + str(txid)))
     return j['data']['block']
@@ -642,4 +690,28 @@ def fee_estimate(nblocks, network="btc"):
     data = json.loads(make_request(url))
     btc_to_satoshi = lambda b: int(b*1e8 + 0.5)
     btcfee = data.get(str(nblocks), None)
-    return btc_to_satoshi(btcfee) if btcfee else None
+    return btc_to_satoshi(btcfee)
+
+estimate_fee = fee_estimate
+
+def get_stats(days=1, network="btc", **kwargs):
+    svc = kwargs.get("source", ("smartbit" if network == "btc" else "webbtc"))
+    if svc == "smartbit":
+        if network == "testnet":
+            raise Exception("No %s functionality for %s" % (network, svc))
+        sb_url = "https://api.smartbit.com.au/v1/blockchain/stats?%d" % int(days)
+        stats = json.loads(make_request(sb_url))
+    elif svc == "webbtc":
+        if network == "testnet":
+            wb_url = "http://test.webbtc.com/stats.json"
+        else:
+            wb_url = "http://webbtc.com/stats.json"
+        stats = json.loads(make_request(wb_url))
+        sys.stderr.write("Current network statistics only available, %d days disregarded" % int(days))
+    return stats
+
+def address_txlist(addr, network="btc"):
+    url = "https://%sblockexplorer.com/api/addr/%s" % ("testnet." if network == "testnet" else "", addr)
+    data = make_request(url)
+    jsonobj = json.loads(data)
+    assert jsonobj.get("addrStr") == addr 
