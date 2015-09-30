@@ -59,10 +59,11 @@ def parse_addr_args(*args):
 
     return network, addr_args
 
+# TODO: complete
 def check_testnet(inp):
     # add "testnet" parameter to unspent, fetchtx etc if necessary
     if (len(inp) in xrange(26, 35+1) and inp[0] in "2mn") or \
-      json.loads(make_request("https://blockexplorer.com/api/addr-validate/%s" % inp)):
+      json.loads(make_request("https://testnet.blockexplorer.com/api/addr-validate/%s" % inp)):
         return inp, "testnet"
     elif len(inp) == 64 and re.match('^[0-9a-fA-F]*$', inp):
         pass
@@ -567,6 +568,15 @@ def get_block_at_height(height, network='btc'):
         return ''
         #raise Exception("Block at this height not found")
 
+get_block_by_height = get_block_at_height
+
+
+def get_block_height(blockhash, network="btc"):
+    url = "https://%sblockexplorer.com/api/block/%s" % ("testnet." if network=="testnet" else "", blockhash)
+    jsonobj = json.loads(make_request(url))
+    return jsonobj.get("height")
+
+
 def _get_block(inp):
     if len(str(inp)) < 64:
         return get_block_at_height(inp)
@@ -586,6 +596,7 @@ def bci_get_block_header_data(inp):
         'bits': j['bits'],
         'nonce': j['nonce'],
     }
+
 
 def blockr_get_block_header_data(height, network='btc'):
     if network == 'testnet':
@@ -607,6 +618,7 @@ def blockr_get_block_header_data(height, network='btc'):
         'bits': int(j['bits'], 16),
         'nonce': j['nonce'],
     }
+
 
 def get_block_timestamp(height, network='btc'):
     if network == 'testnet':
@@ -637,6 +649,7 @@ def get_block_header_data(inp, **kwargs):
     f = block_header_data_getters.get(kwargs.get('source', ''),
                                       blockr_get_block_header_data)
     return f(inp, **kwargs)
+
 
 def get_txs_in_block(inp):
     j = _get_block(inp)
@@ -684,7 +697,8 @@ def smartbits_search(q, network='btc'):
         "Input:\t%s\nSearched:\t%s" % (str(q), jsonobj.get("search", "??"))
     return jsonobj.get("results", [])   # [x.get('data', '') for x in jsonobj.get('results', '')]
 
-def fee_estimate(nblocks, network="btc"):
+
+def estimate_fee(nblocks, network="btc"):
     url = "https://%sblockexplorer.com/api/utils/estimatefee?nbBlocks=%d" % \
           (".testnet" if network == "testnet" else "", int(nblocks))
     data = json.loads(make_request(url))
@@ -692,7 +706,7 @@ def fee_estimate(nblocks, network="btc"):
     btcfee = data.get(str(nblocks), None)
     return btc_to_satoshi(btcfee)
 
-estimate_fee = fee_estimate
+fee_estimate = estimate_fee
 
 def get_stats(days=1, network="btc", **kwargs):
     svc = kwargs.get("source", ("smartbit" if network == "btc" else "webbtc"))
@@ -709,9 +723,28 @@ def get_stats(days=1, network="btc", **kwargs):
         stats = json.loads(make_request(wb_url))
         sys.stderr.write("Current network statistics only available, %d days disregarded" % int(days))
     return stats
+    
+stats = get_stats()
 
-def address_txlist(addr, network="btc"):
-    url = "https://%sblockexplorer.com/api/addr/%s" % ("testnet." if network == "testnet" else "", addr)
-    data = make_request(url)
-    jsonobj = json.loads(data)
-    assert jsonobj.get("addrStr") == addr 
+def address_txlist(*args):
+    network, addrs = parse_addr_args(*args)
+    txs = {}
+    for addr in addrs:
+        url = "https://%sblockexplorer.com/api/addr/%s" % ("testnet." if network == "testnet" else "", addr)
+        data = make_request(url)
+        jsonobj = json.loads(data)
+        assert jsonobj.get("addrStr") == addr 
+        txs[str(addr)] = jsonobj
+    return txs
+
+def get_txid_height(*args):
+    # Takes     TxID, network    returns block height for that TxID
+    network = args[-1] if len(args) == 2 else "btc"
+    txid = args[0].encode('utf-8')
+    if not re.match('^[0-9a-fA-F]*$', args[0].encode('utf-8')) or len(args[0]) != 64:
+        raise TypeError("%s is not a valid TxID" % txid)
+        #network = 'testnet' if network == 'btc' else 'btc'    # swap network
+        #sys.stderr.write("%s is not a valid TxID...trying %s network" % (txid, network))
+    #txs = []
+    #url = 
+    # TODO: complete
