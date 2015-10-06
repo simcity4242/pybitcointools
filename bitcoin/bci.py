@@ -62,14 +62,27 @@ def parse_addr_args(*args):
 # TODO: complete
 def check_testnet(inp):
     # add "testnet" parameter to unspent, fetchtx etc if necessary
-    if (len(inp) in xrange(26, 35+1) and inp[0] in "2mn") or \
-      json.loads(make_request("https://testnet.blockexplorer.com/api/addr-validate/%s" % inp)):
-        return inp, "testnet"
-    elif len(inp) == 64 and re.match('^[0-9a-fA-F]*$', inp):
-        pass
+    #if (isinstance(inp, basestring) and inp[0] in "2mn"):
+    if isinstance(inp, basestring) and inp[0] in "123mn":
+        if re.match("^[2mn][a-km-zA-HJ-NP-Z0-9]{26,33}$", inp):
+            return inp, "testnet"
+        elif re.match("^[13][a-km-zA-HJ-NP-Z0-9]{26,33}$", inp):
+            return inp
+    elif isinstance(inp, basestring) and re.match('^[0-9a-fA-F]{64}$', inp):
+        beurl =  "https://blockexplorer.com/api/tx/%s" % inp
+        beurlt = "https://testnet.blockexplorer.com/api/tx/%s" % inp
+        try:
+            jdata = json.loads(make_request(beurlt))
+            return inp, "testnet"
+        except:
+            jdata = json.loads(make_request(beurl))
+            return inp
+        raise ValueError("TxID %s has no match for testnet or mainnet (Bad TxID)")
     else:
         return inp
 
+
+# json.loads(make_request("https://testnet.blockexplorer.com/api/addr-validate/%s" % inp))
 
 # Gets the unspent outputs of one or more addresses
 def bci_unspent(*args, **kwargs):
@@ -740,11 +753,34 @@ def address_txlist(*args):
 def get_txid_height(*args):
     # Takes     TxID, network    returns block height for that TxID
     network = args[-1] if len(args) == 2 else "btc"
-    txid = args[0].encode('utf-8')
-    if not re.match('^[0-9a-fA-F]*$', args[0].encode('utf-8')) or len(args[0]) != 64:
+    txid = args[:-1] if args[-1] in ("btc", "testnet") else str(args[0])
+    if not re.match('^[0-9a-fA-F]*$', txid) or len(txid) != 64:
         raise TypeError("%s is not a valid TxID" % txid)
-        #network = 'testnet' if network == 'btc' else 'btc'    # swap network
-        #sys.stderr.write("%s is not a valid TxID...trying %s network" % (txid, network))
-    #txs = []
-    #url = 
-    # TODO: complete
+    url = "https://%sblockexplorer.com/api/tx/%s" % ("testnet." if network == "testnet" else "", txid)
+    try:
+        d = json.loads(make_request(url))
+    except:     # GET EXCEPTION NAME
+        network = 'testnet' if network == 'btc' else 'btc' if network == "testnet" else str(network)    # swap network
+        sys.stderr.write("%s is not a valid TxID...trying %s network" % (txid, network))
+        url = "https://%sblockexplorer.com/api/tx/%s" % ("testnet." if network == "testnet" else "", txid)
+        try: 
+            d = json.loads(make_request(url))
+        except: 
+            raise ValueError("TxID %s not found for either network" % txid)
+    bh = d.get("blockhash")
+    bhurl = "https://%sblockexplorer.com/api/block/%s" % ("testnet." if network == "testnet" else "", bh)
+    bdata = json.loads(make_request(bhurl))
+    return bdata.get("height")
+
+def get_price(val=100000000, currency="usd", exchange="coinbase"):
+    """v is Satoshi value (default = 1 BTC), default currency = USD$, exchange can be all"""
+    if isinstance(v, float):
+        v = int(val*1e8 + 0.5)
+    url = "https://chain.so/api/v2/get_price/BTC/%s" % currency.upper()
+    jsonobj = json.loads(make_request(url)).get("data")
+    prices = {}
+    for d in jsonobj.get("prices"):
+        #d.pop("price_base")
+        #d.pop("time")
+        prices[str(d.get("exchange", "unknown"))] = float(d.get("price"))
+    return prices.get(exchange.lower()) if exchange.lower() != "all" else prices
