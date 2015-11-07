@@ -79,9 +79,9 @@ def bip39_to_mn(hexstr, lang=None):
     lang = 'english' if lang is None else str(lang)
     BIP39 = WORDS[lang.lower()]
 
-    hexstr = unhexify(hexstr)
+    hexstr = safe_unhexlify(hexstr)
     cs = sha256(hexstr)     # sha256 hexdigest
-    bstr = (changebase(hexify(hexstr), 16, 2, len(hexstr)*8) +
+    bstr = (changebase(safe_hexlify(hexstr), 16, 2, len(hexstr)*8) +
             changebase(cs, 16, 2, 256)[ : len(hexstr) * 8 // 32])
     wordarr = []
     for i in range(0, len(bstr), 11):
@@ -116,10 +116,10 @@ def bip39_to_entropy(mnem_str):
     
     bd = binstr[:L // 33 * 32]
     cs = binstr[-L // 33:]
-    hexd = unhexify(changebase(bd, 2, 16, L // 33 * 8))
-    hexd_cs = changebase(sha256(hexd), 16, 2, 256)[:L // 33]
+    hexd = changebase(bd, 2, 16, L // 33 * 8)
+    hexd_cs = changebase(sha256(safe_unhexlify(hexd)), 16, 2, 256)[:L // 33]
     if hexd_cs == cs:
-        return hexify(hexd)
+        return safe_hexlify(hexd)
     raise Exception("Checksums don't match!!")
 
 def bip39_check(mnem_phrase, lang=None):
@@ -142,8 +142,8 @@ def bip39_check(mnem_phrase, lang=None):
     L = len(binstr)
     bd = binstr[:L // 33 * 32]
     cs = binstr[-L // 33:]
-    hexd = unhexify(changebase(bd, 2, 16, L // 33 * 8))
-    hexd_cs = changebase(hashlib.sha256(hexd).hexdigest(), 16, 2, 256)[:L // 33]
+    hexd = changebase(bd, 2, 16, L // 33 * 8)
+    hexd_cs = changebase(sha256(safe_unhexlify(hexd)), 16, 2, 256)[:L // 33]
     return cs == hexd_cs
 
 def random_bip39_pair(bits=128, lang=None):
@@ -151,9 +151,8 @@ def random_bip39_pair(bits=128, lang=None):
     lang = 'english' if lang is None else str(lang)
     if int(bits) % 32 != 0:
         raise Exception('%d not divisible by 32! Try 128 bits' % bits)
-    hexseed = hexify(by(unhexify(
-                            random_key()+random_key())[:bits // 8]))
-    return hexseed, bip39_to_mn(hexseed, lang=lang)
+    hexseed = safe_unhexlify(random_key()+random_key())[:bits // 8]
+    return safe_hexlify(hexseed), bip39_to_mn(safe_hexlify(hexseed), lang=lang)
 
 def random_bip39_seed(bits=128):
     return random_bip39_pair(bits)[0]
@@ -257,7 +256,7 @@ def is_elec1_seed(seed):
     except Exception:
         uses_electrum_words = False
     try:
-        unhexify(seed)
+        safe_unhexlify(seed)
         is_hex = (len(seed) == 32 or len(seed) == 64)
     except Exception:
         is_hex = False
