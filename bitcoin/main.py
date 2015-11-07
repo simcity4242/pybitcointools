@@ -134,7 +134,6 @@ def from_jacobian(p):
 
 
 def jacobian_multiply(a, n):
-    if is_ios: sys.setrecursionlimit(1000)
     if a[1] == 0 or n == 0:
         return (0, 0, 1)
     if n == 1:
@@ -148,12 +147,10 @@ def jacobian_multiply(a, n):
 
 
 def fast_multiply(a, n):
-    if is_ios: sys.setrecursionlimit(1000)
     return from_jacobian(jacobian_multiply(to_jacobian(a), n))
 
 
 def fast_add(a, b):
-    if is_ios: sys.setrecursionlimit(1000)
     return from_jacobian(jacobian_add(to_jacobian(a), to_jacobian(b)))
 
 # TODO: check pubkey Electrum
@@ -258,18 +255,15 @@ def convert_privkey(priv, formt=None):
     return encode_privkey(decode_privkey(priv, from_format), to_format)
 
 def add_pubkeys(p1, p2):
-    sys.setrecursionlimit(1000)
     f1, f2 = get_pubkey_format(p1), get_pubkey_format(p2)
     return encode_pubkey(fast_add(decode_pubkey(p1, f1), decode_pubkey(p2, f2)), f1)
 
 def add_privkeys(p1, p2):
-    sys.setrecursionlimit(1000)
     f1, f2 = get_privkey_format(p1), get_privkey_format(p2)
     return encode_privkey((decode_privkey(p1, f1) + decode_privkey(p2, f2)) % N, f1)
 
 
 def multiply(pubkey, privkey):
-    sys.setrecursionlimit(1000)
     f1, f2 = get_pubkey_format(pubkey), get_privkey_format(privkey)
     pubkey, privkey = decode_pubkey(pubkey, f1), decode_privkey(privkey, f2)
     # http://safecurves.cr.yp.to/twist.html
@@ -332,6 +326,7 @@ def neg_privkey(privkey):
     privkey = decode_privkey(privkey, f)
     return encode_privkey((N - privkey) % N, f)
 
+
 def subtract_pubkeys(p1, p2):
     # pub1 + neg_pubkey(pub2)
     f1, f2 = get_pubkey_format(p1), get_pubkey_format(p2)
@@ -367,11 +362,7 @@ def is_pubkey(pubkey):
         return False
 
 def is_address(addr):
-    try:
-        b58check_to_hex(str(addr))
-        return True
-    except AssertionError:
-        return False
+    return re.match("^[123mn][a-km-zA-HJ-NP-Z0-9]{26,33}$", addr)
 
 
 # Hashes
@@ -485,10 +476,12 @@ def random_electrum_seed():
 def random_mini_key():
     charset = get_code_string(58)[1:]   # Base58 without the 1
     while True:
-        randstr = ''.join([random.choice(charset) for i in range(29)])
-        key = "%s%s%s" % ('S', randstr, '?')
-        if bin_sha256(key)[0] != b'\0': continue
-        if bin_sha256(key)[0] == b'\0': break
+        randstr = ''.join([random.choice(charset) for i in xrange(29)])
+        key = "S{0}?".format(randstr)
+        if ord(bin_sha256(key)[0]) != 0: 
+            continue
+        if ord(bin_sha256(key)[0]) == 0: 
+            break
     return key[:-1]
 
 # Encodings
@@ -565,11 +558,13 @@ def ecdsa_raw_sign(msghash, priv, low_s=False):
 
     r, y = fast_multiply(G, k)
     s = inv(k, N) * (z + r*priv) % N
-    if low_s:
-        s = N-s if s>N//2 else s
-    v = (31 if is_compressed else 27) + (y % 2)
-    return v, r, s
+    
+    is_low_s = s * 2 < N
 
+    v = (31 if is_compressed else 27) + ((y % 2) ^ is_low_s)
+    s = s if is_low_s else N-s
+    return v,r,s
+    #return 27+((y % 2) ^ (0 if s * 2 < N else 1)), r, s if s * 2 < N else N - s
 
 def ecdsa_sign(msg, priv):
     """Sign a msg with privkey, returning base64 signature"""
@@ -590,7 +585,7 @@ def ecdsa_raw_verify(msghash, vrs, pub):
     pub = decode_pubkey(pub)
     x, y = fast_add(fast_multiply(G, u1), fast_multiply(pub, u2))
 
-    return r == x
+    return r == x and r % N != 0 and s % N != 0
 
 # FIXME:
 # def ecdsa_addr_verify(addr, b64sig, msg=''):
@@ -616,7 +611,7 @@ def ecdsa_raw_recover(msghash, vrs):
     y = beta if ((v % 2) ^ (beta % 2)) else (P - beta)  # y val from parity and v
     # If xcubedaxb isn't a quadratic residue, the sig is invalid
     # => r cannot be the x coord for a point on the curve
-    if (xcubedaxb - y*y) % P != 0:
+    if (xcubedaxb - y*y) % P != 0 or (r % N != 0) or (s % N != 0):
         return False
     z = hash_to_int(msghash)
     Gz = jacobian_multiply((Gx, Gy, 1), (N - z) % N)
