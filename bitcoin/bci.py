@@ -9,9 +9,10 @@ import json, re
 import random
 import sys
 try:    
-    from urllib.request import build_opener
+    from urllib.request import build_opener, Request
 except: 
-    from urllib2 import build_opener
+    from urllib2 import build_opener, Request, HTTPError
+    import urllib2
 
 FLAG_TESTNET = None
 
@@ -33,12 +34,7 @@ CHAIN_API = "api-key-id=211a589ce9bbc35de662ee02d51aa860"
 BET_URL, BE_URL = "https://testnet.blockexplorer.com/api", "https://blockexplorer.com/api"
 BLOCKRT_URL, BLOCKR_URL = "http://tbtc.blockr.io/api/v1", "http://tbtc.blockr.io/api/v1"
 BLOCKSTRAPT_URL, BLOCKSTRAP_URL = "https://api.blockstrap.com/v0/btct", "https://api.blockstrap.com/v0/btc"
-
-#SERVICES = {"btc": ("bci", "blockstrap", "biteasy", "chain.so", "chain", "blockexplorer", 
-#                    "webbtc", "blockcypher", 
-#                    "blockr", "blocktrail", "smartbit", "toshi"),
-#            "testnet": ("chain.so", "blockexplorer", "blockr", "webbtc")
-#            }
+CHAINSOT_URL, CHAINSO_URL = "https://chain.so/api/v2/%s/BTCTEST/%s", "https://chain.so/api/v2/%s/BTC/%s"
 
 
 def set_api(svc="bci", code=""):
@@ -57,36 +53,32 @@ def set_api(svc="bci", code=""):
         BLOCKSTRAP_API = code
 
 
-# Makes a request to a given URL (first arg) and optional params (second arg)
+
 def make_request(*args):
     opener = build_opener()
-    opener.addheaders = [('User-agent', 'Mozilla/5.0%d' % random.randrange(1000000))]
+    opener.addheaders = [('User-agent',
+                          'Mozilla/5.0'+str(random.randrange(1000000)))]
     try:
-        return opener.open(*args).read().strip().encode('utf-8')
+        return opener.open(*args).read().strip()
     except Exception as e:
         try:
-            p = e.read().strip().encode('utf-8')
+            p = e.read().strip()
         except:
             p = e
         raise Exception(p)
 
 
-
 def is_testnet(inp):
     '''Checks if inp is a testnet address, TXID or Push TxHex''' 
-    if isinstance(inp, dict):
-        from bitcoin.transaction import serialize
-        return is_testnet(serialize(inp))
-    elif len(inp) > 0 and isinstance(inp, (list, tuple)):
+    if len(inp) > 0 and isinstance(inp, (list, tuple)):
         res = []
         for v in inp:
-            if not v: 
+            if not v or (isinstance(v, basestring) and v.lower() in ("btc", "testnet")): 
                 pass
-            if isinstance(v, (basestring, dict)):
-                try: 
-                    res.append(is_testnet(v))
-                except: 
-                    return False
+            try: 
+                res.append(is_testnet(v))
+            except: 
+                return False
         return any(res)
     elif not isinstance(inp, basestring):    # sanity check
         raise TypeError("Cannot check %s, only string or dict" % str(type(inp)))
@@ -98,7 +90,6 @@ def is_testnet(inp):
         elif re.match("^[13][a-km-zA-HJ-NP-Z0-9]{26,33}$", inp):
             return False
         sys.stderr.write("Bad address format %s")
-        return None
     ## TXID
     elif re.match('^[0-9a-fA-F]{64}$', inp):
         try:
@@ -108,17 +99,20 @@ def is_testnet(inp):
             jdata = json.loads(make_request("%s/tx/%s" % (BE_URL, inp)))     # Try Mainnet
             return False
         sys.stderr.write("TxID %s has no match for testnet or mainnet (Bad TxID)")
-        return None
 
     ## PUSHTX
-    #elif (inp[:8] == '01000000' or inp[:4] == b'\x01\x00\x00\x00'):
-    #    return False
+    elif (inp[:8] == '01000000' or inp[:4] == b'\x01\x00\x00\x00'):
+        from bitcoin.transaction import serialize, deserialize
+        txo = deserialize(inp)
+        if len(txo.get("ins")) > 0:
+            pass
+        return False
     else:
-        return None
+        raise TypeError("{0} is unknown input".format(inp))
 
 
 def set_network(*args):
-    '''Decides if args are mainnet or testnet and returns network name'''
+    '''Decides if args for unspent/fetchtx/pushtx are mainnet or testnet'''
     if not args and FLAG_TESTNET is not None:
         return "testnet" if FLAG_TESTNET else "btc"
     r = []
@@ -158,51 +152,52 @@ def parse_addr_args(*args):
 # json.loads(make_request("https://testnet.blockexplorer.com/api/addr-validate/%s" % inp))
 
 # Gets the unspent outputs of one or more addresses
-def bci_unspent(*args, **kwargs):
+
+def be_unspent(*args, **kwargs):
+    try: addrs, network = parse_addr_args(*args)
+    except: network = "btc", args[:-1]
+    u = []
+    for a in addrs:
+        try:
+            data = make_request('%s/addr/%s/utxo?noCache=1' % ((BET_URL if network == "testnet" else BE_URL), a))
+        except Exception as e:
+            if str(e) == 'No free outputs to spend': continue
+            else: raise Exception(e)
+        try:
+            jsonobj = json.loads(data)
+            for o in jsonobj:
+                h = o.get('txid')
+                v = o.get('vout')
+                p = int(o.get('amount')*1e8 + 0.5)
+                u.append({
+                    "output": "%s:%d" % (h, v),
+                    "value": p
+                })
+        except:
+            print data
+            sys.stderr.write("Failed to decode data: "+data)
+    return u
+
+
+def bci_unspent(*args):
     addrs, network = parse_addr_args(*args)
     if not network == "btc":
         raise Exception("BCI only supports mainnet, Network %s unsupported" % network)
     u = []
     for a in addrs:
+        url = 'https://blockchain.info/unspent?active=%s' % a
         try:
-            data = make_request('https://blockchain.info/unspent?address=%s' % a)
+            data = make_request(url)
         except Exception as e:
-            if str(e) == 'No free outputs to spend':
-                continue
-            else:
-                raise Exception(e)
+            if str(e) == 'No free outputs to spend': continue
+            else: raise Exception(e)
         try:
             jsonobj = json.loads(data.decode('utf-8'))
             for o in jsonobj["unspent_outputs"]:
                 h = safe_hexlify(unsafe_hexlify(o['tx_hash'])[::-1])
                 u.append({
                     "output": h+':'+str(o['tx_output_n']),
-                    "value": o['value']
-                })
-        except:
-            raise Exception("Failed to decode data: "+data)
-    return u
-
-
-def be_unspent(*args, **kwargs):
-    addrs, network = parse_addr_args(*args)
-    u = []
-    for a in addrs:
-        try:
-            data = make_request('%s/addr/%s/utxo?noCache=1' % ((BET_URL if network == "testnet" else BE_URL), a))
-        except Exception as e:
-            raise Exception(str(e))
-        try:
-            jsonobj = json.loads(data.decode('utf-8'))
-            if jsonob == []:
-                sys.stderr.write("No unspent outputs for %s" % a)
-                continue
-            for o in jsonobj:
-                h = o['txid']
-                u.append({
-                    "output": '%s:%d' % (o["txid"], o["vout"]),
-                    "value": int(o['amount']*1e8 + 0.5)
-                })
+                    "value": o['value']})
         except:
             raise Exception("Failed to decode data: "+data)
     return u
@@ -223,12 +218,6 @@ def blockr_unspent(*args):
     else:
         raise Exception('Unsupported network {0} for blockr_unspent'.format(network))
 
-    if len(addr_args) == 0:
-        return []
-    elif isinstance(addr_args[0], list):
-        addrs = addr_args[0]
-    else:
-        addrs = addr_args
     res = make_request(blockr_url + ','.join(addrs))
     data = json.loads(res.decode('utf-8'))['data']
     o = []
@@ -291,73 +280,11 @@ def unspent(*args, **kwargs):
 def history(*args):
     # Valid input formats: history([addr1, addr2,addr3], "btc")
     #                      history(addr1, addr2, addr3, "testnet")
-    if len(args) == 0:
+    if len(args) == 0 or (len(args)==1 and args[0] in ('testnet','btc')):
         return []
-    elif len(args) == 2 and isinstance(args[0], list):
-        addrs, network = args[0], args[-1]
-    elif len(args) > 2:
-        addrs, network = args[:-1], args[-1]
-    else:
-        addrs, network = parse_addr_args(*args)
+    addrs, network = parse_addr_args(*args)
 
-    if network == "testnet":
-        txs = []         # using https://api.biteasy.com/blockchain/v1/transactions?address=_ADDR_
-        api = ''         #"?api_key=%s" % BLOCKSTRAP_API if BLOCKSTRAP_API else ''
-        for addr in addrs:
-            offset = 0
-            while 1:
-                gathered = False
-                while not gathered:
-                    try:
-                        data = make_request(
-                            "https://api.blockstrap.com/v0/btct/address/unspents/%s?showtxn=1?records=300%s" % (addr, api))
-                        gathered = True
-                    except Exception as e:
-                        try:
-                            sys.stderr.write(e.read().strip())
-                        except:
-                            sys.stderr.write(str(e))
-                        gathered = False
-                try:
-                    jsonobj = json.loads(data.decode('utf-8'))
-                except:
-                    raise Exception("Failed to decode data: " + data)
-                assert addr in str(jsonobj['data']['address']['address']), \
-                    "Tx data doesn't match address %s" % addr
-                txs.extend(jsonobj['data']['address']['transactions'])
-                if len(jsonobj['data']['address']['inout_count_total']) >= 300: # because records=300
-                    break
-                offset += 100
-                sys.stderr.write("Fetching more transactions... " + str(offset) + '\n')
-        outs = {}
-        for tx in txs:
-            for o in tx["out"]:
-                if o.get('addr', None) in addrs:
-                    key = str(tx["tx_index"]) + ':' + str(o["n"])
-                    outs[key] = {
-                        "address": o["addr"],
-                        "value": o["value"],
-                        "output": tx["hash"] + ':' + str(o["n"]),
-                        "block_height": tx.get("block_height", None)
-                    }
-            # key = str(tx.get("time", "")) + ':' + str(tx.get("input_number", ''))
-            # outs[key] = {
-            #     "address": addr,
-            #     "value": int(1e8*(float(tx["value"]) + 5e-9)),
-            #     "output": tx["hash"] + ':' + str(tx["input_number"]),
-            #     "time": tx['time'],
-            #     "block_height":
-            # }
-        # for tx in txs:
-        #     for i, inp in enumerate(tx["inputs"]):
-        #         if "prev_out" in inp:
-        #             if inp["prev_out"]["addr"] in addrs:
-        #                 key = str(inp["prev_out"]["tx_index"]) + \
-        #                       ':' + str(inp["prev_out"]["n"])
-        #                 if outs.get(key):
-        #                     outs[key]["spend"] = tx["hash"] + ':' + str(i)
-            return [outs[k] for k in reversed(sorted(outs))]
-    elif network == "btc":
+    if network == "btc":
         txs = []
         for addr in addrs:
             offset = 0
@@ -365,9 +292,7 @@ def history(*args):
                 gathered = False
                 while not gathered:
                     try:
-                        data = make_request(
-                            'https://blockchain.info/address/%s?format=json&offset=%s' %
-                            (addr, offset))
+                        data = make_request('https://blockchain.info/address/%s?format=json&offset=%s' % (addr, offset))
                         gathered = True
                     except Exception as e:
                         try:
@@ -376,7 +301,7 @@ def history(*args):
                             sys.stderr.write(str(e))
                         gathered = False
                 try:
-                    jsonobj = json.loads(data.decode('utf-8'))
+                    jsonobj = json.loads(data)
                 except:
                     raise Exception("Failed to decode data: "+data)
                 txs.extend(jsonobj["txs"])
@@ -404,6 +329,58 @@ def history(*args):
                         if outs.get(key):
                             outs[key]["spend"] = tx["hash"] + ':' + str(i)
         return [outs[k] for k in outs]
+        
+    elif network == "testnet":
+        txs = []         # using https://api.biteasy.com/blockchain/v1/transactions?address=_ADDR_
+        for addr in addrs:    # or 
+            offset = 0
+            while 1:
+                gathered = False
+                while not gathered:
+                    try:
+                        data = make_request("%s/txs/?address=%s" % (BET_URL, addr))
+                        gathered = True
+                    except Exception as e:
+                        try:    sys.stderr.write(e.read().strip())
+                        except: sys.stderr.write(str(e))
+                        gathered = False
+                try:
+                    jsonobj = json.loads(data)
+                except:
+                    raise Exception("Failed to decode data: " + data)
+                txs.extend(jsonobj['txs'])
+                #assert addr == jsonobj.get("addrStr"), "Tx data doesn't match address %s" % addr
+                #if len(jsonobj['data']['address']['inout_count_total']) >= 300: # because records=300
+                #    break
+                #offset += 100
+                #sys.stderr.write("Fetching more transactions... " + str(offset) + '\n')
+        outs = {}
+        from bitcoin.main import hex_to_b58check, btc_to_satoshi
+        for tx in txs:
+            for o in tx.get("vout"):
+                if o.get('scriptPubKey', None) and hex_to_b58check(o.get("scriptPubKey"])["hex"], 111) == addr:
+                    key = str(tx["time"]) + ':' + str(o["n"])
+                    outs[key] = {
+                        "address":    addr,
+                        "value":      btc_to_satoshi(o["value"]),
+                        "output":     "{0}:{1}".format(tx["txid"], str(o["n"])),
+                    }
+                    blkhash = tx.get("blockhash")
+                    try:
+                        bheight = get_block_height(blkhash, 'testnet')
+                        outs[key].update({"block_height": int(bheight)})
+                    except:
+                        sys.stderr.write("Couldn't get blockheight for %s.\nUsing blocktime instead" % blkhash)
+                        outs[key].update({"block_time": tx.get("time")})
+        for tx in txs:
+            for i, inp in enumerate(tx["inputs"]):
+                if "prev_out" in inp:
+                    if inp["prev_out"]["addr"] in addrs:
+                        key = str(inp["prev_out"]["tx_index"]) + \
+                              ':' + str(inp["prev_out"]["n"])
+                        if outs.get(key):
+                            outs[key]["spend"] = tx["hash"] + ':' + str(i)
+          return [outs[k] for k in reversed(sorted(outs))]
 
 
 # Pushes a transaction to the network using https://blockchain.info/pushtx
@@ -491,34 +468,34 @@ def bci_fetchtx(txhash):
     return data
     
 
-def be_fetchtx(txhash, network=""):
+def be_fetchtx(txhash):
     if isinstance(txhash, list):
         return [be_fetchtx(h) for h in txhash]
     if not re.match('^[0-9a-fA-F]*$', txhash):
         txhash = safe_hexlify(txhash)
-    network = set_network(be_fetchtx(txhash)) if network == "" else network.lower()
+    network = set_network(txhash)
     data = make_request("%s/tx/%s" % ((BET_URL if network=="testnet" else BE_URL), txhash))
     jsonobj = json.loads(data.decode('utf-8'))
     txh = jsonobj.get("rawtx")
     return txh.encode("utf-8")
 
 
-def blockr_fetchtx(txhash, network='btc'):
-    if network == 'testnet':
-        blockr_url = '%s/tx/raw/' % BLOCKRT_URL
-    elif network == 'btc':
-        blockr_url = '%s/tx/raw/' % BLOCKR_URL
-    else:
+def blockr_fetchtx(txhash, network=None):
+    txhash, network = parse_addr_args(txhash)
+    if network not in ("btc","testnet"):
         raise Exception('Unsupported network {0} for blockr_fetchtx'.format(network))
+    blockr_url = '%s/tx/raw/' % (BLOCKRT_URL if network == 'testnet' else BLOCKR_URL)
+    if len(txhash) == 1 and isinstance(txhash, tuple):
+        txhash = list(txhash[0])
     if isinstance(txhash, list):
         txhash = ','.join([safe_hexlify(x) if not re.match('^[0-9a-fA-F]*$', x)
                            else x for x in txhash])
-        jsondata = json.loads(make_request(blockr_url + txhash)).decode('utf-8')
+        jsondata = json.loads(make_request(blockr_url + txhash))
         return [d['tx']['hex'] for d in jsondata['data']]
     else:
         if not re.match('^[0-9a-fA-F]*$', txhash):
             txhash = safe_hexlify(txhash)
-        jsondata = json.loads(make_request(blockr_url+txhash)).decode('utf-8')
+        jsondata = json.loads(make_request(blockr_url + txhash))
         return jsondata['data']['tx']['hex']   
 
 
@@ -583,7 +560,7 @@ fetchtx_getters = {
 
 def fetchtx(*args, **kwargs):
     svc = kwargs.get("source", "")
-    f = fetchtx_getters.get(svc, blockr_fetchtx)
+    f = fetchtx_getters.get(svc, be_fetchtx)
     return f(*args)
 
 
@@ -815,13 +792,13 @@ def get_price(val=100000000, currency="usd", exchange="coinbase"):
 def get_mempool_txs(tx_count=100):
     tx_count = 1000 if tx_count > 1000 else tx_count
     sb_url = "https://api.smartbit.com.au/v1/blockchain/transactions/unconfirmed?limit=%d" % int(tx_count)
-    jdata = json.loads(make_request(sb_url)).decode('utf-8')
+    jdata = json.loads(make_request(sb_url))
     txs = []
     for tx in jdata.get('transactions'):
         txs.append({
-                    "first_seen"=tx.get('first_seen'), 
-                    "size"=tx.get('size'), 
-                    "txid"=tx.get('txid'), 
-                    "fee"=float(tx.get('fee'))
+                    "first_seen": tx.get('first_seen'), 
+                    "size": tx.get('size'), 
+                    "txid": tx.get('txid'), 
+                    "fee": float(tx.get('fee'))
                     })
     return txs
