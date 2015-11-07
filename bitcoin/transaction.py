@@ -120,9 +120,9 @@ def signature_form(tx, i, script, hashcode=SIGHASH_ALL):
 def der_encode_sig(v, r, s):
     """Takes (vbyte, r, s) as ints and returns hex der encode sig"""
     b1, b2 = encode(r, 256), encode(s, 256)
-    if ord(b1[0]) & 0x80:		# add null bytes if leading byte interpreted as negative
+    if len(b1) and changebase(b1[0], 256, 16, 1) in "89abcdef":		# add null bytes if interpreted as negative number
         b1 = b'\x00' + b1
-    if ord(b2[0]) & 0x80:
+    if len(b2) and ord(b2[0]) & 0x80:
         b2 = b'\x00' + b2
     left  = b'\x02' + encode(len(b1), 256, 1) + b1
     right = b'\x02' + encode(len(b2), 256, 1) + b2
@@ -140,23 +140,53 @@ def der_decode_sig(sig):
     #assert 3*2 + leftlen + 3*2 + rightlen + 1*2 == len(sig) 	
     return (None, decode(left, 16), decode(right, 16))
 
+
 def deserialize_der(sig):
     sig = bytes(bytearray.fromhex(sig)) if re.match('^[0-9a-fA-F]*$', sig) else bytes(bytearray(sig))
     totallen = decode(sig[1], 256) + 2
     rlen = decode(sig[3], 256)
     slen = decode(sig[5+rlen], 256)
     sighashlen = len(sig) - totallen
-    r = changebase(sig[4:4+rlen], 256, 16, rlen*2)
-    s = changebase(sig[6+rlen:6+slen+rlen], 256, 16, slen*2)
-    sighash = changebase(sig[6+rlen+slen:], 256, 16, sighashlen*2)
-    return [r, s, sighash]
+    r = decode(sig[4:4+rlen], 256)
+    s = decode(sig[6+rlen:6+slen+rlen], 256)
+    sighash = decode(sig[6+rlen+slen:], 256)
+    return r, s, sighash
+
+
+def der_extract_rs(sig):
+    res = deserialize_der(sig)
+    return res[:-2]
+
+
+def is_der(signature):
+    if not isinstance(signature, basestring):
+        return False
+    return signature.startswith("30") and len(signature)//2-3 == decode(signature[2:4], 16)
+
+def der_extract(tx):
+    if not isinstance(tx, dict):
+        return serialize(der_extract(deserialize(tx)))
+    nin = len(tx.get("ins"))
+    ins = tx.get("ins")
+    scripts, ders = [], []
+    for inp in ins:
+        scripts.append(inp.get("script"))
+    for scr in scripts:
+        descr = deserialize_script(scr)
+        der = filter(lambda s: is_der(s), descr)
+        ders.extend(der)
+    return ders
+        
+def mutate_tx(txh, i):
+    from bitcoin.main import neg_privkey
 
 def is_bip66(sig):
     """Checks hex DER sig for BIP66 consistency"""
     if isinstance(sig, string_types) and re.match('^[0-9a-fA-F]*$', sig):
         sig = safe_unhexlify(sig)
     sig = bytearray(sig)
-    if ord(sig[1]) == len(sig)-2: sig.extend(b"\1")		# add SIGHASH for BIP66 check
+    if ord(sig[1]) == len(sig)-2: 
+        sig.extend(b"\1")		# add SIGHASH for BIP66 check
     
     if len(sig) < 9 or len(sig) > 73: return False
     if (sig[0] != 0x30): return False
@@ -629,3 +659,11 @@ def check_transaction(tx):
         raise Exception("prevout is null")
 
     return True
+
+def estimate_size(rawtx):
+    # Estimate size of Tx in bytes
+    if isinstance(rawtx, basestrinrg) and re.match('^[0-9a-fA-F]*$', rawtx):
+        return estimate_size(deserialize(rawtx))
+    outs = rawtx.get("outs", [])
+    ins = rawtx.get("ins", [])
+    return len(outs) or 1 * 148 + 34 * len(ins) + 10
