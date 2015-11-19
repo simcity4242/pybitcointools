@@ -1,13 +1,12 @@
 #!/usr/bin/python
 
-###
-###    https://gist.github.com/wizardofozzie/96713e871c3e71e5c87f
-###
-
 from bitcoin.pyspecials import *
-import json, re
+#from bitcoin.constants import *
+
+import json, re, binascii
 import random
 import sys
+import urlparse
 try:    
     from urllib.request import build_opener, Request
 except: 
@@ -16,42 +15,31 @@ except:
 
 FLAG_TESTNET = None
 
-API_CODES = ( 
-                ("BITEASY_API", ""),
-                ("BLOCKSTRAP_API", "?api_key=66350E08-5C41-5449-8936-3EA71EC9CD2F"),
-                ("CHAIN_API", "?api-key-id=211a589ce9bbc35de662ee02d51aa860"),
-                ("BLOCKCYPHER_API", "?token=ba9bd23bab74fa421778a3e1f8dfbece")    #  https://api.blockcypher.com/v1/btc/main?
-           ) 
-           
-TOKENS = dict([(k,v) for k,v in API_CODES if v])
-
-SERVICES = ("bci", "blockstrap", "biteasy", "chain.so", "chain", "blockexplorer", "webbtc", "blockcypher", "blockr", "blocktrail", "smartbit", "toshi")
-
-BLOCKCYPHER_API = "?token=ba9bd23bab74fa421778a3e1f8dfbece"
+BLOCKCYPHER_API = "?token=%s" % "ba9bd23bab74fa421778a3e1f8dfbece"
 BLOCKSTRAP_API = "?api_key=%s" % "66350E08-5C41-5449-8936-3EA71EC9CD2F"
-CHAIN_API = "api-key-id=211a589ce9bbc35de662ee02d51aa860"
+CHAIN_API = "api-key-id=%s" % "211a589ce9bbc35de662ee02d51aa860"
 
 BET_URL, BE_URL = "https://testnet.blockexplorer.com/api", "https://blockexplorer.com/api"
 BLOCKRT_URL, BLOCKR_URL = "http://tbtc.blockr.io/api/v1", "http://tbtc.blockr.io/api/v1"
 BLOCKSTRAPT_URL, BLOCKSTRAP_URL = "https://api.blockstrap.com/v0/btct", "https://api.blockstrap.com/v0/btc"
 CHAINSOT_URL, CHAINSO_URL = "https://chain.so/api/v2/%s/BTCTEST/%s", "https://chain.so/api/v2/%s/BTC/%s"
-
+BLOCKCYPHERT_URL, BLOCKCYPHER_URL = 'https://api.blockcypher.com/v1/btc/test3/', 'https://api.blockcypher.com/v1/btc/main/'
 
 def set_api(svc="bci", code=""):
     """Set API code for web service"""
-    if svc == "bci":
-        global BCI_API
-        BCI_API = code
-    if svc == "blockstrap":
-        global CHAIN_API
-        CHAIN_API = code
-    if svc == "blockcypher":
-        global BLOCKCYPHER_API
-        BLOCKCYPHER_API = code
-    if svc == "blockstrap":
-        global BLOCKSTRAP_API
-        BLOCKSTRAP_API = code
+    if not code:
+        raise ValueError("API code wasn't set")
+    # TODO: call make_api_param()
+    varname = "{svc}_API".format(svc=svc.strip().upper())
+    #global varname
+    globals()[varname] = code
 
+
+def make_api_param(*args):
+    '''Takes (k,v) to make URI_blah?k=v'''
+    if not paramname:
+        return code
+    return "{qm}{pname}={code}".format(qm="?", pname=paramname, code=code)
 
 
 def make_request(*args):
@@ -60,6 +48,8 @@ def make_request(*args):
                           'Mozilla/5.0'+str(random.randrange(1000000)))]
     try:
         return opener.open(*args).read().strip()
+    except HTTPError as he:
+        raise Exception(str(he))
     except Exception as e:
         try:
             p = e.read().strip()
@@ -68,8 +58,9 @@ def make_request(*args):
         raise Exception(p)
 
 
+
 def is_testnet(inp):
-    '''Checks if inp is a testnet address, TXID or Push TxHex''' 
+    '''Checks if inp is a testnet address or if UTXO is a known testnet TxID''' 
     if len(inp) > 0 and isinstance(inp, (list, tuple)):
         res = []
         for v in inp:
@@ -85,11 +76,9 @@ def is_testnet(inp):
 
     ## ADDRESSES
     if inp[0] in "123mn":
-        if re.match("^[2mn][a-km-zA-HJ-NP-Z0-9]{26,33}$", inp):
-            return True 
-        elif re.match("^[13][a-km-zA-HJ-NP-Z0-9]{26,33}$", inp):
-            return False
-        sys.stderr.write("Bad address format %s")
+        return bool(re.match("^[2mn][a-km-zA-HJ-NP-Z0-9]{26,33}$", inp))
+        #sys.stderr.write("Bad address format %s")
+
     ## TXID
     elif re.match('^[0-9a-fA-F]{64}$', inp):
         try:
@@ -100,13 +89,6 @@ def is_testnet(inp):
             return False
         sys.stderr.write("TxID %s has no match for testnet or mainnet (Bad TxID)")
 
-    ## PUSHTX
-    elif (inp[:8] == '01000000' or inp[:4] == b'\x01\x00\x00\x00'):
-        from bitcoin.transaction import serialize, deserialize
-        txo = deserialize(inp)
-        if len(txo.get("ins")) > 0:
-            pass
-        return False
     else:
         raise TypeError("{0} is unknown input".format(inp))
 
@@ -331,14 +313,16 @@ def history(*args):
         return [outs[k] for k in outs]
         
     elif network == "testnet":
-        txs = []         # using https://api.biteasy.com/blockchain/v1/transactions?address=_ADDR_
+        txs = []         # using http://api.blockcypher.com/v1/btc/test3/addrs/n1hjyVvYQPQtejJcANd5ZJM5rmxHCCgWL7;n2kx7k6JuA5Wy27fawaeiPX7dq8mbRDPAv?confirmations=0&limit=50&before
+        #addrs = ';'.join((addrs if isinstance(addrs, list) else [addrs]))
         for addr in addrs:    # or 
             offset = 0
+            bh = last_block_height("testnet")
             while 1:
                 gathered = False
                 while not gathered:
                     try:
-                        data = make_request("%s/txs/?address=%s" % (BET_URL, addr))
+                        data = make_request("http://api.blockcypher.com/v1/btc/test3/addrs/%s?confirmations=0&limit=50&before=%d" % (addr, bh))
                         gathered = True
                     except Exception as e:
                         try:    sys.stderr.write(e.read().strip())
@@ -348,17 +332,19 @@ def history(*args):
                     jsonobj = json.loads(data)
                 except:
                     raise Exception("Failed to decode data: " + data)
-                txs.extend(jsonobj['txs'])
-                #assert addr == jsonobj.get("addrStr"), "Tx data doesn't match address %s" % addr
-                #if len(jsonobj['data']['address']['inout_count_total']) >= 300: # because records=300
-                #    break
-                #offset += 100
-                #sys.stderr.write("Fetching more transactions... " + str(offset) + '\n')
+                assert addr == jsonobj.get("address"), "Tx data doesn't match address %s" % addr
+                txs.extend(jsonobj['txrefs'])
+                if "hasMore" in jsonobj:
+                    bh = txs[-1].get("block_height")
+                if offset >= jsonobj['n_tx']: # because records=50
+                    break
+                offset += 50
+                sys.stderr.write("Fetching more transactions... " + str(offset) + '\n')
         outs = {}
-        from bitcoin.main import hex_to_b58check, btc_to_satoshi
+        #from bitcoin.main import hex_to_b58check, btc_to_satoshi
         for tx in txs:
             for o in tx.get("vout"):
-                if o.get('scriptPubKey', None) and hex_to_b58check(o.get("scriptPubKey"])["hex"], 111) == addr:
+                if o.get('scriptPubKey', None) and hex_to_b58check(o.get("scriptPubKey")["hex"], 111) == addr:
                     key = str(tx["time"]) + ':' + str(o["n"])
                     outs[key] = {
                         "address":    addr,
@@ -380,7 +366,7 @@ def history(*args):
                               ':' + str(inp["prev_out"]["n"])
                         if outs.get(key):
                             outs[key]["spend"] = tx["hash"] + ':' + str(i)
-          return [outs[k] for k in reversed(sorted(outs))]
+        return [outs[k] for k in reversed(sorted(outs))]
 
 
 # Pushes a transaction to the network using https://blockchain.info/pushtx
@@ -391,7 +377,8 @@ def bci_pushtx(tx):
 
 
 def eligius_pushtx(tx):
-    if not re.match('^[0-9a-fA-F]*$', tx): tx = safe_hexlify(tx)
+    if not re.match('^[0-9a-fA-F]*$', tx): 
+        tx = safe_hexlify(tx)
     s = make_request(
         'http://eligius.st/~wizkid057/newstats/pushtxn.php',
         'transaction=%s&send=Push' % tx)
@@ -408,8 +395,7 @@ def blockr_pushtx(tx, network='btc'):
     elif network == 'btc':
         blockr_url = 'http://btc.blockr.io/api/v1/tx/push'
     else:
-        raise Exception(
-            'Unsupported network {0} for blockr_pushtx'.format(network))
+        raise Exception('Unsupported network {0} for blockr_pushtx'.format(network))
 
     if not re.match('^[0-9a-fA-F]*$', tx):
         tx = safe_hexlify(tx)
@@ -475,7 +461,7 @@ def be_fetchtx(txhash):
         txhash = safe_hexlify(txhash)
     network = set_network(txhash)
     data = make_request("%s/tx/%s" % ((BET_URL if network=="testnet" else BE_URL), txhash))
-    jsonobj = json.loads(data.decode('utf-8'))
+    jsonobj = json.loads(data)
     txh = jsonobj.get("rawtx")
     return txh.encode("utf-8")
 
@@ -695,10 +681,9 @@ def get_block_coinbase(txval):
 
 def biteasy_search(*args):
     q, network = parse_addr_args(*args)
-    base_url = 'https://api.biteasy.com/%s/v1/search?q=' % \
-               ('blockchain' if network == 'btc' else 'testnet')
-    data = make_request(base_url + str(q))
-    data = json.loads(data).decode('utf-8')     # we're left with {'results': [...], 'type': BLOCK}
+    url = 'https://api.biteasy.com/%s/v1/search?q=%s' % \
+               (('blockchain' if network == 'btc' else 'testnet', q))
+    data = json.loads(make_request(url))     # we're left with {'results': [...], 'type': BLOCK}
     # TODO: parse different types, eg BLOCK
     return data.get('data', repr(data))
 
@@ -714,15 +699,23 @@ def smartbits_search(q, network='btc'):
     return jsonobj.get("results", [])   # [x.get('data', '') for x in jsonobj.get('results', '')]
 
 
-def estimate_fee(nblocks=6, network="btc"):
+def estimate_fee_by_nblocks(nblocks=6, network="btc"):
     url = "%s/utils/estimatefee?nbBlocks=%d" % \
           (BET_URL if network == "testnet" else BE_URL, int(nblocks))
-    data = json.loads(make_request(url)).decode('utf-8')
+    data = json.loads(make_request(url))
     btc_to_satoshi = lambda b: int(b*1e8 + 0.5)
-    btcfee = data.get(str(nblocks), None)
+    btcfee = data.get(str(nblocks))
     return btc_to_satoshi(btcfee)
 
-fee_estimate = estimate_fee
+fee_estimate_by_nblocks = estimate_fee_by_nblocks
+
+
+def get_fee_estimate(priority="medium", network="btc"):
+    assert priority in ("low", "medium", "high")
+    url = "http://api.blockcypher.com/v1/btc/%s/" % ("test3" if network=="testnet" else "main")
+    jdata = json.loads(make_request(url))
+    fee = jdata.get("%s_fee_per_kb" % priority.lower(), "medium_fee_per_kb")
+    return fee
 
 def get_stats(days=1, network="btc", **kwargs):
     assert network in ("testnet", "btc")
@@ -789,10 +782,11 @@ def get_price(val=100000000, currency="usd", exchange="coinbase"):
     return prices.get(exchange.lower()) if exchange.lower() != "all" else prices
     
 
-def get_mempool_txs(tx_count=100):
+def get_mempool_txs(tx_count=100, network="btc"):
     tx_count = 1000 if tx_count > 1000 else tx_count
-    sb_url = "https://api.smartbit.com.au/v1/blockchain/transactions/unconfirmed?limit=%d" % int(tx_count)
-    jdata = json.loads(make_request(sb_url))
+    url = "http://api.blockcypher.com/v1/btc/%s/txs?limit=%d" % (("test3" if network== "testnet" else "main"), int(tx_count))
+    #sb_url = "https://api.smartbit.com.au/v1/blockchain/transactions/unconfirmed?limit=%d" % int(tx_count)
+    jdata = json.loads(make_request(url))
     txs = []
     for tx in jdata.get('transactions'):
         txs.append({
@@ -801,4 +795,46 @@ def get_mempool_txs(tx_count=100):
                     "txid": tx.get('txid'), 
                     "fee": float(tx.get('fee'))
                     })
+    
     return txs
+
+
+def get_unconfirmed_txs(*args):
+    '''Takes '''
+    addrs_args, network = parse_addr_args(*args)
+    addrs = ';'.join(list(*addrs_args)) if not isinstance(addrs_args, list) else addrs_args
+    url = "%s/addrs/%s/balance" % ((BLOCKCYPHERT_URL if network == 'testnet' else BLOCKCYPHER_URL), addrs)
+    jdata = json.loads(make_request(url))
+    d = {}
+    for o in ([jdata] if not isinstance(jdata, list) else jdata):
+        addr = o.get('address') 
+        assert addr in addrs_args
+        n_txs = o.get('unconfirmed_n_tx')
+        balance = o.get('unconfirmed_balance')
+        if n_txs or balance:
+            # TODO: fetch uncionfirmed Txs
+            d[addr] = dict(n_txs=n_txs, balance=balance)
+            #sys.stderr.write("%s has %d unconfirmed Txs worth %d!" % (n_txs, balance))
+    return d
+    
+def is_unconfirmed(*args):
+    res = get_unconfirmed_txs(*args)
+    return bool(res)
+
+def get_decoded_tx(rawtx, network=None):
+    """Return deserialised raw Tx from Blockcypher API (decode, POST)"""
+    if isinstance(rawtx, basestring) and not re.match('^[0-9a-fA-F]*$', rawtx):
+        return get_decoded_tx(binascii.hexlify(rawtx), network=network)
+    url = "http://api.blockcypher.com/v1/btc/%s/txs/decode" % (
+        "test3" if network=="testnet" else "main" if network=="btc" else "main"
+        )
+    assert rawtx[:8] == "01000000", "Not a Tx! Txs begin with '01000000'"
+    if network not in (None, "btc", "testnet"):
+        raise Exception("Network {0} unsupported".format(str(network)))
+    body = {"tx": rawtx}
+    jdata = json.loads(make_request(url, body))
+    if network is None:
+        jdata.pop("addresses")
+        for i in jdata["inputs"]:  o.pop("addresses")
+        for o in jdata["outputs"]: o.pop("addresses")
+    return jdata
