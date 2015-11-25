@@ -14,14 +14,9 @@ except:
 
 FLAG_TESTNET = None
 
-BLOCKCYPHER_API = "?token=%s" % "ba9bd23bab74fa421778a3e1f8dfbece"
-BLOCKSTRAP_API = "?api_key=%s" % "66350E08-5C41-5449-8936-3EA71EC9CD2F"
-CHAIN_API = "api-key-id=%s" % "211a589ce9bbc35de662ee02d51aa860"
-
 BET_URL, BE_URL = "https://testnet.blockexplorer.com/api", "https://blockexplorer.com/api"
 BLOCKRT_URL, BLOCKR_URL = "http://tbtc.blockr.io/api/v1", "http://tbtc.blockr.io/api/v1"
 BLOCKSTRAPT_URL, BLOCKSTRAP_URL = "https://api.blockstrap.com/v0/btct", "https://api.blockstrap.com/v0/btc"
-CHAINSOT_URL, CHAINSO_URL = "https://chain.so/api/v2/%s/BTCTEST/%s", "https://chain.so/api/v2/%s/BTC/%s"
 BLOCKCYPHERT_URL, BLOCKCYPHER_URL = 'https://api.blockcypher.com/v1/btc/test3/', 'https://api.blockcypher.com/v1/btc/main/'
 
 
@@ -31,10 +26,6 @@ def set_api(svc="blockcypher", code=""):
         raise ValueError("API code wasn't set")
     varname = "{svc}_API".format(svc=svc.strip().upper())
     globals()[varname] = code
-
-#def toggle_testnet():
-#    global FLAG_TESTNET
-#    FLAG_TESTNET = not not FLAG_TESTNET
 
 
 def make_request(*args):
