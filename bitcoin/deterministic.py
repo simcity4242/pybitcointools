@@ -270,7 +270,8 @@ def bip44_descend(masterkey, network='btc', account=0, for_change=0, index=0):
 def bip44_address(masterkey, network='btc', account=0, for_change=0, index=0):
     return privtoaddr(bip44_descend(masterkey, network, account, for_change, index))
 
-# def bip32_info(xkey):
-#     #deser = [x.encode('hex') if isinstance(x, str) else x for x in bip32_deserialize(xkey)]
-#     deser = [safe_hexlify(x) for x in bip32_deserialize(xkey)]
-#     deser[0] = "tprv" if changebase(deser[0], 16, 256, 4) == TESTNET_PRIVATE
+def bip32_info(xkey):
+    #deser = [x.encode('hex') if isinstance(x, str) else x for x in bip32_deserialize(xkey)]
+    deser = [safe_hexlify(x) for x in bip32_deserialize(xkey)]
+    deser[0] = "tPRV" if changebase(deser[0], 16, 256, 4) == TESTNET_PRIVATE else "xPRV"
+    return deser
