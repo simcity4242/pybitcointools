@@ -10,8 +10,14 @@ except ImportError:
 
 LANGS = ["English", "Japanese", "Chinese_simplified", "Chinese_traditional", "Spanish", "French"]
 
-def _get_directory():
-    return os.path.join(os.path.dirname(__file__), 'wordlist')
+def get_directory():
+    #wordlist_english = list(open(os.path.join(os.path.dirname(os.path.realpath(__file__)), 'english.txt'), 'r'))
+    return os.path.join(os.path.dirname(__file__), 'wordlists')
+    
+
+def get_filename(language='english'):
+    return os.path.join(get_directory(), '%s.txt' % language.strip().lower())
+
 
 def get_wordlists(lang=None):
     # Try to access local lists, otherwise download text lists
@@ -37,18 +43,12 @@ def get_wordlists(lang=None):
         return WORDS[lang.lower()]
     return WORDS
 
-#ELECWORDS, BIP39ENG, BIP39JAP = WORDS['electrum1'], WORDS['english'], WORDS['japanese']
 
 def bip39_detect_lang(mnem_str):
-    # TODO: add Electrum1?, Chinese detect not possible?
     if isinstance(mnem_str, list):
         mnem_str = u' '.join(mnem_str)
     mnem_arr = mnem_str.split()
-    sme = set(mnem_arr)
-    # French & English share 100 words
-    #if sme < (frozenset(set(WORDS["english"]) & set(WORDS["french"]))):
-    #    print Warning("Could be English OR French!\nUsing English as default")
-    #    return "english"
+    sme = set(mnem_arr)    # French & English share 100 words
     languages = set(WORDS.keys())
     languages.remove('electrum1')
     poss_langs = []
@@ -88,6 +88,7 @@ def bip39_to_mn(hexstr, lang=None):
         wordarr.append( BIP39[ int(bstr[i:i+11], 2)] )
     return u'\u3000'.join(wordarr) if lang == 'japanese' else u' '.join(wordarr)
 
+
 def bip39_to_seed(mnemonic, saltpass=b''):
     """BIP39 mnemonic (& optional password) to seed"""
     if isinstance(mnemonic, list):
@@ -99,6 +100,7 @@ def bip39_to_seed(mnemonic, saltpass=b''):
 
     assert bip39_check(mn_norm_str)
     return pbkdf2_hmac_sha512(mn_norm_str.encode('utf-8'), 'mnemonic'+norm_saltpass.encode('utf-8'))
+
 
 def bip39_to_entropy(mnem_str):
     """BIP39 mnemonic back to entropy"""
@@ -121,6 +123,7 @@ def bip39_to_entropy(mnem_str):
     if hexd_cs == cs:
         return safe_hexlify(hexd)
     raise Exception("Checksums don't match!!")
+
 
 def bip39_check(mnem_phrase, lang=None):
     """Assert mnemonic is BIP39 standard"""
@@ -146,6 +149,7 @@ def bip39_check(mnem_phrase, lang=None):
     hexd_cs = changebase(sha256(safe_unhexlify(hexd)), 16, 2, 256)[:L // 33]
     return cs == hexd_cs
 
+
 def random_bip39_pair(bits=128, lang=None):
     """Generates a tuple of (entropy, mnemonic)"""
     lang = 'english' if lang is None else str(lang)
@@ -154,12 +158,15 @@ def random_bip39_pair(bits=128, lang=None):
     hexseed = safe_unhexlify(random_key()+random_key())[:bits // 8]
     return safe_hexlify(hexseed), bip39_to_mn(safe_hexlify(hexseed), lang=lang)
 
+
 def random_bip39_seed(bits=128):
     return random_bip39_pair(bits)[0]
+
 
 def random_bip39_mn(bits=128, lang=None):
     lang = 'english' if lang is None else str(lang)
     return random_bip39_pair(bits, lang)[-1]
+
 
 def elec1_mn_decode(mnem):
     """Decodes Electrum 1.x mnem phrase to hex seed"""
@@ -179,6 +186,7 @@ def elec1_mn_decode(mnem):
         output += '%08x' % x
     return output
 
+
 def elec1_mn_encode(hexstr):
     if not isinstance(hexstr, string_types) or not re.match('^[0-9a-fA-F]*$', hexstr):
         raise TypeError("Bad input: hex string req!")
@@ -194,6 +202,7 @@ def elec1_mn_encode(hexstr):
         w3 = ((x//n//n) + w2)%n
         out += [words[w1], words[w2], words[w3]]
     return ' '.join(out)
+
 
 # https://gist.github.com/simcity4242/94a5c32b66e52834ae71
 def generate_elec2_seed(num_bits=128, prefix='01', custom_entropy=1):
@@ -214,6 +223,7 @@ def generate_elec2_seed(num_bits=128, prefix='01', custom_entropy=1):
 
 random_electrum2_seed = random_elec2_seed = generate_elec2_seed
 
+
 def elec2_mn_encode(i, lang='english'):
     """Encodes int, i, as Electrum 2 mnemonic"""
     assert lang in ('english', 'japanese', 'spanish')
@@ -224,6 +234,7 @@ def elec2_mn_encode(i, lang='english'):
         i //= n
         words.append(WORDS[lang.lower()][x])
     return ' '.join(words)
+
 
 def elec2_mn_decode(mn_seed, lang='english'):
     assert lang in ('english', 'japanese', 'spanish')
@@ -237,16 +248,19 @@ def elec2_mn_decode(mn_seed, lang='english'):
         i = i*n + k
     return i
 
+
 def elec2_check_seed(mn_seed, custom_entropy=1):
     assert is_elec2_seed(mn_seed)
     i = elec2_mn_decode(mn_seed)
     return i % custom_entropy == 0
+
 
 def is_elec2_seed(seed, prefix='01'):
     assert prefix in ('01', '101')
     hmac_sha_512 = lambda x, y: hmac.new(x, y, hashlib.sha512).hexdigest()
     s = hmac_sha_512('Seed version', seed)
     return s.startswith(prefix)
+
 
 def is_elec1_seed(seed):
     words = seed.strip().split()
@@ -261,6 +275,7 @@ def is_elec1_seed(seed):
     except Exception:
         is_hex = False
     return is_hex or (uses_electrum_words and (len(words) == 12 or len(words) == 24))
+
 
 def _prepare_seed(seed):
     CJK_INTERVALS = [
@@ -315,8 +330,6 @@ def _prepare_seed(seed):
     return seed
 
 prepare_elec2_seed = _prepare_seed
-
-
 
 # https://github.com/spesmilo/electrum/tree/master/lib/wordlist
 # https://github.com/spesmilo/electrum/raw/master/lib/wordlist/portuguese.txt
