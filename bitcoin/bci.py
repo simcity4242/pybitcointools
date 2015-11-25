@@ -1,5 +1,4 @@
 #!/usr/bin/python
-# turl, murl = "http://api.blockcypher.com/v1/btc/test3/txs/f854aebae95150b379cc1187d848d58225f3c4157fe992bcd166f58bd5063449", "http://api.blockcypher.com/v1/btc/main/txs/f854aebae95150b379cc1187d848d58225f3c4157fe992bcd166f58bd5063449"
 from bitcoin.pyspecials import *
 #from bitcoin.constants import *
 
@@ -30,10 +29,12 @@ def set_api(svc="blockcypher", code=""):
     """Set API code for web service"""
     if not code:
         raise ValueError("API code wasn't set")
-    # TODO: call make_api_param()
     varname = "{svc}_API".format(svc=svc.strip().upper())
-    #global varname
     globals()[varname] = code
+
+#def toggle_testnet():
+#    global FLAG_TESTNET
+#    FLAG_TESTNET = not not FLAG_TESTNET
 
 
 def make_request(*args):
@@ -45,11 +46,11 @@ def make_request(*args):
     if len(args) == 2:
         url, data = args
         headers.update({"Content-Type": "application/json"})
-        method = "POST"
+        #method = "POST"
     elif len(args) == 1:
         url = args[0]
         data = None
-        method = "GET"
+        #method = "GET"
     data = json.dumps(data) if isinstance(data, dict) else data
     req = urllib2.Request(url, data=data, headers=headers)
     try:
@@ -66,7 +67,7 @@ def is_testnet(inp):
     elif not isinstance(inp, basestring):    # sanity check
         raise TypeError("Input must be str/unicode, not type %s" % str(type(inp)))
 
-    if not inp or (inp.lower() in ("btc", "testnet")): 
+    if inp in (None, "btc", "testnet"): 
         pass
 
     ## ADDRESSES
@@ -82,15 +83,13 @@ def is_testnet(inp):
     ## TXID
     elif re.match('^[0-9a-fA-F]{64}$', inp):
         base_url = "http://api.blockcypher.com/v1/btc/{network}/txs/{txid}?includesHex=false"
-        try:
-            # try testnet fetchtx
+        try:         # try testnet fetchtx
             make_request(base_url.format(network="test3", txid=inp.lower()))
             return True
-        except:
-            # try mainnet fetchtx
+        except:      # try mainnet fetchtx
             make_request(base_url.format(network="main", txid=inp.lower()))
             return False
-        sys.stderr.write("TxID %s has no match for testnet or mainnet (Bad TxID)")
+        #sys.stderr.write("TxID %s has no match for testnet or mainnet (Bad TxID)")
         return None
     else:
         raise TypeError("{0} is unknown input".format(inp))
@@ -98,11 +97,10 @@ def is_testnet(inp):
 
 def set_network(*args):
     '''Decides if args for unspent/fetchtx/pushtx are mainnet or testnet'''
-    #if not args and FLAG_TESTNET is not None:
-    #    return "testnet" if FLAG_TESTNET==True else "btc"
     r = []
     for arg in args:
-        if not arg: pass
+        if not arg: 
+            pass
         if isinstance(arg, basestring):
             r.append(is_testnet(arg))
         elif isinstance(arg, (list, tuple)):
@@ -141,12 +139,15 @@ def be_unspent(*args, **kwargs):
     try: addrs, network = parse_addr_args(*args)
     except: network = "btc", args[:-1]
     u = []
+    baseurl = "https://{network}blockexplorer.com/api/addr/{address}/utxo?noCache=1"
     for a in addrs:
         try:
-            data = make_request('%s/addr/%s/utxo?noCache=1' % ((BET_URL if network == "testnet" else BE_URL), a))
-        except Exception as e:
-            if str(e) == 'No free outputs to spend': continue
-            else: raise Exception(e)
+            data = make_request(baseurl.format(network=("testnet." if network=="testnet" else ""), address=a))
+        except Exception as e: 
+            if str(e) == 'No free outputs to spend':     # TODO: fix bloxkexplorer exception
+                continue
+            else: 
+                raise Exception(e)
         try:
             jsonobj = json.loads(data)
             for o in jsonobj:
@@ -216,32 +217,33 @@ def blockr_unspent(*args):
     return o
 
 
-def biteasy_unspent(*args):
-    addrs, network = parse_addr_args(*args)
-    base_url = "https://api.biteasy.com/%s/v1/"
-    url = base_url % ('testnet' if network == 'testnet' else base_url % "blockchain")
-    offset, txs = 0, []
-    for addr in addrs:
-        # TODO: fix multi address search
-        while True:
-            data = make_request("%s/addresses/%s/unspent-outputs?per_page=20" % (url, addr))
-            try:
-                jsondata = json.loads(data.decode('utf-8'))
-            except:
-                raise Exception("Could not decode JSON data")
-            txs.extend(jsondata['data']['outputs'])
-            if jsondata['data']['pagination']['next_page'] is False:
-                break
-            offset += 20 # jsondata['data']['pagination']["per_page"]
-            sys.stderr.write("Fetching more transactions... " + str(offset) + '\n')
-        o = []
-        for utxo in txs:
-            assert utxo['to_address'] == addr and utxo['is_spent'] == 0, "Wrong address or UTXO is spent"
-            o.append({
-                "output": "%s:%d" % (utxo['transaction_hash'], utxo['transaction_index']),
-                "value": utxo['value']
-            })
-        return o
+#def biteasy_unspent(*args):
+#    addrs, network = parse_addr_args(*args)
+#    base_url = "https://api.biteasy.com/{network}/v1/addresses/{addr}/unspent-outputs?per_page=20"
+#    offset, txs = 0, []
+#    for addr in addrs:
+#        url = base_url.format(network=('testnet' if network=='testnet' else 'blockchain'), addr=addr)
+#        # TODO: fix multi address search
+#        while True:
+#            data = make_request(url)
+#            try:
+#                jsondata = json.loads(data.decode('utf-8'))
+#            except:
+#                raise Exception("Could not decode JSON data")
+#            txs.extend(jsondata['data']['outputs'])
+#            if jsondata['data']['pagination']['next_page'] is False:
+#                break
+#            offset += 20 # jsondata['data']['pagination']["per_page"]
+#            sys.stderr.write("Fetching more transactions... " + str(offset) + '\n')
+#        o = []
+#        for utxo in txs:
+#            assert utxo['to_address'] == addr and utxo['is_spent'] == 0, "Wrong address or UTXO is spent"
+#            o.append({
+#                "output": "%s:%d" % (utxo['transaction_hash'], utxo['transaction_index']),
+#                "value": utxo['value']
+#            })
+#        return o
+
 
 def blockcypher_unspent(*args):
     addrs, network = parse_addr_args(*args)
@@ -250,10 +252,15 @@ def blockcypher_unspent(*args):
         addr_args=(";".join(list(addrs) if isinstance(addrs, tuple) else addrs))
     )
     jdata = json.loads(make_request(url))
-    u = []
-    for tx in ([jdata] if not isinstance(jdata, list) else jdata).get('txrefs'):
-        u.append({"output": "%s:%d" % (tx.get('tx_hash'), tx.get('tx_output_n')),
-                  "value": tx.get('value')})
+    u, txs = [], []
+    for addrobj in ([jdata] if not isinstance(jdata, list) else jdata):
+        if not addrobj.get("txrefs", None):
+            return None
+        else:
+            txs.extend(addrobj.get("txrefs"))
+        for tx in txs:
+            u.append({"output": "%s:%d" % (tx.get('tx_hash'), tx.get('tx_output_n')),
+                      "value": tx.get('value')})
     return u
     
 
@@ -261,15 +268,13 @@ unspent_getters = {
     'bci': bci_unspent,
     'blockr': blockr_unspent,
     'be': be_unspent,
-    'biteasy': biteasy_unspent,
     'blockcypher': blockcypher_unspent,
 }
 
 
 def unspent(*args, **kwargs):
     """unspent(addr, "btc", source="blockr")"""
-    svc = kwargs.get('source', '')
-    f = unspent_getters.get(svc, be_unspent)
+    f = unspent_getters.get(kwargs.get('source', ''), blockcypher_unspent)
     return f(*args)
 
 
@@ -867,7 +872,7 @@ def get_decoded_tx(rawtx, network=None):
     return jdata
 
 
-# fromAddr, "toAddr:12345", changeAddress
+# fromAddr, toAddr, 12345, changeAddress
 def get_tx_composite(inputs, outputs, output_value, change_address=None, network=None):
     """use blockcypher API to composite a Tx"""
     inputs = [inputs] if not isinstance(inputs, list) else inputs
@@ -892,7 +897,8 @@ def get_tx_composite(inputs, outputs, output_value, change_address=None, network
     hash, txh = jdata.get("tosign")[0], jdata.get("tosign_tx")[0]
     assert bin_dbl_sha256(txh.decode('hex')).encode('hex') == hash, "checksum mismatch %s" % hash
     return txh.encode("utf-8")
-        
+
+blockcypher_mktx = get_tx_composite
 
 def get_chart(*args):
     """Defaults to SmartBit API, choose from:"""
