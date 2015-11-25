@@ -10,7 +10,7 @@ def send(frm, to, value, fee=10000, **kwargs):
     return sendmultitx(frm, to + ":" + str(value), fee, **kwargs)
 
 
-# Takes privkey, "address1:value1,address2:value2" (satoshis), fee (satoshis)
+# Takes privkey, "address1:value1, address2:value2" (satoshis), fee (satoshis)
 def sendmultitx(frm, *args, **kwargs):   # def sendmultitx(frm, tovalues, fee=10000, **kwargs)
     tv, fee = args[:-1], int(args[-1])
     outs = []
@@ -29,6 +29,7 @@ def sendmultitx(frm, *args, **kwargs):   # def sendmultitx(frm, tovalues, fee=10
 
 # Takes address, address, value (satoshis), fee(satoshis)
 def preparetx(frm, to, value, fee=10000, **kwargs):
+    """Composite from fromAddr, toAddr, value & fee"""
     tovalues = to + ":" + str(value)
     return preparemultitx(frm, tovalues, fee, **kwargs)
 
@@ -126,3 +127,35 @@ def merkle_prove(txhash):
     hashes = get_txs_in_block(blocknum)
     i = hashes.index(txhash)
     return mk_merkle_proof(header, hashes, i)
+
+
+def tx_size(txobj, unit="bytes"):
+    """Get Tx size in bytes"""
+    if isinstance(txobj, dict):
+        return tx_size(serialize(txobj))
+    assert unit in ("bytes", "kilobytes")
+    if unit=='bytes':
+        return len(txobj)
+    elif unit=='kilobytes':
+        return len(txobj) / 1024.0
+
+def realtime_tx_fee(txobj, priority='medium'):
+    """Get realtime Tx Fee (in Satoshis) for txobj"""
+    assert priority in ('low', 'medium', 'high')
+    if isinstance(txobj, dict):
+        return realtime_tx_fee(serialize(txobj), priority)
+    tx_size_kbytes = tx_size(txobj, unit='kilobytes')
+    tx_fee_api = get_fee_estimate(priority)
+    return int(tx_size_kbytes * tx_fee_api)
+
+
+def estimate_tx_size(*args):
+    """Estimate Tx size in bytes"""
+    if not isinstance(txobj, dict):
+        txobj = deserialize(txobj)
+    ins   = txobj.get('ins',  [])
+    outs  = txobj.get('outs', [])
+    nins  = len(ins)  if 'ins' else 1
+    nouts = len(outs) if 'outs' else 1
+    return (nouts * 148) + (34 * nins) + 10
+    
