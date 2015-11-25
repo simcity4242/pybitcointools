@@ -6,8 +6,13 @@ import hashlib
 import struct
 
 
-is_python2 = (str == bytes) or sys.version_info.major == 2
+is_python2 = str == bytes #or sys.version_info.major == 2
 is_ios = "Pythonista" in os.environ.get("XPC_SERVICE_NAME", "")		# for Pythonista iOS
+
+RE_HEX_CHARS = HEX_CHARS_RE = re.compile('^[0-9a-fA-F]*$')        
+RE_IS_TXID = re.compile('^[0-9a-fA-F]{64}$')
+RE_IS_BASE58 = RE_BASE58_CHARS = re.compile('^[0-9a-km-zA-HJ-NP-Z]$')
+
 
 # PYTHON 2 FUNCTIONS
 if is_python2:
@@ -31,6 +36,46 @@ if is_python2:
     }
 
     ### Hex to bin converter and vice versa for objects
+    
+    def is_txid(txid):
+        RE_IS_TXID = re.compile('^[0-9a-fA-F]{64}$')
+        assert isinstance(txid, string_or_bytes_types)
+        if len(txid) == 64:
+            return bool(re.match(RE_IS_TXID, txid))
+        elif len(txid) == 32:
+            try:
+                binascii.hexlify(txid)
+                return True
+            except:
+                return False
+    
+    def is_hex(s):
+        return bool(re.match(HEX_CHARS_RE, s))
+    
+    def is_txhex(txhex):
+        if not isinstance(txhex, basestring):
+            return False
+        elif not re.match('^[0-9a-fA-F]*$', txhex):
+            return binascii.unhexlify(is_txhex(binascii.hexlify(txhex)))
+        txhex = st(txhex)
+        return txhex.startswith('01000000')
+
+
+    def is_txobj(txobj):
+        if not isinstance(txobj, dict):
+            return False
+        elif isinstance(txobj, list) and len(txobj) == 1:
+            return is_txobj(txobj[0]) if isinstance(txobj[0], dict) else False
+        return set(['locktime', 'version']).issubset(set(txobj.keys()))
+
+    def is_tx(txobj):
+        if isinstance(txobj, dict):
+            return is_txobj(txobj)
+        elif isinstance(txobj, string_types):
+            return is_txhex(txobj)
+        else:
+            return False
+
 
     def json_is_base(obj, base):
         if not is_python2 and isinstance(obj, bytes):
@@ -117,6 +162,7 @@ if is_python2:
         else:
             raise TypeError("Not bytes or a dict of bytes")
 
+
     def safe_unhexlify(s):
         if isinstance(s, string_or_bytes_types):
             return binascii.unhexlify(s)
@@ -124,6 +170,9 @@ if is_python2:
             return json_unhexlify(s)
         else:
             raise TypeError("Not bytes or a dict of bytes")
+
+    safe_from_hex = unhexlify = safe_unhexlify
+    hexlify = safe_hexlify
 
     def from_int_repr_to_bytes(a):
         return str(a)
@@ -303,7 +352,7 @@ elif sys.version_info.major == 3:
             leadingzbytes += 1
         return '1' * leadingzbytes + changebase(inp_fmtd+checksum, 256, 58)
 
-    def hexify(b):
+    def safe_hexlify(b):
         if isinstance(b, string_or_bytes_types):
             return st(binascii.hexlify(b))
         elif isinstance(b, dict):
@@ -311,9 +360,9 @@ elif sys.version_info.major == 3:
         elif isinstance(b, int_types) or (b is None):
             return b
         elif isinstance(b, list):
-            return [hexify(x) for x in b]
+            return [hexlify(x) for x in b]
 
-    def unhexify(s):
+    def safe_unhexlify(s):
         if isinstance(s, string_or_bytes_types):
             return binascii.unhexlify(s)
         elif isinstance(s, dict):
@@ -321,11 +370,11 @@ elif sys.version_info.major == 3:
         elif isinstance(s, int_types) or (s is None):
             return s
         elif isinstance(s, list):
-            return [unhexify(x) for x in s]
+            return [unhexlify(x) for x in s]
 
 
-    safe_unhexlify = unhex_it = unhexify
-    safe_hexlify   = hex_it   = hexify
+    safe_from_hex = unhexlify = safe_unhexlify
+    hexlify = safe_hexlify
 
     def from_int_repr_to_bytes(a):
         return by(str(a))
