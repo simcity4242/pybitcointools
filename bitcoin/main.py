@@ -9,6 +9,17 @@ import random
 import hmac
 from bitcoin.ripemd import *
 
+if "ripemd160" not in hashlib.algorithms:
+    try:
+        setattr(hashlib, 'ripemd160', RIPEMD160)
+    except:
+        try:
+            import ripemd
+            setattr(hashlib, 'ripemd160', ripemd.RIPEMD160)
+        except ImportError:
+            pass
+
+
 is_python2 = str == bytes
 
 
@@ -175,8 +186,10 @@ def encode_pubkey(pub, formt):
     """Takes """
     if not isinstance(pub, (tuple, list)):
         pub = decode_pubkey(pub)
-    if formt == 'decimal': return pub
-    elif formt == 'bin': return b'\x04' + encode(pub[0], 256, 32) + encode(pub[1], 256, 32)
+    if formt == 'decimal': 
+        return pub
+    elif formt == 'bin': 
+        return b'\x04' + encode(pub[0], 256, 32) + encode(pub[1], 256, 32)
     elif formt == 'bin_compressed': 
         return from_int_to_byte(2+(pub[1] % 2)) + encode(pub[0], 256, 32)
     elif formt == 'hex': return '04' + encode(pub[0], 16, 64) + encode(pub[1], 16, 64)
@@ -189,9 +202,12 @@ def encode_pubkey(pub, formt):
 
 def decode_pubkey(pub, formt=None):
     """takes pubkey, detects type, returns tuple of (x, y)"""
-    if not formt: formt = get_pubkey_format(pub)
-    if formt == 'decimal': return pub
-    elif formt == 'bin': return (decode(pub[1:33], 256), decode(pub[33:65], 256))
+    if not formt: 
+        formt = get_pubkey_format(pub)
+    if formt == 'decimal': 
+        return pub
+    elif formt == 'bin': 
+        return decode(pub[1:33], 256), decode(pub[33:65], 256)
     elif formt == 'bin_compressed':
         x = decode(pub[1:33], 256)
         beta = pow(int(x*x*x+A*x+B), int((P+1)//4), int(P))
@@ -201,9 +217,9 @@ def decode_pubkey(pub, formt=None):
     elif formt == 'hex_compressed':
         return decode_pubkey(safe_unhexlify(pub), 'bin_compressed')
     elif formt == 'bin_electrum':
-        return (decode(pub[:32], 256), decode(pub[32:64], 256))
+        return decode(pub[:32], 256), decode(pub[32:64], 256)
     elif formt == 'hex_electrum':
-        return (decode(pub[:64], 16), decode(pub[64:128], 16))
+        return decode(pub[:64], 16), decode(pub[64:128], 16)
     else: raise Exception("Invalid format!")
 
 def get_privkey_format(priv):
@@ -273,7 +289,6 @@ def multiply(pubkey, privkey):
 
 
 def divide(pubkey, privkey):
-    sys.setrecursionlimit(1000)
     factor = inv(decode_privkey(privkey), N)
     return multiply(pubkey, factor)
 
@@ -347,9 +362,10 @@ def wif_to_sec(wif):
     return encode_privkey(decode_privkey(wif), sec_formt)
 
 
+# NOTE: this will return True for any int
 def is_privkey(priv):
     try:
-        get_privkey_format(str(priv))
+        get_privkey_format(priv)
         return True
     except:
         return False
@@ -362,7 +378,8 @@ def is_pubkey(pubkey):
         return False
 
 def is_address(addr):
-    return re.match("^[123mn][a-km-zA-HJ-NP-Z0-9]{26,33}$", addr)
+    ADDR_RE = re.compile("^[123mn][a-km-zA-HJ-NP-Z0-9]{26,33}$")
+    return bool(ADDR_RE.match(addr))
 
 
 # Hashes
@@ -371,7 +388,7 @@ def is_address(addr):
 def bin_hash160(string):
     intermed = hashlib.sha256(string).digest()
     digest = ''
-    if not hasattr(hashlib, 'ripemd160'):
+    if not hasattr(hashlib, 'ripemd160') or "ripemd160" not in hashlib.algorithms:
         hashlib.ripemd160 = RIPEMD160
     digest = hashlib.ripemd160(intermed).digest()
     return digest
@@ -391,7 +408,7 @@ def sha256(string):
 
 
 def bin_ripemd160(string):
-    if not hasattr(hashlib, 'ripemd160'):
+    if not hasattr(hashlib, 'ripemd160') or "ripemd160" not in hashlib.algorithms:
         hashlib.ripemd160 = RIPEMD160
     digest = hashlib.ripemd160(string).digest()
     return digest
@@ -530,6 +547,7 @@ def decode_sig(sig):
     bytez = base64.b64decode(sig)
     return from_byte_to_int(bytez[0]), decode(bytez[1:33], 256), decode(bytez[33:], 256)
 
+
 # https://tools.ietf.org/html/rfc6979#section-3.2
 def deterministic_generate_k(msghash, priv):
     hmac_sha256 = lambda k, s: hmac.new(k, s, hashlib.sha256)
@@ -547,36 +565,41 @@ def deterministic_generate_k(msghash, priv):
 
 # MSG SIGNING
 
-def ecdsa_raw_sign(msghash, priv, low_s=False):
+def ecdsa_raw_sign(msghash, priv):
     """sign msg hash (z) with privkey & RFC6979 (k);
     returns signature (v,r,s) with low s (BIP66) by default"""
     z = hash_to_int(msghash)
     k = deterministic_generate_k(msghash, priv)
-
-    is_compressed = 'compressed' in get_privkey_format(priv)
-    priv = decode_privkey(priv)
-
+    #is_compressed = 'compressed' in get_privkey_format(priv)
     r, y = fast_multiply(G, k)
-    s = inv(k, N) * (z + r*priv) % N
+    s = inv(k, N) * (z + r * decode_privkey(priv)) % N
     
-    is_low_s = s * 2 < N
+    #is_high_s = s*2  N
+    #v = (31 if is_compressed else 27) + ((y % 2) ^ is_high_s)
+    v, r, s = 27+((y % 2) ^ (0 if s * 2 < N else 1)), r, s if s * 2 < N else N - s
+    if 'compressed' in get_privkey_format(priv):
+        v += 4
+    return v, r, s
 
-    v = (31 if is_compressed else 27) + ((y % 2) ^ is_low_s)
-    s = s if is_low_s else N-s
-    return v,r,s
-    #return 27+((y % 2) ^ (0 if s * 2 < N else 1)), r, s if s * 2 < N else N - s
+
+
 
 def ecdsa_sign(msg, priv):
     """Sign a msg with privkey, returning base64 signature"""
     sighash = electrum_sig_hash(msg)
     v, r, s = ecdsa_raw_sign(sighash, priv)
-    #return encode_sig(*ecdsa_raw_sign(electrum_sig_hash(msg), priv))
-    return encode_sig(v, r, s)
+    sig = encode_sig(v, r, s)
+    assert ecdsa_verify(msg, sig, privtopub(priv)), \
+         "Bad Sig!\t %s\nv,r,s = %d,\n%d\n%d" % (sig, v,r,s)
+    return sig
+    
 
 
 def ecdsa_raw_verify(msghash, vrs, pub):
     """Verifies signature against pubkey for digest hash (msghash)"""
     v, r, s = vrs
+    if not (27 <= v <= 34):
+        return False
 
     w = inv(s, N)
     z = hash_to_int(msghash)
@@ -584,54 +607,53 @@ def ecdsa_raw_verify(msghash, vrs, pub):
     u1, u2 = z*w % N, r*w % N
     pub = decode_pubkey(pub)
     x, y = fast_add(fast_multiply(G, u1), fast_multiply(pub, u2))
+    return bool(r == x and (r % N) and (s % N))
 
-    return r == x and r % N != 0 and s % N != 0
+# For BitcoinCore
+def ecdsa_verify_addr(msg, sig, addr):
+    assert is_address(addr)
+    Q = ecdsa_recover(msg, sig)
+    magic = get_version_byte(addr)
+    return (addr == pubtoaddr(Q, int(magic))) or (addr == pubtoaddr(compress(Q), int(magic)))
 
-# FIXME:
-# def ecdsa_addr_verify(addr, b64sig, msg=''):
-#     msghash = electrum_sig_hash(msg)
-#     pubkey_recovered = ecdsa_recover(msghash, b64sig)
-#     magic = get_version_byte(addr)
-#     return addr == pubtoaddr(pubkey_recovered, magicbyte=magic)
 
 def ecdsa_verify(msg, sig, pub):
     """Verify (base64) signature of a message using pubkey"""
+    if is_address(pub):
+        return ecdsa_verify_addr(msg, sig, pub)
     sighash = electrum_sig_hash(msg)
     vrs = decode_sig(sig)
-    #return ecdsa_raw_verify(electrum_sig_hash(msg), decode_sig(sig), pub)
     return ecdsa_raw_verify(sighash, vrs, pub)
 
 
 def ecdsa_raw_recover(msghash, vrs):
     """Recovers (x,y) point from msghash and sig values (v,r,s)"""
     v, r, s = vrs
+    if not (27 <= v <= 34):
+        raise ValueError("%d must in range 27-31" % v)
+
     x = r
-    xcubedaxb = (x*x*x+A*x+B) % P
-    beta = pow(xcubedaxb, (P+1)//4, P)                  # determine which
-    y = beta if ((v % 2) ^ (beta % 2)) else (P - beta)  # y val from parity and v
-    # If xcubedaxb isn't a quadratic residue, the sig is invalid
+    alpha = (x*x*x+A*x+B) % P
+    beta = pow(alpha, (P+1)//4, P)                            # determine which
+    y = beta if ((v % 2) ^ (beta % 2)) else (P - beta)        # y val from parity and v
+    # If alpha isn't a quadratic residue, the sig is invalid
     # => r cannot be the x coord for a point on the curve
-    if (xcubedaxb - y*y) % P != 0 or (r % N != 0) or (s % N != 0):
-        return False
+    if (alpha - y*y) % P != 0 or not (r % N) or not (s % N):
+        raise Exception("Invalid signature!")
     z = hash_to_int(msghash)
     Gz = jacobian_multiply((Gx, Gy, 1), (N - z) % N)
     XY = jacobian_multiply((x, y, 1), s)
     Qr = jacobian_add(Gz, XY)
     Q = jacobian_multiply(Qr, inv(r, N))
     Q = from_jacobian(Q)
-
-    if not ecdsa_raw_verify(msghash, vrs, Q):
-        return False
     return Q
 
 
 def ecdsa_recover(msg, sig):
-    """Recover pubkey from message and base64 signature"""
-    sighash = electrum_sig_hash(msg)
-    vrs = decode_sig(sig)
-    Q = ecdsa_raw_recover(sighash, vrs)
-    # return encode_pubkey(ecdsa_raw_recover(electrum_sig_hash(msg), decode_sig(sig)), 'hex')
-    return encode_pubkey(Q, 'hex')
+    """Recover pubkey from message and base64 signature. For BTCCore msg=addr"""
+    v,r,s = decode_sig(sig)
+    Q = ecdsa_raw_recover(electrum_sig_hash(msg), (v,r,s))
+    return encode_pubkey(Q, 'hex_compressed') if v >= 30 else encode_pubkey(Q, 'hex')
 
 
 # Modifications based on https://matt.ucc.asn.au/src/pbkdf2.py
