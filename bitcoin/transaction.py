@@ -4,11 +4,11 @@ from bitcoin.main import *
 from _functools import reduce
 from bitcoin.pyspecials import *
 from bitcoin.bci import fetchtx
-import pdb
+#import pdb
 
 # Transaction serialization and deserialization
 
-def deserialize(tx):
+def deserialize(tx, script_unpack=False):
     if isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx):
         return json_hexlify(deserialize(binascii.unhexlify(tx)))
     # http://stackoverflow.com/questions/4851463/python-closure-write-to-variable-in-parent-scope
@@ -40,7 +40,8 @@ def deserialize(tx):
     obj["version"] = read_as_int(4)
     ins = read_var_int()
     for i in range(ins):
-        obj["ins"].append({
+        obj["ins"].append(
+        {
             "outpoint": {
                 "hash": read_bytes(32)[::-1],
                 "index": read_as_int(4)
@@ -48,6 +49,8 @@ def deserialize(tx):
             "script": read_var_string(),
             "sequence": read_as_int(4)
         })
+#        if script_unpack:
+#            scriptval = obj["ins"][-1]["script"]
     outs = read_var_int()
     for i in range(outs):
         obj["outs"].append({
@@ -55,7 +58,11 @@ def deserialize(tx):
             "script": read_var_string()
         })
     obj["locktime"] = read_as_int(4)
-    return obj
+    if not script_unpack:
+        return obj
+    else:
+        pass
+        
 
 def serialize(txobj):
     #if isinstance(txobj, bytes):
@@ -185,7 +192,7 @@ def is_bip66(sig):
     if isinstance(sig, string_types) and re.match('^[0-9a-fA-F]*$', sig):
         sig = safe_unhexlify(sig)
     sig = bytearray(sig)
-    if ord(sig[1]) == len(sig)-2: 
+    if sig[1] == len(sig)-2: 
         sig.extend(b"\1")		# add SIGHASH for BIP66 check
     
     if len(sig) < 9 or len(sig) > 73: return False
@@ -524,8 +531,7 @@ def mksend(*args, **kwargs):
     for o in outs:
         if isinstance(o, string_types):
             o2 = {
-                "address": o[:o.find(':')],
-                "value": int(o[o.find(':')+1:])
+                "address": o[:o.find(':')], "value": int(o[o.find(':')+1:])
             }
         else:
             o2 = o
@@ -540,31 +546,40 @@ def mksend(*args, **kwargs):
     return mktx(ins, outputs2, **kwargs)
 
 	
-# takes "txid:0"
+# takes "txid:0"     or     txhex, index
 def get_script(*args, **kwargs):
     # last param can be 'ins', 'outs'
     if args[-1] in ("ins", "outs"):
         source = str(args[-1])
         args = args[:-1]
-    else: source = None
-    if isinstance(args[0], str) and ':' in args[0]:
+    else: 
+        source = None
+    if is_inp(args[0]):
         txid, vout = args[0].split(':')
-    elif (len(args) == 2 and not source) or len(args) == 3:
+    elif (len(args) == 2 and not source) or (len(args) == 3 and source):
         txh, vout = str(args[0]), int(args[1])
-    network = kwargs.get('network', 'btc')
-    try:    txo = deserialize(fetchtx(txid, network))
-    except: txo = deserialize(txh)
-    if source is None:
+    network = set_network(txid) if not kwargs.get('network', None) else kwargs.get('network')
+    try:    
+            txo = deserialize(fetchtx(txid, network))    # try fetching txid
+    except: 
+            txo = deserialize(txh)                       # else, deserialize txhex
+
+    if source == 'ins':
+        return access(txo, "ins")[vout]['script']
+    elif source == 'outs':
+        return access(txo, "outs")[vout]['script']
+    elif source is None:                    # no source means return BOTH ins & outs
         scriptsig, script_pk = [], []
         for inp in txo['ins']:
             scriptsig.append(inp['script'])
         for outp in txo['outs']:
             script_pk.append(inp['script'])
         return {'ins': scriptsig, 'outs': script_pk}
-    return access(txo, "ins")[vout]['script'] if source == 'ins' else access(txo, "outs")[vout]['script']
+    else:
+        raise Exception
 
 
-# takes "txid:vout"
+# takes "txid:vout" or txhex, index
 def get_scriptsig(*args, **kwargs):
     """Return scriptSig for 'txid:index'"""
     if len(args) == 1 and ':' in args[0]:
@@ -592,6 +607,9 @@ def get_scriptpubkey(*args, **kwargs):
     script_pubkey = reduce(access, ["outs", vout, "script"], txo)
     return script_pubkey
 
+extract_scripts_in = get_scriptsig
+extract_scripts_out = get_scriptpubkey
+extract_scripts = get_script
 
 # get "TXID:vout" from raw Tx
 def get_outpoints(rawtx, i=None):
@@ -609,6 +627,7 @@ def get_outpoints(rawtx, i=None):
     assert all([x[64] == ':' for x in outpoints])
     return outpoints if i is None else outpoints[i]
 
+extract_tx_outpoints = get_outpoints
 
 # https://github.com/richardkiss/pycoin/blob/master/tests/bc_transaction_test.py#L177-L210
 def check_transaction(tx):
