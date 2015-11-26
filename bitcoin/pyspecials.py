@@ -14,7 +14,6 @@ RE_IS_TXID = re.compile('^[0-9a-fA-F]{64}$')
 RE_IS_BASE58 = RE_BASE58_CHARS = re.compile('^[0-9a-km-zA-HJ-NP-Z]$')
 RE_IS_BLOCK = re.compile('^[0]{5,}[0-9a-fA-F]{59,}$')
 
-
 # PYTHON 2 FUNCTIONS
 if is_python2:
     
@@ -76,6 +75,11 @@ if is_python2:
             return is_txhex(txobj)
         else:
             return False
+            
+    def is_blockhash(hash):
+        if isinstance(hash, (list,tuple)):
+            return all([is_blockhash(x) for x in hash])
+        return bool(re.match(RE_IS_BLOCK, hash))
 
 
     def json_is_base(obj, base):
