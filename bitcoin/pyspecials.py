@@ -12,6 +12,7 @@ is_ios = "Pythonista" in os.environ.get("XPC_SERVICE_NAME", "")		# for Pythonist
 RE_HEX_CHARS = HEX_CHARS_RE = re.compile('^[0-9a-fA-F]*$')        
 RE_IS_TXID = re.compile('^[0-9a-fA-F]{64}$')
 RE_IS_BASE58 = RE_BASE58_CHARS = re.compile('^[0-9a-km-zA-HJ-NP-Z]$')
+RE_IS_BLOCK = re.compile('^[0]{5,}[0-9a-fA-F]{59,}$')
 
 
 # PYTHON 2 FUNCTIONS
