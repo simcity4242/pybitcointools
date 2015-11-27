@@ -414,6 +414,10 @@ def is_outp(arg):
         return ':' in arg and is_address(arg.split(":")[0])
 
 
+def is_txhex(txo):
+    return str(txo).startswith("01000000")
+
+
 def mktx(*args, **kwargs):
     # [in0, in1...],[out0, out1...] or in0, in1 ... out0 out1 ...
     ins, outs = [], []
@@ -518,24 +522,29 @@ def get_script(*args, **kwargs):
     else:
         source = "both" 
     
+    
     if is_inp(args[0]):
         txid, vout = args[0].split(':')
         network = set_network(txid) if not kwargs.get('network', None) else kwargs.get('network')
         txo = deserialize(fetchtx(txid, network))    # try fetching txid
     elif (len(args) == 2 and source == 'both') or (len(args) == 3 and source != 'both'):
         txhex, vout = str(args[0]), int(args[1])
-        txo = deserialize(txhex)                       # else, deserialize txhex
-
-    if source == 'ins':        # return scriptsig
-        return txo["ins"][int(vout)]['script']
-    elif source == 'outs':     # return scriptpubkey
-        return txo["outs"][int(vout)]['script']
-    elif source == 'both':     # no source means return BOTH ins & outs
-        scriptsig, script_pk = [], []
-        for inp in txo['ins']:
-            scriptsig.append(inp['script'])
-        for outp in txo['outs']:
-            script_pk.append(outp['script'])
+        txo = deserialize(txhex)                       
+    elif (1<= len(args) <= 2) and is_txhex(args[0]):    # for no vout
+        txo = deserialize(args[0])  
+        vout = None
+        
+    scriptsig, script_pk = [], []
+    for inp in txo['ins']:
+        scriptsig.append(inp['script'])
+    for outp in txo['outs']:
+        script_pk.append(outp['script'])
+        
+    if source == 'ins':                        # return scriptsig
+        return script_pk if not vout else script_pk[int(vout)]
+    elif source == 'outs':                     # return scriptpubkey
+        return scriptsig if not vout else scriptsig[int(vout)]
+    elif source == 'both':                     # return BOTH ins & outs
         return {'ins': scriptsig, 'outs': script_pk}
     else:
         raise Exception("Bad source {0} type: choose 'ins', 'outs' or 'both'".format(source))
