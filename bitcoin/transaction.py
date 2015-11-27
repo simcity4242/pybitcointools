@@ -8,7 +8,7 @@ from bitcoin.bci import fetchtx
 
 # Transaction serialization and deserialization
 
-def deserialize(tx, script_unpack=False):
+def deserialize(tx):
     if isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx):
         return json_hexlify(deserialize(binascii.unhexlify(tx)))
     # http://stackoverflow.com/questions/4851463/python-closure-write-to-variable-in-parent-scope
@@ -58,10 +58,7 @@ def deserialize(tx, script_unpack=False):
             "script": read_var_string()
         })
     obj["locktime"] = read_as_int(4)
-    if not script_unpack:
-        return obj
-    else:
-        pass
+    return obj
         
 
 def serialize(txobj):
@@ -124,8 +121,12 @@ def signature_form(tx, i, script, hashcode=SIGHASH_ALL):
 
 # Making the actual signatures
 
-def der_encode_sig(v, r, s):
-    """Takes (vbyte, r, s) as ints and returns hex der encode sig"""
+def der_encode_sig(*args):
+    """Takes ([vbyte], r, s) as ints and returns hex der encode sig"""
+    if len(args) == 3:
+        v,r,s = args
+    elif len(args) == 2:
+        r,s = args
     b1, b2 = encode(r, 256), encode(s, 256)
     if len(b1) and changebase(b1[0], 256, 16, 1) in "89abcdef":		# add null bytes if interpreted as negative number
         b1 = b'\x00' + b1
@@ -146,55 +147,14 @@ def der_decode_sig(sig):
     right = sig[12+leftlen:12+leftlen+rightlen]
     #assert 3*2 + leftlen + 3*2 + rightlen + 1*2 == len(sig) 	
     return (None, decode(left, 16), decode(right, 16))
-
-
-def deserialize_der(sig):
-    sig = bytes(bytearray.fromhex(sig)) if re.match('^[0-9a-fA-F]*$', sig) else bytes(bytearray(sig))
-    totallen = decode(sig[1], 256) + 2
-    rlen = decode(sig[3], 256)
-    slen = decode(sig[5+rlen], 256)
-    sighashlen = len(sig) - totallen
-    r = decode(sig[4:4+rlen], 256)
-    s = decode(sig[6+rlen:6+slen+rlen], 256)
-    sighash = decode(sig[6+rlen+slen:], 256)
-    return r, s, sighash
-
-
-def der_extract_rs(sig):
-    res = deserialize_der(sig)
-    return res[:-2]
-
-
-def is_der(signature):
-    if not isinstance(signature, basestring):
-        return False
-    return signature.startswith("30") and len(signature)//2-3 == decode(signature[2:4], 16)
-
-def der_extract(tx):
-    if not isinstance(tx, dict):
-        return serialize(der_extract(deserialize(tx)))
-    nin = len(tx.get("ins"))
-    ins = tx.get("ins")
-    scripts, ders = [], []
-    for inp in ins:
-        scripts.append(inp.get("script"))
-    for scr in scripts:
-        descr = deserialize_script(scr)
-        der = filter(lambda s: is_der(s), descr)
-        ders.extend(der)
-    return ders
-        
-def mutate_tx(txh, i):
-    from bitcoin.main import neg_privkey
+    
 
 def is_bip66(sig):
-    """Checks hex DER sig for BIP66 consistency"""
-    if isinstance(sig, string_types) and re.match('^[0-9a-fA-F]*$', sig):
-        sig = safe_unhexlify(sig)
-    sig = bytearray(sig)
+    """Checks hex DER sig for BIP66 compliance"""
+    sig = bytearray.fromhex(sig) if (isinstance(sig, string_types) and re.match('^[0-9a-fA-F]*$', sig)) else bytearray(sig)
     if sig[1] == len(sig)-2: 
         sig.extend(b"\1")		# add SIGHASH for BIP66 check
-    
+
     if len(sig) < 9 or len(sig) > 73: return False
     if (sig[0] != 0x30): return False
     if (sig[1] != len(sig)-3): return False
@@ -445,7 +405,7 @@ def apply_multisignatures(*args):
 
 
 def is_inp(arg):
-    return len(arg) > 64 or "output" in arg or "outpoint" in arg
+    return (len(arg) > 64 and ':' in arg) or "output" in arg or "outpoint" in arg
 
 def is_outp(arg):
     if isinstance(arg, dict):
@@ -545,87 +505,88 @@ def mksend(*args, **kwargs):
 
     return mktx(ins, outputs2, **kwargs)
 
-	
-# takes "txid:0"     or     txhex, index
+
+# args = "TxID:index"     or     
+# args = txhex, index
+# append 'ins' or 'outs' to args: args = "txid:0", 'ins'
 def get_script(*args, **kwargs):
-    # last param can be 'ins', 'outs'
-    if args[-1] in ("ins", "outs"):
-        source = str(args[-1])
+    """Extract scripts from txhex; specify 'ins' or 'outs', otherwise default is both"""
+    from bitcoin.bci import set_network
+    if len(args) > 1 and args[-1] in ("ins", "outs", "both"):
+        source = args[-1]
         args = args[:-1]
-    else: 
-        source = None
+    else:
+        source = "both" 
+    
     if is_inp(args[0]):
         txid, vout = args[0].split(':')
-    elif (len(args) == 2 and not source) or (len(args) == 3 and source):
-        txh, vout = str(args[0]), int(args[1])
-    network = set_network(txid) if not kwargs.get('network', None) else kwargs.get('network')
-    try:    
-            txo = deserialize(fetchtx(txid, network))    # try fetching txid
-    except: 
-            txo = deserialize(txh)                       # else, deserialize txhex
+        network = set_network(txid) if not kwargs.get('network', None) else kwargs.get('network')
+        txo = deserialize(fetchtx(txid, network))    # try fetching txid
+    elif (len(args) == 2 and source == 'both') or (len(args) == 3 and source != 'both'):
+        txhex, vout = str(args[0]), int(args[1])
+        txo = deserialize(txhex)                       # else, deserialize txhex
 
-    if source == 'ins':
-        return access(txo, "ins")[vout]['script']
-    elif source == 'outs':
-        return access(txo, "outs")[vout]['script']
-    elif source is None:                    # no source means return BOTH ins & outs
+    if source == 'ins':        # return scriptsig
+        return txo["ins"][int(vout)]['script']
+    elif source == 'outs':     # return scriptpubkey
+        return txo["outs"][int(vout)]['script']
+    elif source == 'both':     # no source means return BOTH ins & outs
         scriptsig, script_pk = [], []
         for inp in txo['ins']:
             scriptsig.append(inp['script'])
         for outp in txo['outs']:
-            script_pk.append(inp['script'])
+            script_pk.append(outp['script'])
         return {'ins': scriptsig, 'outs': script_pk}
     else:
-        raise Exception
+        raise Exception("Bad source {0} type: choose 'ins', 'outs' or 'both'".format(source))
 
 
 # takes "txid:vout" or txhex, index
 def get_scriptsig(*args, **kwargs):
     """Return scriptSig for 'txid:index'"""
-    if len(args) == 1 and ':' in args[0]:
-        txid, vout = args[0].split(':')
-    elif len(args) == 2 and args[0][:8] == '01000000' and str(args[1]).isdigit():
-        txh, vout = args[0], int(args[1])
-    network = kwargs.get('network', 'btc')
-    try:    txo = deserialize(fetchtx(txid, network))
-    except: txo = deserialize(txh)
-    scriptsig = reduce(access, ["ins", vout, "script"], txo)
-    return scriptsig
+    argz = args + ('ins',)
+    return get_script(*argz, **kwargs)
+#    if len(args) == 1 and ':' in args[0]:
+#        txid, vout = args[0].split(':')
+#    elif len(args) == 2 and args[0][:8] == '01000000' and str(args[1]).isdigit():
+#        txh, vout = args[0], int(args[1])
+#    network = kwargs.get('network', 'btc')
+#    try:    txo = deserialize(fetchtx(txid, network))
+#    except: txo = deserialize(txh)
+#    scriptsig = reduce(access, ["ins", vout, "script"], txo)
+#    return scriptsig
 
 
 # takes "txid:vout" or hex_tx, index
 def get_scriptpubkey(*args, **kwargs):
     """Return scriptPubKey for 'txid:index'"""
     # TODO: can use biteasy to retrieve a Tx's SPK
-    if len(args) == 1 and ':' in args[0]:
-        txid, vout = args[0].split(':')
-    elif len(args) == 2 and args[0][:8] == '01000000' and str(args[1]).isdigit():
-        txh, vout = args[0], int(args[1])
-    network = kwargs.get('network', 'btc')
-    try:    txo = deserialize(fetchtx(txid, network))
-    except: txo = deserialize(txh)
-    script_pubkey = reduce(access, ["outs", vout, "script"], txo)
-    return script_pubkey
+    argz = args + ('outs',)
+    return get_script(*argz, **kwargs)
+#    if len(args) == 1 and ':' in args[0]:
+#        txid, vout = args[0].split(':')
+#    elif len(args) == 2 and args[0][:8] == '01000000' and str(args[1]).isdigit():
+#        txh, vout = args[0], int(args[1])
+#    network = kwargs.get('network', 'btc')
+#    try:    txo = deserialize(fetchtx(txid, network))
+#    except: txo = deserialize(txh)
+#    script_pubkey = reduce(access, ["outs", vout, "script"], txo)
+#    return script_pubkey
 
-extract_scripts_in = get_scriptsig
-extract_scripts_out = get_scriptpubkey
-extract_scripts = get_script
 
-# get "TXID:vout" from raw Tx
+# return inpoints, "TXID:vout", for raw Tx
 def get_outpoints(rawtx, i=None):
-    """get rawtx spendable inputs as 'txid:0' """
+    """get rawtx's inpoints as 'txid:0' """
     # if isinstance(rawtx, str) and not re.match('^[0-9a-fA-F]*$', rawtx):    # binary
     #     return safe_unhexlify(get_outpoints(rawtx, i))
-    if isinstance(rawtx, dict):
-        rawtxo = rawtx
-    elif isinstance(rawtx, str) and re.match('^[0-9a-fA-F]*$', rawtx):
-        rawtxo = deserialize(rawtx)
-    if i is not None: i = int(i)
+    rawtxo = deserialize(rawtx) if (isinstance(rawtx, str) and re.match('^[0-9a-fA-F]*$', rawtx)) else rawtx 
+    assert isinstance(rawtx, dict)
+    #i = i or int(i)
     outpoints = []
     for tx in multiaccess(rawtxo['ins'], 'outpoint'):
         outpoints.append("%s:%d" % (tx['hash'], tx['index']))
-    assert all([x[64] == ':' for x in outpoints])
-    return outpoints if i is None else outpoints[i]
+    assert all([is_inp(x) for x in outpoints])
+    return outpoints if i is None else outpoints[int(i)]
 
 extract_tx_outpoints = get_outpoints
 
@@ -679,10 +640,51 @@ def check_transaction(tx):
 
     return True
 
-def estimate_size(rawtx):
+def estimate_tx_size(rawtx):
     # Estimate size of Tx in bytes
     if isinstance(rawtx, basestrinrg) and re.match('^[0-9a-fA-F]*$', rawtx):
-        return estimate_size(deserialize(rawtx))
+        return estimate_tx_size(deserialize(rawtx))
     outs = rawtx.get("outs", [])
     ins = rawtx.get("ins", [])
     return len(outs) or 1 * 148 + 34 * len(ins) + 10
+
+
+def deserialize_der(sig):
+    sig = bytes(bytearray.fromhex(sig)) if re.match('^[0-9a-fA-F]*$', sig) else bytes(bytearray(sig))
+    totallen = decode(sig[1], 256) + 2
+    rlen = decode(sig[3], 256)
+    slen = decode(sig[5+rlen], 256)
+    sighashlen = len(sig) - totallen
+    r = decode(sig[4:4+rlen], 256)
+    s = decode(sig[6+rlen:6+slen+rlen], 256)
+    sighash = decode(sig[6+rlen+slen:], 256)
+    return r, s, sighash
+
+
+def der_extract_rs(sig):
+    res = deserialize_der(sig)
+    return res[:-2]
+
+
+def is_der(signature):
+    if not isinstance(signature, basestring):
+        return False
+    return signature.startswith("30") and len(signature)//2-3 == decode(signature[2:4], 16)
+
+def der_extract(tx):
+    if not isinstance(tx, dict):
+        return serialize(der_extract(deserialize(tx)))
+    nin = len(tx.get("ins"))
+    ins = tx.get("ins")
+    scripts, ders = [], []
+    for inp in ins:
+        scripts.append(inp.get("script"))
+    for scr in scripts:
+        descr = deserialize_script(scr)
+        der = filter(lambda s: is_der(s), descr)
+        ders.extend(der)
+    return ders
+
+
+def mutate_tx(txh, i):
+    from bitcoin.main import neg_privkey
