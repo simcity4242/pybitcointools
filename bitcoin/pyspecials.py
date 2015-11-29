@@ -9,10 +9,15 @@ import struct
 is_python2 = str == bytes #or sys.version_info.major == 2
 is_ios = "Pythonista" in os.environ.get("XPC_SERVICE_NAME", "")		# for Pythonista iOS
 
-RE_HEX_CHARS = HEX_CHARS_RE = re.compile('^[0-9a-fA-F]*$')        
-RE_IS_TXID = re.compile('^[0-9a-fA-F]{64}$')
-RE_IS_BASE58 = RE_BASE58_CHARS = re.compile('^[0-9a-km-zA-HJ-NP-Z]$')
-RE_IS_BLOCK = re.compile('^[0]{5,}[0-9a-fA-F]{59,}$')
+RE_HEX_CHARS = re.compile(ur'^[0-9a-f]*$', re.IGNORECASE)        
+RE_TXID = re.compile(ur'^[0-9a-f]{64}$', re.IGNORECASE)
+RE_TXHEX = re.compile(ur'^01000000[0-9a-f]{108,}$', re.IGNORECASE)
+RE_BASE58_CHARS = re.compile('^[0-9a-km-zA-HJ-NP-Z]$')
+RE_BLOCKHASH = re.compile(ur'^(00000)[0-9a-f]{59}$', re.IGNORECASE)
+RE_ADDR = re.compile(ur'^[123mn][a-km-zA-HJ-NP-Z0-9]{25,34}$')
+RE_DER = re.compile(ur'(?:30)(?P<siglen>[0-4][0-9a-f])02(?P<rlen>[0-2][0-9a-f])(?P<r>(?:00)?[a-f0-9]{2,64})02(?P<slen>[0-2][0-9a-f])(?P<s>(?:00)?[a-f0-9]{2,64})(?P<sighash>(0|8)[0-3])?', re.IGNORECASE)
+RE_PUBKEY = re.compile(ur'^((02|03)[0-9a-f]{64})|(04[0-9a-f]{128})$', re.IGNORECASE)
+RE_PRIVKEY = re.compile(ur'^([0-9a-f]{64}(01)?)|([5KL9c][1-9a-km-zA-LMNP-Z]{50,51})|(\d){1,78}$')
 
 # PYTHON 2 FUNCTIONS
 if is_python2:
@@ -56,7 +61,7 @@ if is_python2:
         if not isinstance(txhex, basestring):
             return False
         elif not re.match('^[0-9a-fA-F]*$', txhex):
-            return binascii.unhexlify(is_txhex(binascii.hexlify(txhex)))
+            txhex = binascii.hexlify(txhex)
         txhex = st(txhex)
         return txhex.startswith('01000000')
 
@@ -165,7 +170,7 @@ if is_python2:
         elif isinstance(b, dict):
             return json_hexlify(b)
         else:
-            raise TypeError("Not bytes or a dict of bytes")
+            raise TypeError("%s must be str/bytes or a dict of bytes" % type(b))
 
 
     def safe_unhexlify(s):
