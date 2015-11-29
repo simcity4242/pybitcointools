@@ -63,9 +63,9 @@ def is_testnet(inp):
 
     ## ADDRESSES
     if inp[0] in "123mn":
-        if re.match("^[2mn][a-km-zA-HJ-NP-Z0-9]{26,33}$", inp):
+        if re.match("^[2mn][a-km-zA-HJ-NP-Z0-9]{26,35}$", inp):
             return True
-        elif re.match("^[13][a-km-zA-HJ-NP-Z0-9]{26,33}$", inp):
+        elif re.match("^[13][a-km-zA-HJ-NP-Z0-9]{26,35}$", inp):
             return False
         else:
             #sys.stderr.write("Bad address format %s")
@@ -598,7 +598,7 @@ get_block_by_height = get_block_at_height
 
 def get_block_height(blockhash, network="btc"):
     url = "%s/api/block/%s" % (BET_URL if network=="testnet" else BE_URL, blockhash)
-    jsonobj = json.loads(make_request(url)).decode('utf-8')
+    jsonobj = json.loads(make_request(url))
     return jsonobj.get("height")
 
 
@@ -805,12 +805,11 @@ def get_price(val=100000000, currency="usd", exchange="coinbase"):
     
 
 def get_mempool_txs(tx_count=100, network="btc"):
-    tx_count = 1000 if tx_count > 1000 else tx_count
-    url = "http://api.blockcypher.com/v1/btc/%s/txs?limit=%d" % (("test3" if network== "testnet" else "main"), int(tx_count))
-    #sb_url = "https://api.smartbit.com.au/v1/blockchain/transactions/unconfirmed?limit=%d" % int(tx_count)
-    jdata = json.loads(make_request(url))
+    tx_count = 1000 if tx_count > 1000 else int(tx_count)
+    ##bcurl = "http://api.blockcypher.com/v1/btc/%s/txs?limit=%d" % (("test3" if network== "testnet" else "main"), int(tx_count))    # returns detailed data, list
+    jdata = json.loads(make_request("https://api.smartbit.com.au/v1/blockchain/transactions/unconfirmed?limit=%d" % int(tx_count)))
     txs = []
-    for tx in jdata.get('transactions'):
+    for tx in jdata.get('transactions', jdata):
         txs.append({
                     "first_seen": tx.get('first_seen'), 
                     "size": tx.get('size'), 
@@ -894,3 +893,47 @@ blockcypher_mktx = get_tx_composite
 def get_chart(*args):
     """Defaults to SmartBit API, choose from:"""
     pass
+
+
+def address_to_pubkey(addr):
+    """Converts an address to public key (if available)"""
+    base_url = "https://blockchain.info/q/pubkeyaddr/{addr}"
+    assert not is_testnet(addr)
+    try:
+        jdata = json.loads(make_request(base_url.format(addr=addr)))
+    except:
+        return None
+    return jdata
+
+
+def get_new_privkey():
+    """Uses BCI API to request a new (addr, privkey) pair"""
+    try:
+        data = make_request("https://blockchain.info/q/newkey")
+        return data
+    except Exception as e:
+        raise e
+
+
+def address_first_seen(addr):
+    assert not is_testnet(addr)
+    base_url = "https://blockchain.info/q/addressfirstseen/{addr}"
+    data = make_request(base_url.format(addr=addr))
+    return data if int(data) > 0 else -1
+
+
+def unconfirmed_tx_count():
+    """Query BCI API for number of unconfirmed Txs in the mempool"""
+    data = make_request("https://blockchain.info/q/unconfirmedcount")
+    return int(data) if int(data) > 0 else -1
+    
+
+def get_rejection_info(inp):
+    """Use BCI API to query why the network rejected a blockhash or a TxID"""
+    assert len(inp) == 64 and bool(re.match(RE_HEXCHARS, inp))
+    try:
+        data = make_request("https://blockchain.info/q/rejected/{0}".format(inp))
+        ## TODO: so..... now what? Need a testcase
+    except Exception as e:
+        raise e
+    return data
