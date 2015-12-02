@@ -13,18 +13,19 @@ def send(frm, to, value, fee=10000, **kwargs):
 # Takes privkey, "address1:value1, address2:value2" (satoshis), fee (satoshis)
 def sendmultitx(frm, *args, **kwargs):   # def sendmultitx(frm, tovalues, fee=10000, **kwargs)
     tv, fee = args[:-1], int(args[-1])
+    network = kwargs.get('network', set_network(tv[0].split(':')[0]))
     outs = []
     outvalue = 0
     for a in tv:
         outs.append(a)
         outvalue += int(a.split(":")[1])
-
-    u = unspent(privtoaddr(frm), **kwargs)
+    
+    u = unspent(privtoaddr(frm, (111 if network == 'testnet' else 0)), **kwargs)
     u2 = select(u, int(outvalue)+int(fee))
-    argz = u2 + outs + [privtoaddr(frm), fee]
+    argz = u2 + outs + [privtoaddr(frm, (111 if network == 'testnet' else 0)), fee]
     tx = mksend(*argz)
     tx2 = signall(tx, frm)
-    return pushtx(tx2, **kwargs)
+    return pushtx(tx2, network, **kwargs)
 
 
 # Takes address, address, value (satoshis), fee(satoshis)
@@ -37,6 +38,7 @@ def preparetx(frm, to, value, fee=10000, **kwargs):
 # Takes address, address:value, address:value ... (satoshis), fee(satoshis)
 def preparemultitx(frm, *args, **kwargs):
     tv, fee = args[:-1], int(args[-1])
+    network = kwargs.get('network', set_network(tv[0].split(':')[0]))
     outs = []
     outvalue = 0
     for a in tv:
@@ -149,13 +151,15 @@ def realtime_tx_fee(txobj, priority='medium'):
     return int(tx_size_kbytes * tx_fee_api)
 
 
-def estimate_tx_size(*args):
-    """Estimate Tx size in bytes"""
-    if not isinstance(txobj, dict):
-        txobj = deserialize(txobj)
-    ins   = txobj.get('ins',  [])
-    outs  = txobj.get('outs', [])
-    nins  = len(ins)  if 'ins' else 1
-    nouts = len(outs) if 'outs' else 1
-    return (nouts * 148) + (34 * nins) + 10
+#def estimate_tx_size(*args):
+#    """Estimate Tx size in bytes"""
+#    if not isinstance(txobj, dict):
+#        txobj = deserialize(txobj)
+#    ins   = txobj.get('ins',  [])
+#    outs  = txobj.get('outs', [])
+#    nins  = len(ins)  if 'ins' else 1
+#    nouts = len(outs) if 'outs' else 1
+#    return (nouts * 34) + (148 * nins) + 10
+#    
+
     
