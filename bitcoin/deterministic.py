@@ -2,8 +2,8 @@ from bitcoin.main import *
 import hmac
 import hashlib
 from binascii import hexlify
-from bitcoin.mnemonic import prepare_elec2_seed, is_elec1_seed, is_elec2_seed
-# from bitcoin.pyspecials import *
+from bitcoin.mnemonic import prepare_elec2_seed, is_elec1_seed, is_elec2_seed, bip39_check, bip39_to_seed
+from bitcoin.pyspecials import *
 
 # Electrum wallets
 def bin_electrum_extract_seed(mn_seed, password=b''):
@@ -20,7 +20,7 @@ def bin_electrum_extract_seed(mn_seed, password=b''):
     return rootseed
 
 def electrum_extract_seed(mn_seed, password=''):
-    return hexify(bin_electrum_extract_seed(mn_seed, password))
+    return safe_hexlify(bin_electrum_extract_seed(mn_seed, password))
 
 def electrum_masterprivkey(mnemonic, password=''):
     return bip32_master_key(bin_electrum_extract_seed(mnemonic, password))
@@ -149,6 +149,8 @@ def bip32_ckd(data, i):
 
 
 def bip32_master_key(seed, vbytes=MAINNET_PRIVATE):
+    if bip39_check(seed):
+        seed = unhexlify(bip39_to_seed(seed))
     I = hmac_sha512(from_str_to_bytes("Bitcoin seed"), seed).digest()
     return bip32_serialize((vbytes, 0, b'\x00'*4, 0, I[32:], I[:32]+b'\x01'))
 
@@ -158,7 +160,7 @@ def bip32_bin_extract_key(data):
 
 
 def bip32_extract_key(data):
-    return hexify(bip32_deserialize(data)[-1])
+    return safe_hexlify(bip32_deserialize(data)[-1])
 
 # Exploits the same vulnerability as above in Electrum wallets
 # Takes a BIP32 pubkey and one of the child privkeys of its corresponding
@@ -202,16 +204,12 @@ def coinvault_priv_to_bip32(*args):
     return bip32_serialize((MAINNET_PRIVATE, 0, b'\x00'*4, 0, I2, I3+b'\x01'))
 
 
-# TODO: rename new 'descend' funcs
 def bip32_descend(*args):
+    """Descend masterkey and return privkey"""
     if len(args) == 2 and isinstance(args[1], list):
         key, path = args
     else:
-        key, path = args[0], args[1:]
-    try: 
-        path = parse_bip32_path(path)
-    except TypeError: 
-        sys.stderr.write("Couldn't parse BIP32 path")
+        key, path = args[0], map(int, args[1:])
     for p in path:
         key = bip32_ckd(key, p)
     return bip32_extract_key(key)
@@ -220,24 +218,24 @@ def bip32_descend(*args):
 def bip32_path(*args, **kwargs):
     """Same as bip32_descend but returns masterkey instead of hex privkey"""
     # use keyword public=True or end path in .pub for public child derivation
+    args = map(str, args)
     if len(args) == 2:
         key, path = args
     elif len(args) > 2:
-        key, pth = args[0], args[1:]
-        path = "/".join(pth)
-    else: raise TypeError("Path format wrong")
-    if not path.startswith("m/") and path[1] == '/':
+        key, path = args[0], list(args[1:])
+        path = "/".join(path)
+    #else: 
+    #    raise TypeError("Wrong path format")
+    if not path.startswith("m/"):
         path = "m/" + path
     is_public = path.endswith("pub") or kwargs.get("public", False)
     pathlist = parse_bip32_path(path)
-    if len(pathlist)==0:    # empty list
-        return key if not is_public else bip32_privtopub(key)
+#    if len(pathlist)==0:    # empty list
+#        return key if not is_public else bip32_privtopub(key)
     for p in pathlist:
         key = bip32_ckd(key, p)
-    if is_public:
-        return bip32_privtopub(key)
-    else:
-        return key
+    return key if not is_public else bip32_privtopub(key)
+
 
 def parse_bip32_path(path):
     """Takes bip32 path as string "m/0'/2H" or "m/0H/1/2H/2/1000000000.pub" """
@@ -257,21 +255,24 @@ def parse_bip32_path(path):
         patharr.append(v)
     return patharr
 
+
 # TODO: fix below bip44
-def bip44_descend(masterkey, network='btc', account=0, for_change=0, index=0):
-    # 44'/NETWORK'/ACCOUNT'/internal_or_change?/index
+def bip44_descend(masterkey, network='btc', account=0, index=0):
+    # 44'/NETWORK'/ACCOUNT'/index
     network = "0H" if network == 'btc' else "1H"
-    account, for_change, index = str(account), str(for_change), str(index)
+    account, index = str(account), str(index)
     account += 'H'
-    for_change += 'H'
-    path = "m/44H/%s/%s/%s/%s" % (network, account, for_change, index)
+    path = "m/44H/{network}/{account}/{index}".format(network=network, account=account, index=index)
     return bip32_extract_key(bip32_path(masterkey, path))
+
 
 def bip44_address(masterkey, network='btc', account=0, for_change=0, index=0):
     return privtoaddr(bip44_descend(masterkey, network, account, for_change, index))
+
 
 def bip32_info(xkey):
     #deser = [x.encode('hex') if isinstance(x, str) else x for x in bip32_deserialize(xkey)]
     deser = [safe_hexlify(x) for x in bip32_deserialize(xkey)]
     deser[0] = "tPRV" if changebase(deser[0], 16, 256, 4) == TESTNET_PRIVATE else "xPRV"
     return deser
+    
