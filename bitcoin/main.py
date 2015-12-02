@@ -323,6 +323,7 @@ privtopub = privkey_to_pubkey
     
 
 def privkey_to_address(priv, magicbyte=0):
+    magicbyte = 111 if str(priv)[0] in "c9" else magicbyte
     return pubkey_to_address(privkey_to_pubkey(priv), int(magicbyte))
     
 privtoaddr = privkey_to_address
@@ -356,6 +357,11 @@ def subtract_privkeys(p1, p2):
     return encode_privkey((decode_privkey(p1, f1) - k2) % N, f1)
 
 
+def mul_privkeys(p1, p2):
+    f1, f2 = get_privkey_format(p1), get_privkey_format(p2)
+    return encode_privkey((decode_privkey(p1, f1) * decode_privkey(p2, f2)) % N, f1)
+
+
 def wif_to_sec(wif):
     formt = get_privkey_format(wif)
     sec_formt = 'hex_compressed' if 'compressed' in formt else 'hex'
@@ -371,11 +377,9 @@ def is_privkey(priv):
         return False
 
 def is_pubkey(pubkey):
-    try:
-        get_pubkey_format(pubkey)
-        return True
-    except:
-        return False
+    RE_PUBKEY = re.compile(ur'^((02|03)[0-9a-f]{64})|(04[0-9a-f]{128})$', re.IGNORECASE)
+    return bool(RE_PUBKEY.match(pubkey))
+ 
 
 def is_address(addr):
     ADDR_RE = re.compile("^[123mn][a-km-zA-HJ-NP-Z0-9]{26,33}$")
@@ -455,22 +459,34 @@ def num_to_var_int(x):
 
 def num_to_op_push(x):
     x = int(x)
-    pcfx = lambda pc, i, ln: from_int_to_byte(pc) + from_int_to_bytes(i, ln)
-    if x < 76:              return pcfx(0, x, 1)[1:]
-    elif x < 0xff:          return pcfx(76, x, 1)
-    elif x < 0xffff:        return pcfx(77, x, 2)
-    elif x < 0xffffffff:    return pcfx(78, x, 4)
-    else: raise ValueError("0xffffffff > value >= 0")
+    if 0 <= x <= 75:              
+        pc = ''
+        num = encode(x, 256, 1)
+    elif x < 0xff:          
+        pc = from_int_to_byte(0x4c)
+        num = encode(x, 256, 1)
+    elif x < 0xffff:        
+        pc = from_int_to_byte(0x4d)
+        num = encode(x, 256, 2)[::-1]
+    elif x < 0xffffffff:
+        pc = from_int_to_byte(0x4e)
+        num = encode(x, 256, 4)[::-1]
+    else: 
+        raise ValueError("0xffffffff > value >= 0")
+    return pc + num
+
 
 def wrap_varint(hexdata):
     if re.match('^[0-9a-fA-F]*$', hexdata):
         return safe_hexlify(wrap_varint(safe_unhexlify(hexdata)))
     return num_to_var_int(len(hexdata)) + hexdata
 
+
 def wrap_script(hexdata):
     if re.match('^[0-9a-fA-F]*$', hexdata):
         return safe_hexlify(wrap_script(safe_unhexlify(hexdata)))
-    return len(num_to_op_push(hexdata)) + hexdata
+    return num_to_op_push(len(hexdata)) + hexdata
+
 
 # WTF, Electrum?
 def electrum_sig_hash(msg):
@@ -490,6 +506,7 @@ def random_key():
 def random_electrum_seed():
     return random_key()[:32]
 
+
 def random_mini_key():
     charset = get_code_string(58)[1:]   # Base58 without the 1
     while True:
@@ -500,6 +517,7 @@ def random_mini_key():
         if ord(bin_sha256(key)[0]) == 0: 
             break
     return key[:-1]
+
 
 # Encodings
 def b58check_to_bin(inp):
@@ -686,13 +704,6 @@ def pbkdf2_hmac_sha512(password, salt):
 
 hmac_sha256 = lambda k, s: hmac.new(k, s, hashlib.sha256)
 hmac_sha512 = lambda k, s: hmac.new(k, s, hashlib.sha512)
-
-
-def rev(s):
-    """Reverse Endianess of bytes or hex string"""
-    if isinstance(s, string_or_bytes_types) and re.match('^[0-9a-fA-F]*$', s):
-        return safe_hexlify(rev(safe_unhexlify(s)))
-    return s[::-1]
 
 
 def satoshi_to_btc(val):
