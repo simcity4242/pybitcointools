@@ -15,9 +15,15 @@ RE_TXHEX = re.compile(ur'^01000000[0-9a-f]{108,}$', re.IGNORECASE)
 RE_BASE58_CHARS = re.compile('^[0-9a-km-zA-HJ-NP-Z]$')
 RE_BLOCKHASH = re.compile(ur'^(00000)[0-9a-f]{59}$', re.IGNORECASE)
 RE_ADDR = re.compile(ur'^[123mn][a-km-zA-HJ-NP-Z0-9]{25,34}$')
-RE_DER = re.compile(ur'(?:30)(?P<siglen>[0-4][0-9a-f])02(?P<rlen>[0-2][0-9a-f])(?P<r>(?:00)?[a-f0-9]{2,64})02(?P<slen>[0-2][0-9a-f])(?P<s>(?:00)?[a-f0-9]{2,64})(?P<sighash>(0|8)[0-3])?', re.IGNORECASE)
 RE_PUBKEY = re.compile(ur'^((02|03)[0-9a-f]{64})|(04[0-9a-f]{128})$', re.IGNORECASE)
 RE_PRIVKEY = re.compile(ur'^([0-9a-f]{64}(01)?)|([5KL9c][1-9a-km-zA-LMNP-Z]{50,51})|(\d){1,78}$')
+RE_DER = re.compile(ur'''
+30(?P<siglen>[0-4][0-9a-f])
+02(?P<rlen>[0-2][0-9a-f])(?P<r>(?:00)?[a-f0-9]{2,64})
+02(?P<slen>[0-2][0-9a-f])(?P<s>(?:00)?[a-f0-9]{2,64})
+(?P<sighash>(0|8)[0-3])?
+''', re.I | re.X)
+
 
 # PYTHON 2 FUNCTIONS
 if is_python2:
@@ -43,10 +49,10 @@ if is_python2:
     ### Hex to bin converter and vice versa for objects
     
     def is_txid(txid):
-        RE_IS_TXID = re.compile('^[0-9a-fA-F]{64}$')
-        assert isinstance(txid, string_or_bytes_types)
+        if not isinstance(txid, string_types):
+            return False
         if len(txid) == 64:
-            return bool(re.match(RE_IS_TXID, txid))
+            return bool(RE_TXID.match(txid))
         elif len(txid) == 32:
             try:
                 binascii.hexlify(txid)
@@ -55,22 +61,18 @@ if is_python2:
                 return False
     
     def is_hex(s):
-        return bool(re.match(HEX_CHARS_RE, s))
-    
+        return bool(RE_HEX_CHARS.match(s))
+
     def is_txhex(txhex):
         if not isinstance(txhex, basestring):
             return False
-        elif not re.match('^[0-9a-fA-F]*$', txhex):
+        elif not re.match(RE_HEX_CHARS, txhex):
             txhex = binascii.hexlify(txhex)
-        txhex = st(txhex)
-        return txhex.startswith('01000000')
-
+        return bool(RE_TXHEX.match(txhex))
 
     def is_txobj(txobj):
         if not isinstance(txobj, dict):
             return False
-        elif isinstance(txobj, list) and len(txobj) == 1:
-            return is_txobj(txobj[0]) if isinstance(txobj[0], dict) else False
         return set(['locktime', 'version']).issubset(set(txobj.keys()))
 
     def is_tx(txobj):
@@ -78,13 +80,12 @@ if is_python2:
             return is_txobj(txobj)
         elif isinstance(txobj, string_types):
             return is_txhex(txobj)
-        else:
-            return False
+        return False
             
     def is_blockhash(hash):
-        if isinstance(hash, (list,tuple)):
-            return all([is_blockhash(x) for x in hash])
-        return bool(re.match(RE_IS_BLOCK, hash))
+        if not isinstance(hash, string_types):
+            return False
+        return bool(RE_BLOCKHASH.match(hash))
 
 
     def json_is_base(obj, base):
