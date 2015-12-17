@@ -113,7 +113,7 @@ def bip39_to_entropy(mnem_str):
     
     L = len(mnem_arr) * 11
     indexes = [BIP39.index(w) for w in mnem_arr]	# word indexes (int)
-    bindexes = map(lambda d: changebase(st(d), 10, 2, 11), indexes)
+    bindexes = map(lambda d: changebase(str(d), 10, 2, 11), indexes)
     binstr = ''.join(bindexes)
     
     bd = binstr[:L // 33 * 32]
@@ -121,7 +121,7 @@ def bip39_to_entropy(mnem_str):
     hexd = changebase(bd, 2, 16, L // 33 * 8)
     hexd_cs = changebase(sha256(safe_unhexlify(hexd)), 16, 2, 256)[:L // 33]
     if hexd_cs == cs:
-        return safe_hexlify(hexd)
+        return hexd
     raise Exception("Checksums don't match!!")
 
 
