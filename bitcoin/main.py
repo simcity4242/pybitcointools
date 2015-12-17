@@ -10,30 +10,23 @@ import hmac
 from bitcoin.ripemd import *
 
 if "ripemd160" not in hashlib.algorithms:
-    try:
-        setattr(hashlib, 'ripemd160', RIPEMD160)
-    except:
-        try:
-            import ripemd
-            setattr(hashlib, 'ripemd160', ripemd.RIPEMD160)
-        except ImportError:
-            pass
-
+    from bitcoin import ripemd
+    setattr(hashlib, 'ripemd160', ripemd.RIPEMD160)
 
 is_python2 = str == bytes
 
 
 # Elliptic curve parameters (secp256k1)
 P = 2**256 - 2**32 - 977	# P = 2**256 - 2**32 - 2**9 - 2**8 - 2**7 - 2**6 - 2**4 - 2**0
-# fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f
+# = fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f
 N = 115792089237316195423570985008687907852837564279074904382605163141518161494337
-# fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141
+# = fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141
 A = 0
 B = 7
 Gx = 55066263022277343669578718895168534326250603453777594175500187360389116729240
-# 79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798
+#  = 79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798
 Gy = 32670510020758816978083085130507043184471273380659243275938904335757337482424
-# 483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8
+#  = 483ada7726a3c4655da4fbfc0e1108a8fd17b448a68554199c47d08ffb10d4b8
 G = (Gx, Gy)
 
 
@@ -58,10 +51,12 @@ def inv(a, n):
         lm, low, hm, high = nm, new, lm, low
     return lm % n
 
-def is_point(x, y):
-    """Is point (x,y) on curve?"""
-    x, y = int(x), int(y)
+
+def is_point(pubkey):
+    """Is point on curve? (takes pubkey or (x,y))"""
+    x,y = decode_pubkey(pubkey)
     return (y**2 - (x**3 + A*x + B )) % P == 0
+
 
 # JSON access (for pybtctool convenience)
 
@@ -323,7 +318,7 @@ privtopub = privkey_to_pubkey
     
 
 def privkey_to_address(priv, magicbyte=0):
-    magicbyte = 111 if str(priv)[0] in "c9" else magicbyte
+    magicbyte = 111 if (str(priv)[0] in "c9" and len(str(priv)) != 64) else magicbyte
     return pubkey_to_address(privkey_to_pubkey(priv), int(magicbyte))
     
 privtoaddr = privkey_to_address
@@ -377,8 +372,16 @@ def is_privkey(priv):
         return False
 
 def is_pubkey(pubkey):
+    pubkey = hexlify(pubkey) if not RE_HEX_CHARS.match(pubkey) else pubkey
     RE_PUBKEY = re.compile(ur'^((02|03)[0-9a-f]{64})|(04[0-9a-f]{128})$', re.IGNORECASE)
     return bool(RE_PUBKEY.match(pubkey))
+    try:
+        get_pubkey_format(pubkey)
+        return True
+    except:
+        return False
+    #RE_PUBKEY = re.compile(ur'^((02|03)[0-9a-f]{64})|(04[0-9a-f]{128})$', re.IGNORECASE)
+    #return bool(RE_PUBKEY.match(pubkey))
  
 
 def is_address(addr):
