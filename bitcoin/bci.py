@@ -94,10 +94,12 @@ def is_testnet(inp):
     if inp[0] in "123mn":
         if re.match("^[2mn][a-km-zA-HJ-NP-Z0-9]{26,35}$", inp):
             req = json.loads(make_request("https://testnet.blockexplorer.com/api/addr-validate/{addr}".format(addr=inp)))
-            return req
+            assert req
+            return True
         elif re.match("^[13][a-km-zA-HJ-NP-Z0-9]{26,35}$", inp):
             req = json.loads(make_request("https://blockexplorer.com/api/addr-validate/{addr}".format(addr=inp)))
-            return req
+            assert req
+            return False
         else:
             #sys.stderr.write("Bad address format %s")
             return None
@@ -595,7 +597,7 @@ def blockcypher_fetchtx(txhash, network=''):
     jdata = json.loads(make_request(url))
     txhex = jdata.get('hex')
     from bitcoin.transaction import txhash as TXHASH
-    assert TXHASH(txhex) == txhash
+    assert TXHASH(unhexlify(txhex)) == txhash
     return txhex
 
 
@@ -812,41 +814,25 @@ def address_txlist(*args):
 
 def get_txid_height(txid, network=None):
     # Takes     TxID, network    returns block height for that TxID
-    network = set_network(txid) if not network else network
     if not re.match('^[0-9a-fA-F]*$', txid) or len(txid) != 64:
         raise TypeError("%s is not a valid TxID" % txid)
-    url = "%s/tx/%s" % (BET_URL if network == "testnet" else BE_URL, txid)
-    try:
-        d = json.loads(make_request(url))
-    except:     # GET EXCEPTION NAME
-        if network=="btc":    # swap network
-            network=="testnet"
-        elif network=="testnet":
-            network=="btc"
-        #sys.stderr.write("%s is not a valid TxID...trying %s network" % (txid, network))
-        url = "%s/api/tx/%s" % (BET_URL if network == "testnet" else BE_URL, txid)
-        try: 
-            d = json.loads(make_request(url))
-        except: 
-            raise ValueError("TxID %s not found for either network" % txid)
-    bh = d.get("blockhash")
-    bhurl = "%s/block/%s" % (BET_URL if network == "testnet" else BE_URL, bh)
-    bdata = json.loads(make_request(bhurl))
-    return {"tx_hash": txid, "block_height": bdata.get("height")}
+    network = set_network(txid) if not network else network
+    url = "http://%swebbtc.com/tx/%s.json" % ("testnet." if network == "testnet" else "", txid)
+    jsonobj = json.loads(make_request(url))
+    if "error" in jsonobj:
+        raise Exception(jsonobj.get("error"))
+    return int(jsonobj.get("blocknumber"))
+    
 
-
-def get_price(val=100000000, currency="usd", exchange="coinbase"):
-    """v is Satoshi value (default = 1 BTC), default currency = USD$, exchange can be all"""
-    if isinstance(v, float):
-        v = int(val*1e8 + 0.5)
-    url = "https://chain.so/api/v2/get_price/BTC/%s" % currency.upper()
-    jsonobj = json.loads(make_request(url)).get("data")
-    prices = {}
-    for d in jsonobj.get("prices"):
-        #d.pop("price_base")
-        #d.pop("time")
-        prices[str(d.get("exchange", "unknown"))] = float(d.get("price"))
-    return prices.get(exchange.lower()) if exchange.lower() != "all" else prices
+def get_price(currency=''):
+    """Smartbit exchange rates (updated every 60sec)""" 
+    currency = currency.upper().strip() if (0 < len(currency) <= 4) else None
+    url = "https://api.smartbit.com.au/v1/exchange-rates"
+    jdata = json.loads(make_request(url)).get("exchange_rates")
+    assert jdata['success'] == True
+    L = [(pair['code'], pair['rate']) for pair in jdata]
+    result = dict([(k, float(v)) for k,v in L])
+    return result if currency is None else result.get(currency)        
     
 
 def get_mempool_txs(tx_count=100, network="btc"):
@@ -861,7 +847,6 @@ def get_mempool_txs(tx_count=100, network="btc"):
                     "txid": tx.get('txid'), 
                     "fee": float(tx.get('fee'))
                     })
-    
     return txs
 
 
@@ -945,6 +930,8 @@ def address_to_pubkey(addr):
     except:
         return None
     return jdata
+
+addrtopubkey = address_to_pubkey
 
 
 def get_new_privkey():
@@ -1054,11 +1041,14 @@ def get_opreturns_by_blockhash(blockhash, network='btc'):
     
 def get_opreturns_by_transaction(txid, network=None):
     network = set_network(txid)
-    base_url = 'https://api.chain.com/v1/{network}/transactions/{txid}/op-returns?api-key-id=DEMO-4a5e1e4'
-    url = base_url.format(network=('bitcoin' if network=='btc' else 'testnet3'), txid=txid)
+    txid = [txid] if not isinstance(txid, list) else list(txid) if isinstance(txid, tuple) else txid
+    base_url = 'https://api.chain.com/v1/{network}/transactions/{txids}/op-returns?api-key-id=DEMO-4a5e1e4'
+    url = base_url.format(network=('bitcoin' if network=='btc' else 'testnet3'), txids=",".join(txid))
     jdata = json.loads(make_request(url))
     return jdata    
-    
+
+get_opreturns_by_txid = get_opreturns_by_transaction
+
 
 def get_xpub_unspent_addrs(*args):
     """Takes bip32 xpub (or xprv) and returns addresses with balance"""
@@ -1103,6 +1093,17 @@ def get_xpub_outputs(*args):
     values = map(str, multiaccess(jdata, "confirmed" or "unconfirmed"))
     return [":".join(y) for y in [x for x in zip(addrs, values)]]           
 
-    #pubtoaddr(bip32_descend(bip32_ckd(hdpub, 1), 2))
-    # args = ('xpub6BjpJL49CajcQvGn5pXVpmFe5PtcHf2AtCyPJ1Tkqe6uuCTMott1NdbV49j3DA9VTSWSFDdzHxvFVfggUy3YQe5WTSZ7Q4692cCCU8Zby9D', 'xpub6BfKpqjTwvH21wJGWEfxLppb8sU7C6FJge2kWb9315oP4ZVqCXG29cdUtkyu7YQhHyfA5nt63nzcNZHYmqXYHDxYo8mm1Xq1dAC7YtodwUR', 'xpub661MyMwAqRbcGJRSqFchVsmi1RvxEb546fePRgitBdSxrxgbw9uJCkUoXWmmVmsK3oYh5mMKSqd7TZ69jKf5DeCvWYyDfpn2Yp4ubeRkUph')
-#    [{u'confirmed': 0, u'addr': u'1uN4DmnMkpJdhYvNZLDKN3hofUNm9Ff6K', u'unconfirmed': 0}, {u'confirmed': 0, u'addr': u'1FrnEuikP8n2fDvFL5XixeGPS4Y6uURpPd', u'unconfirmed': 0}, {u'confirmed': 55600, u'addr': u'1MEXcYwATz7WGQoHedNS1qT4XuadYhAF7c', u'unconfirmed': 0}, {u'confirmed': 0, u'addr': u'13eWZHytgWzFuxH7nv3tpvBZRPZEAPPf4S', u'unconfirmed': 0}, {u'confirmed': 244400, u'addr': u'1GGfUGHLDoacYKcyuS8XXv3cf4qwBcxUPn', u'unconfirmed': 0}, {u'confirmed': 0, u'addr': u'1699DqGc1TRSyfBPZ9mT615JHZWonEMf84', u'unconfirmed': 0}]
+
+#def cancel_pending_tx(toaddr):
+#    url = "https://shapeshift.io/cancelpending", 
+#    data = json.dumps({"address": str(toaddr)})
+#    req = json.loads(make_request(url, data))
+#    k = req.keys()[0]
+#    return req[k]
+    
+
+#def txid_overview_info(*args):
+#    """Smrtbit: https://api.smartbit.com.au/v1/blockchain/tx/4c1df235ffd7642008989422aee5255e6312b4172b55d94e328fa99e99d727c7,522f9f3df4d8140a08aa3650ea1b4525d842b5f97d51fc89c4118465ec5396ad/op-returns"""
+
+    
+    
