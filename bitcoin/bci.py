@@ -2,7 +2,9 @@
 from bitcoin.pyspecials import *
 #from bitcoin.constants import *
 
-import json, re, binascii, datetime, requests, urlparse, urllib2
+import json, re, binascii, datetime, urlparse, urllib2
+try:   import requests
+except ImportError: pass
 import random
 import sys 
 from urlparse import urljoin
@@ -17,7 +19,7 @@ BET_URL, BE_URL = "https://testnet.blockexplorer.com/api", "https://blockexplore
 BLOCKRT_URL, BLOCKR_URL = "http://tbtc.blockr.io/api/v1", "http://btc.blockr.io/api/v1"
 BLOCKSTRAPT_URL, BLOCKSTRAP_URL = "https://api.blockstrap.com/v0/btct", "https://api.blockstrap.com/v0/btc"
 BLOCKCYPHERT_URL, BLOCKCYPHER_URL = 'https://api.blockcypher.com/v1/btc/test3/', 'https://api.blockcypher.com/v1/btc/main/'
-CHAINCOM_API_ID, CHAINCOM_API_SECRET = "api-key-id=%s" % "DEMO-4a5e1e4", "DEMO-f8aef80"
+
 
 
 def set_api(svc="blockcypher", code=""):
@@ -91,7 +93,7 @@ def is_testnet(inp):
         pass
 
     ## ADDRESSES
-    if inp[0] in "123mn":
+    if re.match(ur'^[123mn][a-km-zA-HJ-NP-Z0-9]{25,34}$', inp):
         if re.match("^[2mn][a-km-zA-HJ-NP-Z0-9]{26,35}$", inp):
             req = json.loads(make_request("https://testnet.blockexplorer.com/api/addr-validate/{addr}".format(addr=inp)))
             assert req
@@ -598,7 +600,7 @@ def blockcypher_fetchtx(txhash, network=''):
     txhex = jdata.get('hex')
     from bitcoin.transaction import txhash as TXHASH
     assert TXHASH(unhexlify(txhex)) == txhash
-    return txhex
+    return txhex.encode()
 
 
 fetchtx_getters = {
@@ -729,13 +731,6 @@ def get_txs_in_block(inp):
     return hashes
 
 
-#def get_block_height(txid, network='btc'):
-#    base_url = 'https://bitcoin.toshi.io/api/v0/blocks/1' % \
-#               ('tbtc' if network == 'testnet' else 'btc')
-#    j = json.loads(make_request(base_url + str(txid)))
-#    return j['data']['block']
-
-
 def get_block_coinbase(txval):
     j = _get_block(txval)
     cb = bytearray.fromhex(j['tx'][0]['inputs'][0]['script'])
@@ -850,6 +845,13 @@ def get_mempool_txs(tx_count=100, network="btc"):
     return txs
 
 
+def get_decoded_txhex(txhex):
+    """Use Smartbit API to deserialize txhex"""
+    data = make_request("https://api.smartbit.com.au/v1/blockchain/decodetx", json.dumps({"hex": txhex}))
+    jdata = json.loads(data)
+    return jdata['transaction'] if jdata['success'] == True else None
+
+
 def get_unconfirmed_txs(*args):
     '''Takes '''
     addrs_args, network = parse_addr_args(*args)
@@ -887,7 +889,7 @@ def get_decoded_tx(rawtx, network=None):
     jdata = json.loads(make_request(url, json.dumps(body)))
     if network is None:
         jdata.pop("addresses")
-        for i in jdata["inputs"]:  o.pop("addresses")
+        for i in jdata["inputs"]:  i.pop("addresses")
         for o in jdata["outputs"]: o.pop("addresses")
     return jdata
 
@@ -916,32 +918,35 @@ def get_tx_composite(inputs, outputs, output_value, change_address=None, network
     jdata = json.loads(make_request(url, data))
     hash, txh = jdata.get("tosign")[0], jdata.get("tosign_tx")[0]
     assert bin_dbl_sha256(txh.decode('hex')).encode('hex') == hash, "checksum mismatch %s" % hash
-    return txh.encode("utf-8")
+    return txh[:-8].encode()
 
 blockcypher_mktx = get_tx_composite
 
+
+## BCI queries
 
 def address_to_pubkey(addr):
     """Converts an address to public key (if available)"""
     base_url = "https://blockchain.info/q/pubkeyaddr/{addr}"
     assert not is_testnet(addr), "Testnet not supported"
     try:
-        jdata = json.loads(make_request(base_url.format(addr=addr)))
+        data = make_request(base_url.format(addr=addr))
     except:
-        return None
-    return jdata
+        data = None
+    return data
 
-addrtopubkey = address_to_pubkey
+addrtopub = address_to_pubkey
 
 
 def get_new_privkey():
     """Uses BCI API to request a new (addr, privkey) pair"""
+    data = ""
     try:
         data = make_request("https://blockchain.info/q/newkey")
-        return data
     except Exception as e:
         raise e
-
+    else:
+        return data
 
 def address_first_seen(addr):
     assert not is_testnet(addr)
@@ -959,20 +964,10 @@ def unconfirmed_tx_count():
 
 def get_rejection_info(inp):
     """Use BCI API to query why the network rejected a blockhash or a TxID"""
-    assert len(inp) == 64 and bool(re.match(RE_HEXCHARS, inp))
-    try:
-        data = make_request("https://blockchain.info/q/rejected/{0}".format(inp))
-        ## TODO: so..... now what? Need a testcase
-    except Exception as e:
-        raise e
-    return data
-
-
-def get_decoded_tx(txhex):
-    """Use Smartbit API to deserialize txhex"""
-    jdata = json.loads(make_request("https://api.smartbit.com.au/v1/blockchain/decodetx", 
-                                    json.dumps({"hex": txhex})))
-    return jdata['transaction'] if jdata['success'] == True else None
+    assert RE_BLOCKHASH.match(inp) or RE_TXID.match(inp)
+    msg = make_request("https://blockchain.info/q/rejected/{0}".format(inp))
+    ## bc4bbf2dabb496d203b709bec938a7be877ceb54d99538ff991b7f4f2010e0e0
+    return "{hash}: {errormsg}".format(hash=inp, errormsg=msg)
 
 
 def get_doublespent_txs(tx_count=100):
@@ -1011,7 +1006,9 @@ def get_chart(*args, **kwargs):
 
 # CHAIN.COM
 
-def get_opreturns_by_addr(addr):
+CHAINCOM_API_ID, CHAINCOM_API_SECRET = "api-key-id=DEMO-4a5e1e4", "DEMO-f8aef80"
+
+def get_opreturns_by_address(addr):
     network = set_network(addr)
     base_url = 'https://api.chain.com/v1/{network}/addresses/{address}/op-returns?api-key-id=DEMO-4a5e1e4'
     url = base_url.format(network=('bitcoin' if network=='btc' else 'testnet3'), address=addr)
@@ -1020,12 +1017,12 @@ def get_opreturns_by_addr(addr):
         del tx['sender_addresses']
         del tx['receiver_addresses']
         del tx['hex']
+        tx["txid"] = tx["transaction_hash"]
+        del tx["transaction_hash"]
     return jdata
     
 
 def get_opreturns_by_blockheight(blockheight, network='btc'):
-    lastbh = int(last_block_height(network))
-    assert 0 <= int(blockheight) <= lastbh, "Invalid blockheight %d for %s network" % (blockheight, network)
     base_url = 'https://api.chain.com/v1/{network}/blocks/{blockheight}/op-returns?api-key-id=DEMO-4a5e1e4'
     url = base_url.format(network=('bitcoin' if network=='btc' else 'testnet3'), blockheight=str(blockheight))
     jdata = json.loads(make_request(url))
@@ -1045,9 +1042,27 @@ def get_opreturns_by_transaction(txid, network=None):
     base_url = 'https://api.chain.com/v1/{network}/transactions/{txids}/op-returns?api-key-id=DEMO-4a5e1e4'
     url = base_url.format(network=('bitcoin' if network=='btc' else 'testnet3'), txids=",".join(txid))
     jdata = json.loads(make_request(url))
-    return jdata    
+    return jdata
+
+
+def get_opreturns(inp):
+    """Get OP_RETURNs by blockheight, blockhash, txid or address"""
+    if RE_ADDR.match(inp):
+        return get_opreturns_by_address(inp)
+    elif RE_BLOCKHASH.match(inp):
+        return get_opreturns_by_blockhash(inp)
+    elif str(inp).isdigit():
+        return get_opreturns_by_blockheight(inp)
+    elif RE_TXID.match(inp):
+        return get_opreturns_by_transaction(inp)
+    else:
+        raise Exception("Unknown input, {0}".format(inp))
 
 get_opreturns_by_txid = get_opreturns_by_transaction
+opreturns_by_tx = get_opreturns_by_transaction
+opreturns_by_addr = get_opreturns_by_address
+opreturns_by_height = get_opreturns_by_blockheight
+opreturns_by_blockhash = get_opreturns_by_blockhash
 
 
 def get_xpub_unspent_addrs(*args):
@@ -1089,11 +1104,18 @@ def get_xpub_outputs(*args):
     xpubs = [bip32_privtopub(x) if x.startswith("xprv") else x for x in args]
     jdata = json.loads(make_request("https://www.blockonomics.co/api/balance", \
                                       json.dumps({"addr": " ".join(xpubs)}))).get("response")
-    addrs = multiaccess(jdata, 'addrs')
+    addrs = multiaccess(jdata, 'addr')
     values = map(str, multiaccess(jdata, "confirmed" or "unconfirmed"))
-    return [":".join(y) for y in [x for x in zip(addrs, values)]]           
+    return [":".join(y) for y in [x for x in zip(addrs, values)]]
 
 
+def bigmac_ppi(currency='USD'):
+    """BigMac Purchsing Power Index (PPI): 1 BTC = x BigMacs"""
+    pass
+
+
+def fiat_to_btc(value, currency="USD"):
+    base_url = "https://blockchain.info/tobtc?currency={}&value={}" 
 #def cancel_pending_tx(toaddr):
 #    url = "https://shapeshift.io/cancelpending", 
 #    data = json.dumps({"address": str(toaddr)})
