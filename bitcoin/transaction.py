@@ -51,7 +51,8 @@ def deserialize(tx):
         })
     outs = read_var_int()
     for i in range(outs):
-        obj["outs"].append({
+        obj["outs"].append(
+        {
             "value": read_as_int(8),
             "script": read_var_string()
         })
@@ -151,7 +152,8 @@ def is_bip66(sig):
     """Checks hex DER sig for BIP66 compliance"""
     #https://raw.githubusercontent.com/bitcoin/bips/master/bip-0066.mediawiki
     #0x30  [total-len]  0x02  [R-len]  [R]  0x02  [S-len]  [S]  [sighash]
-    sig = bytearray.fromhex(sig) if (isinstance(sig, string_types) and re.match('^[0-9a-fA-F]*$', sig)) else bytearray(sig)
+    sig = bytearray.fromhex(sig) if (isinstance(sig, string_types) and \
+             re.match('^[0-9a-fA-F]*$', sig)) else bytearray(sig)
     if sig[1] == len(sig)-2: 
         sig.extend(b"\1")		# add SIGHASH for BIP66 check
 
@@ -222,7 +224,7 @@ def mk_opreturn(msg, *args):
     orhex = serialize_script([0x6a, msg])
     if len(args) == 0:
         return orhex
-    if len(args) == 1:
+    elif len(args) == 1:
         if isinstance(args[0], str) and re.match('^[0-9a-fA-F]*$', args[0]):
             return serialize(mk_opreturn(msg, deserialize(args[0])))
         elif isinstance(args[0], dict):
@@ -710,15 +712,19 @@ def mutate_tx(txh, i):
 
 def mk_opreturn(msg, txhex=None):
     """Makes OP_RETURN script from msg, embeds in Tx hex"""    
-    or_hex = safe_hexlify(b'\x6a' + wrap_script(msg))
+    hexdata = safe_hexlify(b'\x6a' + wrap_script(msg))
     if txhex is None:
-        return or_hex
+        return hexdata
     else:
+        if not re.match("^[0-9a-fA-F]$", txhex):
+            return unhexlify(mk_opreturn(msg, hexlify(txhex)))
         if isinstance(txhex, dict):
-            return deserialize((mk_opreturn(serialize(txhex))))
+            return deserialize((msg, mk_opreturn(serialize(txhex))))
         txo = deserialize(txhex)
-        if filter(lambda o: int(o.get('value'))==0 or o.get('script').startswith('6a'), txo.get('outs')):
+        outs = txo.get('outs')
+        if filter(lambda o: int(o.get('value')) == 0 or str(o.get('script')).startswith(('\x6a', '6a'))):  # 
             raise Exception("OP_Return outputs are limited to 1")
-        txo['outs'].append({'script': or_hex, 'value': 0})
+        outs.append(
+                    {'script': hexdata, 'value': 0}
+                    )
         return serialize(txo)
-    return orhex if not json else orjson
