@@ -9,21 +9,22 @@ from bitcoin.pyspecials import *
 def bin_electrum_extract_seed(mn_seed, password=b''):
     if isinstance(mn_seed, string_types):
         mn_seed = prepare_elec2_seed(mn_seed)
-    elif isinstance(mn_seed, list):
-        mn_seed = prepare_elec2_seed(' '.join(mn_seed).lower().strip())
-    else: raise Exception("mnemonic string req")
-
-    mn_seed = from_str_to_bytes(mn_seed)
-    password = from_str_to_bytes("electrum{}".format(password))
-    rootseed = safe_unhexlify(pbkdf2_hmac_sha512(mn_seed, password))
+    else: 
+        raise Exception("mnemonic string req")
+    rootseed = safe_unhexlify(pbkdf2_hmac_sha512( \
+        from_str_to_bytes(mn_seed), from_str_to_bytes("electrum"+password)))
     assert len(rootseed) == 64
     return rootseed
 
 def electrum_extract_seed(mn_seed, password=''):
-    return safe_hexlify(bin_electrum_extract_seed(mn_seed, password))
+    if isinstance(mn_seed, list):
+        mn_seed = ' '.join(mn_seed)
+    return safe_hexlify(bin_electrum_extract_seed(prepare_elec2_seed(mn_seed), password))
+
 
 def electrum_masterprivkey(mnemonic, password=''):
     return bip32_master_key(bin_electrum_extract_seed(mnemonic, password))
+
 
 def electrum_keystretch(seed, password=None):
     if isinstance(seed, string_types) and re.match('^[0-9a-fA-F]*$', seed):
@@ -49,8 +50,9 @@ def electrum_privkey(seed, n, for_change=0):
     if len(seed) == 32:
         seed = electrum_keystretch(seed)
     mpk = electrum_mpubk(seed)
-    offset = bin_dbl_sha256(from_str_to_bytes("{}:{}:{}".format(n, for_change, safe_unhexlify(mpk))))
+    offset = bin_dbl_sha256(from_str_to_bytes("{0}:{1}:{2}".format(n, for_change, safe_unhexlify(mpk))))
     return add_privkeys(seed, offset)
+
 
 # Accepts (seed or stretched seed or master pubkey), index and secondary index
 # (conventionally 0 for ordinary addresses, 1 for change) , returns pubkey
@@ -62,7 +64,7 @@ def electrum_pubkey(masterkey, n, for_change=0):
     else:
         mpk = masterkey
     bin_mpk = encode_pubkey(mpk, 'bin_electrum')
-    offset = bin_dbl_sha256(from_str_to_bytes("{}:{}:{}".format(n, for_change, bin_mpk)))
+    offset = bin_dbl_sha256(from_str_to_bytes("{0}:{1}:{2}".format(n, for_change, bin_mpk)))
     return add_pubkeys('04'+mpk, privtopub(offset))
 
 # seed/stretched seed/pubkey -> address (convenience method)
@@ -144,13 +146,12 @@ def bip32_privtopub(data):
     return bip32_serialize(raw_bip32_privtopub(bip32_deserialize(data)))
 
 
-def bip32_ckd(data, i):
-    return bip32_serialize(raw_bip32_ckd(bip32_deserialize(data), i))
-
-
 def bip32_master_key(seed, vbytes=MAINNET_PRIVATE):
+    """Takes entropy hex or bip39 mnemonic and returns master xprv key"""
     if bip39_check(seed):
         seed = unhexlify(bip39_to_seed(seed))
+    elif re.match("^[0-9a-fA-F]$", seed):
+        seed = unhexlify(seed)
     I = hmac_sha512(from_str_to_bytes("Bitcoin seed"), seed).digest()
     return bip32_serialize((vbytes, 0, b'\x00'*4, 0, I[32:], I[:32]+b'\x01'))
 
@@ -161,6 +162,15 @@ def bip32_bin_extract_key(data):
 
 def bip32_extract_key(data):
     return safe_hexlify(bip32_deserialize(data)[-1])
+    
+
+def bip32_bin_extract_chaincode(data):
+    return bip32_deserialize(data)[-2]
+
+
+def bip32_extract_chaincode(data):
+   return safe_hexlify(bip32_bin_extract_chaincode(data))
+
 
 # Exploits the same vulnerability as above in Electrum wallets
 # Takes a BIP32 pubkey and one of the child privkeys of its corresponding
@@ -170,7 +180,8 @@ def raw_crack_bip32_privkey(parent_pub, priv):
     pvbytes, pdepth, pfingerprint, pi, pchaincode, pkey = parent_pub
     i = int(i)
 
-    if i >= 2**31: raise Exception("Can't crack private derivation!")
+    if i >= 2**31: 
+        raise Exception("Can't crack private derivation!")
 
     I = hmac_sha512(pchaincode, pkey+encode(i, 256, 4)).digest()
 
@@ -208,37 +219,32 @@ def bip32_descend(*args):
     """Descend masterkey and return privkey"""
     if len(args) == 2 and isinstance(args[1], list):
         key, path = args
-    else:
+    elif len(args) == 2 and isinstance(args[1], string_types):
+        key = args[0]
+        path = map(int, str(args[1]).lstrip("mM/").split('/'))
+    elif len(args):
         key, path = args[0], map(int, args[1:])
     for p in path:
         key = bip32_ckd(key, p)
     return bip32_extract_key(key)
 
 
-def bip32_path(*args, **kwargs):
-    """Same as bip32_descend but returns masterkey instead of hex privkey"""
+def bip32_ckd(key, *args, **kwargs):
+    """Same as bip32_ckd but takes bip32_path or ints"""
     # use keyword public=True or end path in .pub for public child derivation
-    args = map(str, args)
-    if len(args) == 2:
-        key, path = args
-    elif len(args) > 2:
-        key, path = args[0], list(args[1:])
-        path = "/".join(path)
-    #else: 
-    #    raise TypeError("Wrong path format")
-    if not path.startswith("m/"):
-        path = "m/" + path
-    is_public = path.endswith("pub") or kwargs.get("public", False)
+    argz = map(str, args)
+    path = "/".join(argz)    # no effect if "m/path/0"
+    if not path.startswith(("m/", "M/")):
+        path = "m/{0}".format(path)
+    is_public = path.startswith("M/") or path.endswith(".pub") or kwargs.get("public", False)
     pathlist = parse_bip32_path(path)
-#    if len(pathlist)==0:    # empty list
-#        return key if not is_public else bip32_privtopub(key)
     for p in pathlist:
-        key = bip32_ckd(key, p)
+        key = bip32_serialize(raw_bip32_ckd(bip32_deserialize(key), p))
     return key if not is_public else bip32_privtopub(key)
 
 
 def parse_bip32_path(path):
-    """Takes bip32 path as string "m/0'/2H" or "m/0H/1/2H/2/1000000000.pub" """
+    """Takes bip32 path, "m/0'/2H" or "m/0H/1/2H/2/1000000000.pub", returns list of ints """
     path = path.lstrip("m/").rstrip(".pub")
     if not path:
         return []
@@ -257,22 +263,43 @@ def parse_bip32_path(path):
 
 
 # TODO: fix below bip44
-def bip44_descend(masterkey, network='btc', account=0, index=0):
-    # 44'/NETWORK'/ACCOUNT'/index
-    network = "0H" if network == 'btc' else "1H"
-    account, index = str(account), str(index)
+def bip44_ckd(masterkey, account=0, change=0):
+    # m / purpose' / coin_type' / account' / change / address_index
+    assert str(masterkey)[0] in "xt", "Master key must be xprv/xpub or tprv/tpub"
+    network = "1H" if str(masterkey).startswith("t")  else "0H"
+    account, change = str(account), str(change)
     account += 'H'
-    path = "m/44H/{network}/{account}/{index}".format(network=network, account=account, index=index)
-    return bip32_extract_key(bip32_path(masterkey, path))
+    path = "m/44H/{network}/{account}/{change}".format(network=network, account=account, change=change)
+    return bip32_ckd(masterkey, path)
+
+
+def bip44_descend(masterkey, account=0, change=0, addr_index=0):
+    # m / purpose' / coin_type' / account' / change / address_index
+    xprv = bip44_ckd(masterkey, account, change)
+    return bip32_descend(xprv, int(addr_index))
 
 
 def bip44_address(masterkey, network='btc', account=0, for_change=0, index=0):
-    return privtoaddr(bip44_descend(masterkey, network, account, for_change, index))
+    return privtoaddr(bip44_descend(masterkey, network, account, for_change, index), 0 if network=='btc' else 111)
+
+
+def bip44_address_info(masterkey, network='btc', account=0, for_change=0, index=0):
+    # m / purpose' / coin_type' / account' / change / address_index
+    index = int(index)
+    paths, addrs, wifs = [], [], []
+    for i in range(index, index+20):
+        paths.append(str("m/44'/0'/0'/0/{0}".format(index)).rjust(20))
+        addrs.append(str(bip44_address(masterkey, network, account, for_change, i)).rjust(42))
+        wifs.append(str(bip44_address(masterkey, network, account, for_change, i)).rjust(66))
+    lines = zip(paths, addrs, wifs, ["\n"]*20)
+    res = map(lambda o: "".join(list(o)), lines)
+    print res
+        
 
 
 def bip32_info(xkey):
     #deser = [x.encode('hex') if isinstance(x, str) else x for x in bip32_deserialize(xkey)]
-    deser = [safe_hexlify(x) for x in bip32_deserialize(xkey)]
+    deser = [safe_hexlify(x) for x in bip32_deserialize(xkey) if isinstance(x, string_types)]
     deser[0] = "tPRV" if changebase(deser[0], 16, 256, 4) == TESTNET_PRIVATE else "xPRV"
     return deser
     
