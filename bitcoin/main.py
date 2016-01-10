@@ -54,8 +54,8 @@ def inv(a, n):
 
 def is_point(pubkey):
     """Is point on curve? (takes pubkey or (x,y))"""
-    x,y = decode_pubkey(pubkey)
-    return (y**2 - (x**3 + A*x + B )) % P == 0
+    pubkey = decode_pubkey(pubkey)
+    return bool(not isinf(pubkey) and (pubkey[0]**3+B-pubkey[1]*pubkey[1]) % P == 0)
 
 
 # JSON access (for pybtctool convenience)
@@ -162,10 +162,8 @@ def fast_add(a, b):
 # TODO: check pubkey Electrum
 # Functions for handling pubkey and privkey formats
 def get_pubkey_format(pub):
-    if is_python2:
-        two = '\x02'; three = '\x03'; four = '\x04'
-    else:
-        two = 2; three = 3; four = 4
+    if is_python2:    two = '\2'; three = '\3'; four = '\4'
+    else:             two = 2; three = 3; four = 4
     
     if isinstance(pub, (tuple, list)):                  return 'decimal'
     elif len(pub) == 65 and pub[0] == four:             return 'bin'
@@ -178,7 +176,6 @@ def get_pubkey_format(pub):
 
 
 def encode_pubkey(pub, formt):
-    """Takes """
     if not isinstance(pub, (tuple, list)):
         pub = decode_pubkey(pub)
     if formt == 'decimal': 
@@ -217,6 +214,15 @@ def decode_pubkey(pub, formt=None):
         return decode(pub[:64], 16), decode(pub[64:128], 16)
     else: raise Exception("Invalid format!")
 
+
+def convert_pubkey(pubkey, formt=None):
+    from_format = get_privkey_format(pubkey)
+    to_format = 'hex' if formt is None else str(formt)
+    if from_format == to_format:
+        return pubkey
+    return encode_privkey(decode_privkey(pubkey, from_format), to_format)
+
+
 def get_privkey_format(priv):
     if isinstance(priv, int_types): return 'decimal'
     elif len(priv) == 30 and priv[0] == 'S': return 'mini'
@@ -229,6 +235,7 @@ def get_privkey_format(priv):
         if len(bin_p) == 32: return 'wif'
         elif len(bin_p) == 33: return 'wif_compressed'
         else: raise Exception("WIF does not represent privkey")
+
 
 def encode_privkey(priv, formt, vbyte=0):
     if not isinstance(priv, int_types):
@@ -245,6 +252,7 @@ def encode_privkey(priv, formt, vbyte=0):
         return bin_to_b58check(encode(priv, 256, 32) + b'\1', magicbyte=int(vbyte)|0x80)
     else: raise Exception("Invalid format!")
 
+
 def decode_privkey(priv,formt=None):
     if not formt: formt = get_privkey_format(priv)
     if formt == 'decimal': return priv
@@ -258,16 +266,25 @@ def decode_privkey(priv,formt=None):
         return decode(b58check_to_bin(priv)[:32], 256)
     else: raise Exception("WIF does not represent privkey")
 
+
 def convert_privkey(priv, formt=None):
     from_format = get_privkey_format(priv)
-    to_format = 'hex' if formt is None else str(formt)
+    is_compressed = "compressed" in from_format
+    if formt is None:
+        "hex_compressed" if is_compressed else "hex"
     if from_format == to_format:
         return priv
     return encode_privkey(decode_privkey(priv, from_format), to_format)
 
+
+def wif_to_sec(wif):
+    return convert_privkey(wif, )
+
+
 def add_pubkeys(p1, p2):
     f1, f2 = get_pubkey_format(p1), get_pubkey_format(p2)
     return encode_pubkey(fast_add(decode_pubkey(p1, f1), decode_pubkey(p2, f2)), f1)
+
 
 def add_privkeys(p1, p2):
     f1, f2 = get_privkey_format(p1), get_privkey_format(p2)
@@ -290,16 +307,20 @@ def divide(pubkey, privkey):
 
 def compress(pubkey):
     f = get_pubkey_format(pubkey)
-    if 'compressed' in f: return pubkey
-    elif f == 'bin': return encode_pubkey(decode_pubkey(pubkey, f), 'bin_compressed')
+    if 'compressed' in f: 
+        return pubkey
+    elif f == 'bin': 
+        return encode_pubkey(decode_pubkey(pubkey, f), 'bin_compressed')
     elif f == 'hex' or f == 'decimal':
         return encode_pubkey(decode_pubkey(pubkey, f), 'hex_compressed')
 
 
 def decompress(pubkey):
     f = get_pubkey_format(pubkey)
-    if 'compressed' not in f: return pubkey
-    elif f == 'bin_compressed': return encode_pubkey(decode_pubkey(pubkey, f), 'bin')
+    if 'compressed' not in f: 
+        return pubkey
+    elif f == 'bin_compressed': 
+        return encode_pubkey(decode_pubkey(pubkey, f), 'bin')
     elif f == 'hex_compressed' or f == 'decimal':
         return encode_pubkey(decode_pubkey(pubkey, f), 'hex')
 
@@ -318,7 +339,6 @@ privtopub = privkey_to_pubkey
     
 
 def privkey_to_address(priv, magicbyte=0):
-    magicbyte = 111 if (str(priv)[0] in "c9" and len(str(priv)) != 64) else magicbyte
     return pubkey_to_address(privkey_to_pubkey(priv), int(magicbyte))
     
 privtoaddr = privkey_to_address
@@ -355,12 +375,6 @@ def subtract_privkeys(p1, p2):
 def mul_privkeys(p1, p2):
     f1, f2 = get_privkey_format(p1), get_privkey_format(p2)
     return encode_privkey((decode_privkey(p1, f1) * decode_privkey(p2, f2)) % N, f1)
-
-
-def wif_to_sec(wif):
-    formt = get_privkey_format(wif)
-    sec_formt = 'hex_compressed' if 'compressed' in formt else 'hex'
-    return encode_privkey(decode_privkey(wif), sec_formt)
 
 
 # NOTE: this will return True for any int
@@ -615,7 +629,6 @@ def ecdsa_sign(msg, priv):
     return sig
     
 
-
 def ecdsa_raw_verify(msghash, vrs, pub):
     """Verifies signature against pubkey for digest hash (msghash)"""
     v, r, s = vrs
@@ -629,6 +642,7 @@ def ecdsa_raw_verify(msghash, vrs, pub):
     pub = decode_pubkey(pub)
     x, y = fast_add(fast_multiply(G, u1), fast_multiply(pub, u2))
     return bool(r == x and (r % N) and (s % N))
+
 
 # For BitcoinCore
 def ecdsa_verify_addr(msg, sig, addr):
@@ -652,7 +666,6 @@ def ecdsa_raw_recover(msghash, vrs):
     v, r, s = vrs
     if not (27 <= v <= 34):
         raise ValueError("%d must in range 27-31" % v)
-
     x = r
     alpha = (x*x*x+A*x+B) % P
     beta = pow(alpha, (P+1)//4, P)                            # determine which
@@ -715,3 +728,16 @@ def satoshi_to_btc(val):
 
 def btc_to_satoshi(val):
     return int(val*1e8 + 0.5)
+
+
+def format_output(num, output_type):
+    if output_type == 'btc':
+        return '{0:,.8f}'.format(num)
+    elif output_type == 'mbtc':
+        return '{0:,.5f}'.format(num)
+    elif output_type == 'bit':
+        return '{0:,.2f}'.format(num)
+    elif output_type == 'satoshi':
+        return '{:,}'.format(int(num))
+    else:
+        raise Exception('Invalid Unit Choice: %s' % output_type)
