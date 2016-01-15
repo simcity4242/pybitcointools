@@ -29,35 +29,6 @@ def set_api(svc="blockcypher", code=""):
     varname = "{svc}_API".format(svc=svc.strip().upper())
     globals()[varname] = code
 
-        
-#def request(url, data=None, headers=None, params=None, **kwargs):
-#    import requests
-#    is_json_str = lambda s: isinstance(s, string_types) and set(s[0]+s[-1]) < set('''\'"[]{}''')
-#    nonce = random.randrange(999999)
-#    method = "POST" if data is not None else str(kwargs.get("method")).upper() \
-#              if kwargs.get("method", None) is not None else "GET"
-#    headers = headers if isinstance(headers, dict) else kwargs.get("headers") \
-#                if kwargs.get("headers", None) else {}
-#    headers.update({
-#                "User-agent":     "Mozilla/5.0%d" % nonce, 
-#                "Accept":         "application/json", 
-#                "Accept-Charset": "utf-8",
-#              })
-#    params, data = kwargs.get("params", None), kwargs.get("data", None)
-#    params = json.dumps(params) if isinstance(params, dict) else params
-#    data = json.dumps(data) if isinstance(params, dict) else data
-#    if method == 'GET':
-#        req = requests.get(url, headers=headers, params=params)
-#    if method == "POST":
-#        headers.update({"Content-Type": "application/json"})
-#        req = requests.post(url, data=data, params=params)
-#    if req.status_code != requests.codes.ALL_OK:
-#        error_txt = req.json() if is_json_str(req.content) else req.content
-#        raise Exception("%d error!\t%s\nContent:\t%s" %(req.status_code, req.reason, error_txt))
-#    try:
-#        return req.json()
-#    except (TypeError, ValueError):
-#        return req.text.encode()
 
 
 def make_request(*args, **kwargs):
@@ -894,27 +865,45 @@ def get_decoded_tx(rawtx, network=None):
     return jdata
 
 
-# fromAddr, toAddr, 12345, changeAddress
+# fromAddr OR txid:index, toAddr, 12345, changeAddress
 def get_tx_composite(inputs, outputs, output_value, change_address=None, network=None):
     """use blockcypher API to composite a Tx"""
     inputs = [inputs] if not isinstance(inputs, list) else inputs
     outputs = [outputs] if not isinstance(outputs, list) else outputs
     network = set_network(change_address or inputs) if not network else network.lower()
     url = "http://api.blockcypher.com/v1/btc/{network}/txs/new?includeToSignTx=true".format(\
-        network=('test3' if network=='testnet' else 'main'))
+            network=('test3' if network=='testnet' else 'main'))
     is_address = lambda a: bool(re.match("^[123mn][a-km-zA-HJ-NP-Z0-9]{26,33}$", a))
-    if any([is_address(x) for x in inputs]):
-        inputs_type = 'addresses'        # also accepts UTXOs
+    
+    #inputs
+    if any([is_address(x) for x in inputs]):        # inputs as addresses
+        inputs_type = 'addresses'        
+    elif any(filter(lambda s: ":" in s, inputs)):   # inputs as utxo:idx
+        inputs_type = 'utxos'
+        ins = []
+        for i in inputs:
+            ins.append({
+                        "prev_hash":    i[:i.find(":")], 
+                        "output_index": int(i[i.find(":")+1:])
+                      })
+        inputs = ins[:]
+    elif any([is_address(x) for x in inputs]) and any(filter(lambda s: ":" in s, inputs)):
+        raise Exception("Inputs takes EITHER address or 'utxo:index'")
+    
+    # outputs
     if any([is_address(x) for x in outputs]):
         outputs_type = 'addresses'
+    else:
+        raise Exception("Output must be an address")
+    
     data = {
-            'inputs':  [{inputs_type:  inputs}], 
+            'inputs':  [{"addresses":  inputs}] if inputs_type == "addresses" else inputs,
             'confirmations': 0, 
             'preference': 'high', 
             'outputs': [{outputs_type: outputs, "value": output_value}]
             }
     if change_address:
-        data["change_address"] = change_address    # 
+        data["change_address"] = change_address     
     jdata = json.loads(make_request(url, data))
     hash, txh = jdata.get("tosign")[0], jdata.get("tosign_tx")[0]
     assert bin_dbl_sha256(txh.decode('hex')).encode('hex') == hash, "checksum mismatch %s" % hash
