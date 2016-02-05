@@ -718,15 +718,19 @@ def mk_opreturn(msg, txhex=None):
     if txhex is None:
         return hexdata
     else:
-        if not re.match("^[0-9a-fA-F]$", txhex):
+        if not re.match("^[0-9a-fA-F]*$", txhex):
             return unhexlify(mk_opreturn(msg, hexlify(txhex)))
-        if isinstance(txhex, dict):
-            return deserialize((msg, mk_opreturn(serialize(txhex))))
+        elif isinstance(txhex, dict):
+            txo = txhex
+            outs = txo.get('outs')
+        else:
+            outs = deserialize(txhex).get('outs')
+        
         txo = deserialize(txhex)
-        outs = txo.get('outs')
-        if filter(lambda o: int(o.get('value')) == 0 or str(o.get('script')).startswith(('\x6a', '6a'))):  # 
-            raise Exception("OP_Return outputs are limited to 1")
-        outs.append(
-                    {'script': hexdata, 'value': 0}
-                    )
+        assert (len(outs) > 0) and sum(multiaccess(outs, 'value')) > 0 \
+                and not any([o for o in outs if o.get("script")[:2] == '6a']), "Tx limited to *1* OP_RETURN, and only whilst the other outputs send funds"
+        outs.append({
+                    'script': hexdata, 
+                    'value': 0
+                    })
         return serialize(txo)
