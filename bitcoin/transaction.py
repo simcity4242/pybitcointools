@@ -531,14 +531,16 @@ def get_script(*args, **kwargs):
     else:
         source = "both" 
     
-    
     if is_inp(args[0]):
         txid, vout = args[0].split(':')
         network = set_network(txid) if not kwargs.get('network', None) else kwargs.get('network')
-        txo = deserialize(fetchtx(txid, network))    # try fetching txid
-    elif (len(args) == 2 and source == 'both') or (len(args) == 3 and source != 'both'):
+        txo = deserialize(fetchtx(txid, network))    # try fetching txi
+    elif len(args) == 3 and source != 'both':
         txhex, vout = str(args[0]), int(args[1])
         txo = deserialize(txhex)                       
+    elif len(args) == 2 and source == 'both':
+        txhex, vout = str(args[0]), None
+        txo = deserialize(txhex)
     elif (1<= len(args) <= 2) and is_txhex(args[0]):    # for no vout
         txo = deserialize(args[0])  
         vout = None
@@ -550,9 +552,9 @@ def get_script(*args, **kwargs):
         script_pk.append(outp['script'])
         
     if source == 'ins':                        # return scriptsig
-        return script_pk if not vout else script_pk[int(vout)]
-    elif source == 'outs':                     # return scriptpubkey
         return scriptsig if not vout else scriptsig[int(vout)]
+    elif source == 'outs':                     # return scriptpubkey
+        return script_pk if not vout else script_pk[int(vout)]
     elif source == 'both':                     # return BOTH ins & outs
         return {'ins': scriptsig, 'outs': script_pk}
     else:
