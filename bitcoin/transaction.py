@@ -708,8 +708,10 @@ def der_extract(tx):
     return ders
 
 
-def mutate_tx(txh, i):
-    from bitcoin.main import neg_privkey
+
+TODO:
+#def mutate_tx(txh, i):
+#    from bitcoin.main import neg_privkey
 
 
 def mk_opreturn(msg, txhex=None):
