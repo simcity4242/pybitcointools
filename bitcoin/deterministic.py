@@ -146,17 +146,9 @@ def bip32_privtopub(data):
     return bip32_serialize(raw_bip32_privtopub(bip32_deserialize(data)))
 
 
-def bip32_ckd(data, i):
-    return bip32_serialize(raw_bip32_ckd(bip32_deserialize(data), i))
-
-
 def bip32_master_key(seed, vbytes=MAINNET_PRIVATE):
     """Takes entropy hex or bip39 mnemonic and returns master xprv key"""
-    if re.match(ur'^((\w+\b ){11})|(\w+\b ){23}\w+\b$', seed): 
-        try:
-            bip39_check(seed)
-        except AssertionError:
-            raise Exception("Mnemonic not BIP39")
+    if bip39_check(seed):
         seed = unhexlify(bip39_to_seed(seed))
     elif re.match("^[0-9a-fA-F]$", seed):
         seed = unhexlify(seed)
@@ -205,47 +197,46 @@ def crack_bip32_privkey(parent_pub, priv):
     return bip32_serialize(raw_crack_bip32_privkey(dsppub, dspriv))
 
 
-def bip32_path(*args):
+def coinvault_pub_to_bip32(*args):
+    if len(args) == 1:
+        args = args[0].split(' ')
+    vals = map(int, args[34:])
+    I1 = ''.join(map(chr, vals[:33]))
+    I2 = ''.join(map(chr, vals[35:67]))
+    return bip32_serialize((MAINNET_PUBLIC, 0, b'\x00'*4, 0, I2, I1))
+
+
+def coinvault_priv_to_bip32(*args):
+    if len(args) == 1:
+        args = args[0].split(' ')
+    vals = map(int, args[34:])
+    I2 = ''.join(map(chr, vals[35:67]))
+    I3 = ''.join(map(chr, vals[72:104]))
+    return bip32_serialize((MAINNET_PRIVATE, 0, b'\x00'*4, 0, I2, I3+b'\x01'))
+
+
+def bip32_descend(*args):
+    """Descend masterkey and return privkey"""
     if len(args) == 2 and isinstance(args[1], list):
         key, path = args
     elif len(args) == 2 and isinstance(args[1], string_types):
         key = args[0]
-        path = bip32_path_from_string(args[1])
-    else:
+        path = map(int, str(args[1]).lstrip("mM/").split('/'))
+    elif len(args):
         key, path = args[0], map(int, args[1:])
-
-    return reduce(bip32_ckd, path, key)
-
-
-def bip32_descend(*args):
-    return bip32_extract_key(bip32_path(*args))
-
-
-#explicit harden method.
-def bip32_harden(x):
-    return (1 << 31) + int(x)
-
-
-def bip32_path_from_string(pathstring): #can only handle private key style paths not others.
-    pathstring = pathstring.lstrip("mM/").rstrip(".pub")
-    def process(x):
-        nhx = x.rstrip("H'")
-        return bip32_harden(int(nhx)) if nhx != x else int(nhx)
-    pe = pathstring.split("/")
-    return [process(x) for x in pe]
-
-
+    for p in path:
+        key = bip32_ckd(key, p)
+    return bip32_extract_key(key)
 
 
 def bip32_ckd(key, *args, **kwargs):
     """Same as bip32_ckd but takes bip32_path or ints"""
-    # use M/path..., kwarg public=True or m/path.pub for public ckd
+    # use keyword public=True or end path in .pub for public child derivation
     argz = map(str, args)
     path = "/".join(argz)    # no effect if "m/path/0"
-    #path = argz if isinstance(argz, basestring) else "/".join(argz) if isinstance(argz, (list, tuple))   # no effect if "m/
-    is_public = path.startswith("M/") or path.endswith(".pub") or kwargs.get("public", False)
     if not path.startswith(("m/", "M/")):
-        path = "{0}/{1}".format("M" if is_public else "m", path)
+        path = "m/{0}".format(path)
+    is_public = path.startswith("M/") or path.endswith(".pub") or kwargs.get("public", False)
     pathlist = parse_bip32_path(path)
     for p in pathlist:
         key = bip32_serialize(raw_bip32_ckd(bip32_deserialize(key), p))
@@ -253,9 +244,8 @@ def bip32_ckd(key, *args, **kwargs):
 
 
 def parse_bip32_path(path):
-    """Takes CKD path notatation and returns list of ints
-       Path notations accepted:  m/0'/2H    M/1H/0'/1    m/0H/1/2H/2/1000000000.pub"""
-    path = path.lstrip("mM/").rstrip(".pub")
+    """Takes bip32 path, "m/0'/2H" or "m/0H/1/2H/2/1000000000.pub", returns list of ints """
+    path = path.lstrip("m/").rstrip(".pub")
     if not path:
         return []
     elif path.endswith("/"):
