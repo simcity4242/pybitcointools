@@ -146,9 +146,17 @@ def bip32_privtopub(data):
     return bip32_serialize(raw_bip32_privtopub(bip32_deserialize(data)))
 
 
+def bip32_ckd(data, i):
+    return bip32_serialize(raw_bip32_ckd(bip32_deserialize(data), i))
+
+
 def bip32_master_key(seed, vbytes=MAINNET_PRIVATE):
     """Takes entropy hex or bip39 mnemonic and returns master xprv key"""
-    if bip39_check(seed):
+    if re.match(ur'^((\w+\b ){11})|(\w+\b ){23}\w+\b$', seed): 
+        try:
+            bip39_check(seed)
+        except AssertionError:
+            raise Exception("Mnemonic not BIP39")
         seed = unhexlify(bip39_to_seed(seed))
     elif re.match("^[0-9a-fA-F]$", seed):
         seed = unhexlify(seed)
@@ -197,46 +205,47 @@ def crack_bip32_privkey(parent_pub, priv):
     return bip32_serialize(raw_crack_bip32_privkey(dsppub, dspriv))
 
 
-def coinvault_pub_to_bip32(*args):
-    if len(args) == 1:
-        args = args[0].split(' ')
-    vals = map(int, args[34:])
-    I1 = ''.join(map(chr, vals[:33]))
-    I2 = ''.join(map(chr, vals[35:67]))
-    return bip32_serialize((MAINNET_PUBLIC, 0, b'\x00'*4, 0, I2, I1))
-
-
-def coinvault_priv_to_bip32(*args):
-    if len(args) == 1:
-        args = args[0].split(' ')
-    vals = map(int, args[34:])
-    I2 = ''.join(map(chr, vals[35:67]))
-    I3 = ''.join(map(chr, vals[72:104]))
-    return bip32_serialize((MAINNET_PRIVATE, 0, b'\x00'*4, 0, I2, I3+b'\x01'))
-
-
-def bip32_descend(*args):
-    """Descend masterkey and return privkey"""
+def bip32_path(*args):
     if len(args) == 2 and isinstance(args[1], list):
         key, path = args
     elif len(args) == 2 and isinstance(args[1], string_types):
         key = args[0]
-        path = map(int, str(args[1]).lstrip("mM/").split('/'))
-    elif len(args):
+        path = bip32_path_from_string(args[1])
+    else:
         key, path = args[0], map(int, args[1:])
-    for p in path:
-        key = bip32_ckd(key, p)
-    return bip32_extract_key(key)
+
+    return reduce(bip32_ckd, path, key)
+
+
+def bip32_descend(*args):
+    return bip32_extract_key(bip32_path(*args))
+
+
+#explicit harden method.
+def bip32_harden(x):
+    return (1 << 31) + int(x)
+
+
+def bip32_path_from_string(pathstring): #can only handle private key style paths not others.
+    pathstring = pathstring.lstrip("mM/").rstrip(".pub")
+    def process(x):
+        nhx = x.rstrip("H'")
+        return bip32_harden(int(nhx)) if nhx != x else int(nhx)
+    pe = pathstring.split("/")
+    return [process(x) for x in pe]
+
+
 
 
 def bip32_ckd(key, *args, **kwargs):
     """Same as bip32_ckd but takes bip32_path or ints"""
-    # use keyword public=True or end path in .pub for public child derivation
+    # use M/path..., kwarg public=True or m/path.pub for public ckd
     argz = map(str, args)
     path = "/".join(argz)    # no effect if "m/path/0"
-    if not path.startswith(("m/", "M/")):
-        path = "m/{0}".format(path)
+    #path = argz if isinstance(argz, basestring) else "/".join(argz) if isinstance(argz, (list, tuple))   # no effect if "m/
     is_public = path.startswith("M/") or path.endswith(".pub") or kwargs.get("public", False)
+    if not path.startswith(("m/", "M/")):
+        path = "{0}/{1}".format("M" if is_public else "m", path)
     pathlist = parse_bip32_path(path)
     for p in pathlist:
         key = bip32_serialize(raw_bip32_ckd(bip32_deserialize(key), p))
@@ -244,8 +253,9 @@ def bip32_ckd(key, *args, **kwargs):
 
 
 def parse_bip32_path(path):
-    """Takes bip32 path, "m/0'/2H" or "m/0H/1/2H/2/1000000000.pub", returns list of ints """
-    path = path.lstrip("m/").rstrip(".pub")
+    """Takes CKD path notatation and returns list of ints
+       Path notations accepted:  m/0'/2H    M/1H/0'/1    m/0H/1/2H/2/1000000000.pub"""
+    path = path.lstrip("mM/").rstrip(".pub")
     if not path:
         return []
     elif path.endswith("/"):
@@ -262,24 +272,34 @@ def parse_bip32_path(path):
     return patharr
 
 
-# TODO: fix below bip44
-def bip44_ckd(masterkey, account=0, change=0):
+def bip44_ckd(masterkey, account=0, change=0, **kwargs):
     # m / purpose' / coin_type' / account' / change / address_index
-    assert str(masterkey)[0] in "xt", "Master key must be xprv/xpub or tprv/tpub"
-    network = "1H" if str(masterkey).startswith("t")  else "0H"
-    account, change = str(account), str(change)
-    account += 'H'
-    path = "m/44H/{network}/{account}/{change}".format(network=network, account=account, change=change)
+    assert masterkey[0] in "xt", "Master key {0} must be xprv/xpub or tprv/tpub".format(masterkey)
+    is_public = masterkey[:4] in ('xpub', 'tpub') or kwargs.get('public', False)
+    path = "{keytype}/44H/{network}/{account}/{change}".format( \
+                keytype = "M" if is_public else "m",
+                network = "{0}H".format(1 if masterkey.startswith("t") else 0), 
+                account = "{0}H".format(account),
+                change = change
+           )
     return bip32_ckd(masterkey, path)
+    
+    
+def bip44_ckd_privpub(masterkey, account=0, change=0, **kwargs):
+    keyprv = bip44_ckd(masterkey, account, change, **kwargs)
+    keypub = bip32_privtopub(keyprv)
+    return keyprv, keypub
 
 
-def bip44_descend(masterkey, account=0, change=0, addr_index=0):
+def bip44_descend(masterkey, network="btc", account=0, change=0, addr_index=0):
     # m / purpose' / coin_type' / account' / change / address_index
+    assert bip32_deserialize(masterkey)[1] == 0, "Masterkey depth != 0 (not a masterkey)"
     xprv = bip44_ckd(masterkey, account, change)
     return bip32_descend(xprv, int(addr_index))
 
 
 def bip44_address(masterkey, network='btc', account=0, for_change=0, index=0):
+    assert 0 <= (int(index) or int(account)) <= 0x7fffffff
     return privtoaddr(bip44_descend(masterkey, network, account, for_change, index), 0 if network=='btc' else 111)
 
 
@@ -288,11 +308,11 @@ def bip44_address_info(masterkey, network='btc', account=0, for_change=0, index=
     index = int(index)
     paths, addrs, wifs = [], [], []
     for i in range(index, index+20):
-        paths.append(str("m/44'/0'/0'/0/{0}".format(index)).rjust(20))
-        addrs.append(str(bip44_address(masterkey, network, account, for_change, i)).rjust(42))
-        wifs.append(str(bip44_address(masterkey, network, account, for_change, i)).rjust(66))
+        paths.append(str("m/44'/0'/0'/0/{0}".format(i)).ljust(20))
+        addrs.append(str(bip44_descend(masterkey, network, account, for_change, i)).ljust(42))
+        wifs.append(str(bip44_address(masterkey, network, account, for_change, i)).ljust(66))
     lines = zip(paths, addrs, wifs, ["\n"]*20)
-    res = map(lambda o: "".join(list(o)), lines)
+    res = "".join(map(lambda o: "".join(list(o)), lines))
     print res
         
 
