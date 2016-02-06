@@ -1,78 +1,77 @@
 from bitcoin.pyspecials import *
 from bitcoin.main import *
 from bitcoin.deterministic import *
+from bitcoin.bci import *
 
 import re, hmac, hashlib
 
-# Alice's wallet:
-# Mnemonic (BIP39): [response seminar brave tip suit recall often sound stick owner lottery motion]
-# Hex seed (BIP39): b7b8706d714d9166e66e7ed5b3c61048
-
-RE_BIP47_HEXCODE = re.compile(ur'^0100(02|03)[0-9a-fA-F]{128}0{26}$')
-RE_BIP47_PAYCODE = re.compile(ur"^P[1-9a-km-zA-HJ-NP-Z]{0,115}$")
+RE_HEXCODE = re.compile(ur'^0100(02|03)[0-9a-fA-F]{128}0{26}$')
+RE_PAYCODE = re.compile(ur"^P[1-9a-km-zA-HJ-NP-Z]{0,115}$")
 
 
-def bip47_is_paycode(pcode):
-    if not bool(RE_BIP47_PAYCODE.match(pcode)):
+def is_bip47_code(s):
+    assert isinstance(s, basestring)
+    if not re.match("^[0-9a-fA-F]*$", s) and len(s)==80:
+        return is_bip47_code(safe_hexlify(s))
+    elif re.match("^[0-9a-fA-F]*$", s) and len(s)==160: 
+        return bool(RE_HEXCODE.match(s))
+    elif s[0] == 'P':
+        return bool(RE_PAYCODE.match(s))
+    else:
         return False
-    try:
-        b58check_to_hex(pcode)
-        return True
-    except AssertionError:
-        return False
-    raise Exception("{0} can't be IDd. Verify payment code is correct").format(pcode)   # should never reach this
-        
 
-def bip47_is_hexcode(hexstr):
-    return bool(RE_BIP47_HEXCODE.match(hexstr))
-    
 
-def bip47_derive_xpub(seed):
+
+def bip47_ckd(seed):
     """Derive derived xpub from entropy or mnemonic"""
-    master_key = bip32_master_key(seed)
-    xpub = bip32_ckd(master_key, """M/47'/0'/0'""")
-    return xpub
+    assert RE_MNEMONIC.match(seed) or RE_BIP32_PRIV.match(seed)
+    return bip32_ckd(bip32_master_key(seed), "M/47'/0'/0'")
     
 
-def bip47_paycode_to_hex(pcode):
-    hex = b58check_to_hex(pcode)
-    assert bip47_is_hexcode(hex)
-    return hex
+# def bip47_descend(key, index, account=0):
+#     """Return account pubkey at index"""
+#     assert 0 <= int(index) < 0x80000000
+#     pubkey = bip32_descend(key, "M/{}/{}".format(account, index))
     
 
-def bip47_hex_to_paycode(hex):
-    pcode = hex_to_b58check(hex, 0x47)
+def bip47_decode_paycode(pcode):
     assert bip47_is_paycode(pcode)
-    return pcode
+    return b58check_to_hex(pcode)
+    
+
+def bip47_encode_paycode(hexstr):
+    assert bip47_is_hexcode(hexstr)
+    return hex_to_b58check(hexstr, 0x47)
+
+
+# args = (pubkey, chaincode) or derived xpub(key)
+def bip47_serialize_paycode(*args):
+    if len(args) == 1 and re.match(r'^[xt]pub[0-9a-km-zA-HJ-NP-Z]{76,108}$', str(args[-1])):
+        xpub = args[0]
+        assert bip32_deserialize(xpub)[1] == 4, "xpub depth != 4"
+        chaincode = bip32_extract_chaincode(xpub)
+        pubkey = bip32_extract_key(xpub)
+    elif len(args) == 2:
+        pubkey, chaincode = sorted(args, cmp=lambda s,t: len(s) < len(t))
+    return '0100{0:066x}{1:064x}{2:026x}'.format(int(pubkey,16), int(chaincode,16), 0)
 
 
 def bip47_deserialize_paycode(pcode):
     """Deserialize payment code to (pubkey, chaincode) """
-    assert isinstance(pcode, basestring) and pcode[0] == "P"
-    hex = bip47_paycode_to_hex(pcode)
+    assert isinstance(pcode, basestring) and pcode.startswith('P')
+    hex = bip47_decode_paycode(pcode)
     pubkey = hex[4:70]
     chaincode = hex[70:134]
     return pubkey, chaincode
-    
-
-def bip47_serialize(*args):
-    """Takes xpub, (pubkey, chaincode) or (chaincode, pubkey) & serializes into bip47 hex code"""
-    if len(args) == 1 and args[0][:4] == 'xpub':
-        xpub = args[0]
-        assert bip32_deserialize(xpub)[1] == 3, "xpub is not M/47'/0'/0'"
-        chaincode = bip32_extract_chaincode(xpub)
-        pubkey = bip32_extract_key(xpub)
-    elif len(args) == 2:
-        chaincode = args[0] if len(args[0]) == 64 else args[1]
-        pubkey = args[1] if len(args[1]) == 66 else args[0]
-    return '0100{0}{1}00000000000000000000000000'.format(pubkey, chaincode)
 
 
-def bip47_derive_paycode(xkey):
-    if xkey.startswith("xprv") or xkey.count(" ") in (11, 23) or (re.match("^[0-9a-fA-F]$", xkey) and len(xkey) % 32 == 0):
-        pcode = bip47_serialize(bip47_derive_pubkey(xkey))
+def bip47_derive_paycode(rootkey):
+    """Derive paycode from initial entropy, mnemonic or root key """
+    if rootkey.startswith("xprv") or rootkey.count(" ") in (11, 23) or \
+             (re.match("^[0-9a-fA-F]$", rootkey) and len(rootkey) % 32 == 0):
+        pcode = bip47_serialize_paycode(bip47_ckd(xkey))
     elif xkey[:4] == "xpub":
-        pcode = bip47_serialize(xkey)
+        pcode = bip47_serialize_paycode(xkey)
     return pcode
 
 
@@ -91,9 +90,54 @@ def bip47_find_blinding_factor(a, B, outpoint):
     o = changebase(txid, 16, 256, 32)[::-1] + changebase(vout, 16, 256,  4)[::-1]
     s = hmac.new(x, o, hashlib.sha512).hexdigest()
     return s
+
+
+def bip47_get_xor_paycode(a, B, outpoint, paycode_in):
+    def sxor(s1, s2):
+        return ''.join(chr(ord(a) ^ ord(b)) for a,b in zip(s1, s2))
+    bf = unhexlify(bip47_find_blinding_factor(a, B, outpoint))
+    x, c = bip47_deserialize_paycode(paycode_in)
+    parity = x[:2]
+    x = x[2:]
+    assert parity in ('02', '03')
+    xdash = sxor(decode(bf[:32], 256), decode(x, 16))
+    cdash = sxor(decode(bf[-32:], 256), decode(c, 16), 16)
+    return bip47_serialize_paycode(parity+encode(xdash, 16, 64), encode(cdash, 16, 64))
+
+
+def bip47_mk_notification_tx(a, paycodeB):
+    # a is a privkey which should be difficult to associate with Alice
+    from_addr = privtoaddr(a)
+    from_pubkey = compress(privtopub(a))
+    B, ccB = bip47_deserialize_paycode(paycodeB)
+    notification_address = pubtoaddr(B)
+    txh = blockcypher_mktx(from_addr, notification_address, 50000)
+    txo = deserialize(txh)
+    outpoint = ""
+    for inp in txo["ins"]:
+        spk = deserialize_script(inp.get("script"))
+        if spk[-1] in (from_pubkey, decompress(from_pubkey)):
+             outpoint = "{hash}:{index}".format(hash=inp["outpoint"]["hash"], index=inp["outpoint"]["index"])
+    txo['outs'].append({'script': bip47_get_xor_paycode(a, B, outpoint, ), 'value': 0})
+
+
+def bip47_check_address(addr, index=0):
+    """Checks notification address at decreasing indexes for payments, returns [{"txid:vout": "6a4c5001..."}]"""
+    #from bitcoin.transaction import get_script
+    un = unspent(addr)[int(index) : 1+int(index)]
+    outpoint = access(un, "output")[int(index)]
+    txids = map(lambda s: str(s[:64]), outpoints)
+    #scripts = []
+    scriptpks = list(multiaccess(txo.get('outs'), 'script'))
+    opret = filter(lambda s: s.startswith("6a4c5001"), scriptpks)
+    assert is_bip47_code(deserialize_script(opret)[-1])
     
+    return scripts
+    # if scriptpk startswith 01 then select first exposed pubkey
 
 
+
+    
 
 Amn = "response seminar brave tip suit recall often sound stick owner lottery motion"
 Apc = "PM8TJTLJbPRGxSbc8EJi42Wrr6QbNSaSSVJ5Y3E4pbCYiTHUskHg13935Ubb7q8tx9GVbh2UuRnBc3WSyJHhUrw8KhprKnn9eDznYGieTzFcwQRya4GA"
@@ -116,3 +160,22 @@ bs = ['04448fd1be0c9c13a5ca0b530e464b619dc091b299b98c5cab9978b32b4a1b8b', '6bfa9
 Bs = ['024ce8e3b04ea205ff49f529950616c3db615b1e37753858cc60c1ce64d17e2ad8', '03e092e58581cf950ff9c8fc64395471733e13f97dedac0044ebd7d60ccc1eea4d', '029b5f290ef2f98a0462ec691f5cc3ae939325f7577fcaf06cfc3b8fc249402156', '02094be7e0eef614056dd7c8958ffa7c6628c1dab6706f2f9f45b5cbd14811de44', '031054b95b9bc5d2a62a79a58ecfe3af000595963ddc419c26dab75ee62e613842', '03dac6d8f74cacc7630106a1cfd68026c095d3d572f3ea088d9a078958f8593572', '02396351f38e5e46d9a270ad8ee221f250eb35a575e98805e94d11f45d763c4651', '039d46e873827767565141574aecde8fb3b0b4250db9668c73ac742f8b72bca0d0', '038921acc0665fd4717eb87f81404b96f8cba66761c847ebea086703a6ae7b05bd', '03d51a06c6b48f067ff144d5acdfbe046efa2e83515012cf4990a89341c1440289']
 
 bip47_txid = "bad5802e2183be44007b6b94395113d7cb513dbeb68d40245a83f5fadfcc76f3"
+bip47_txid2 = "9414f1681fb1255bd168a806254321a837008dd4480c02226063183deb100204"
+
+pchex = "010002063e4eb95e62791b06c50e1a3a942e1ecaaa9afbbeb324d16ae6821e091611fa96c0cf048f607fe51a0327f5e2528979311c78cb2de0d682c61e1180fc3d543b00000000000000000000000000"
+
+txh = "010000000186f411ab1c8e70ae8a0795ab7a6757aea6e4d5ae1826fc7b8f00c597d500609c010000006b483045022100ac8c6dbc482c79e86c18928a8b364923c774bfdbd852059f6b3778f2319b59a7022029d7cc5724e2f41ab1fcfc0ba5a0d4f57ca76f72f19530ba97c860c70a6bf0a801210272d83d8a1fa323feab1c085157a0791b46eba34afb8bfbfaeb3a3fcc3f2c9ad8ffffffff0210270000000000001976a9148066a8e7ee82e5c5b9b7dc1765038340dc5420a988ac1027000000000000536a4c50010002063e4eb95e62791b06c50e1a3a942e1ecaaa9afbbeb324d16ae6821e091611fa96c0cf048f607fe51a0327f5e2528979311c78cb2de0d682c61e1180fc3d543b0000000000000000000000000000000000"
+
+txo = """ \
+{'ins': [{'outpoint': {'hash': '9c6000d597c5008f7bfc2618aed5e4a6ae57677aab95078aae708e1cab11f486',
+                       'index': 1},
+          'script': '483045022100ac8c6dbc482c79e86c18928a8b364923c774bfdbd852059f6b3778f2319b59a7022029d7cc5724e2f41ab1fcfc0ba5a0d4f57ca76f72f19530ba97c860c70a6bf0a801210272d83d8a1fa323feab1c085157a0791b46eba34afb8bfbfaeb3a3fcc3f2c9ad8',
+          'sequence': 4294967295}],
+ 'locktime': 0,
+ 'outs': [{'script': '76a9148066a8e7ee82e5c5b9b7dc1765038340dc5420a988ac',
+           'value': 10000},
+          {'script': '6a4c50010002063e4eb95e62791b06c50e1a3a942e1ecaaa9afbbeb324d16ae6821e091611fa96c0cf048f607fe51a0327f5e2528979311c78cb2de0d682c61e1180fc3d543b00000000000000000000000000',
+           'value': 10000}],
+ 'version': 1}
+"""
+txo=eval(txo)
