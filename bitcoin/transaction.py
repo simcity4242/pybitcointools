@@ -709,7 +709,7 @@ def der_extract(tx):
 
 
 
-TODO:
+#TODO:
 #def mutate_tx(txh, i):
 #    from bitcoin.main import neg_privkey
 
