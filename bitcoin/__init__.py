@@ -9,3 +9,4 @@ from bitcoin.blocks import *
 from bitcoin.mnemonic import *
 from bitcoin.file_insert import *
 from bitcoin.utils import *
+from bitcoin.bip47 import *
