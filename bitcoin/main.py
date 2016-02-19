@@ -741,3 +741,17 @@ def format_output(num, output_type):
         return '{:,}'.format(int(num))
     else:
         raise Exception('Invalid Unit Choice: %s' % output_type)
+
+
+# amount, label, message, request
+def uri_encode(addr, amount=None, label=None, message=None):
+    #bitcoin:1NS17iag9jJgTHD1VXjvLCEnZuQ3rJED9L?amount=20.3&label=Luke-Jr&message=Donation%20for%20project%20xyz
+    from urllib import urlencode
+    base_uri = "bitcoin:{address}?{params}"
+    params = urlencode([
+                        ("amount", str(satoshi_to_btc(int(amount)))), 
+                        ("label", label),
+                        ("message", message)
+                       ])
+    uri = base_uri.format(address=addr, params=params)
+    return uri.replace("+", "%20")
