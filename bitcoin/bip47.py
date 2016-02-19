@@ -4,6 +4,12 @@ from bitcoin.deterministic import *
 from bitcoin.bci import *
 
 import re, hmac, hashlib
+try:
+    from strxor import strxor as sxor
+except ImportError:
+    def sxor(s1, s2):
+        return ''.join([chr(ord(a) ^ ord(b)) for a,b in zip(s1, s2)])
+
 
 RE_HEXCODE = re.compile(ur'^0100(02|03)[0-9a-fA-F]{128}0{26}$') 
 RE_PAYCODE = re.compile(ur"^P[1-9a-km-zA-HJ-NP-Z]{0,115}$")
@@ -21,67 +27,62 @@ def is_bip47_code(s):
         return False
 
 
-
 def bip47_ckd(seed):
     """Derive derived xpub from entropy or mnemonic"""
     assert RE_MNEMONIC.match(seed) or RE_BIP32_PRIV.match(seed)
     return bip32_ckd(bip32_master_key(seed), "M/47'/0'/0'")
     
 
-# def bip47_descend(key, index, account=0):
-#     """Return account pubkey at index"""
-#     assert 0 <= int(index) < 0x80000000
-#     pubkey = bip32_descend(key, "M/{}/{}".format(account, index))
+def derive_paycode(xkey):
+    """Derive paycode from initial entropy, mnemonic or root key """
+    if xkey.startswith("xprv") or xkey.count(" ") in (11, 23) or \
+             (re.match("^[0-9a-fA-F]$", xkey) and len(xkey) % 32 == 0):
+        pcode = serialize_paycode(bip47_ckd(xkey))
+    elif xkey[:4] == "xpub":
+        pcode = serialize_paycode(xkey)
+    return pcode
     
 
-def bip47_decode_paycode(pcode):
+def decode_paycode(pcode):
     """Decode b58check to hex paycode"""
     assert is_bip47_code(pcode)
     return b58check_to_hex(pcode)
     
 
-def bip47_encode_paycode(hexstr):
+def encode_paycode(hexstr):
     """Encode hex paycode to b58check hexcode"""
     assert is_bip47_code(hexstr)
     return hex_to_b58check(hexstr, 0x47)
 
 
 # args = (pubkey, chaincode) or derived xpub(key)
-def bip47_serialize_paycode(*args):
-    """Serialize (pubkey, chaincode) into hex"""
+def serialize_paycode(*args):
+    """Serialize xpub or (pubkey, chaincode) into hex"""
     
     # Convenience function, derived xpub
     if len(args) == 1 and RE_BIP32_PUB.match(str(args[-1])):
         xpub = args[0]
-        assert bip32_deserialize(xpub)[1] == 4, "xpub depth != 4"
+        assert bip32_deserialize(xpub)[1] == 3, "xpub = ({0}) instead of 3".format(bip32_deserialize(xpub)[1])
         chaincode = bip32_extract_chaincode(xpub)
         pubkey = bip32_extract_key(xpub)
-    elif len(args) == 2:
-        pubkey, chaincode = sorted(args, cmp=lambda s,t: len(s) < len(t))
+    elif len(args) == 1 and is_bip47_code(args[0]):
+        return args[0]
+    elif len(args) == 2 and isinstance(args[0], tuple):
+        pubkey, chaincode = sorted(args, key=lambda x: -len(x))
     return '0100{0:066x}{1:064x}{2:026x}'.format(int(pubkey,16), int(chaincode,16), 0)
 
 
-def bip47_deserialize_paycode(pcode):
+def deserialize_paycode(pcode):
     """Deserialize hex or b58check paycode to (pubkey, chaincode) """
     assert is_bip47_code(pcode)
-    hex = bip47_encode_paycode(pcode) if pcode.startswith('P') else pcode
+    hex = decode_paycode(pcode) if pcode.startswith('P') else pcode
     pubkey = hex[4:70]
     chaincode = hex[70:134]
     assert (hex[:4], hex[-26:]) == ('0100', '00'*13), "Deserialize Error! Ensure hex paycode is hexlified"
     return pubkey, chaincode
-    
-
-def bip47_derive_paycode(xkey):
-    """Derive paycode from initial entropy, mnemonic or root key """
-    if xkey.startswith("xprv") or xkey.count(" ") in (11, 23) or \
-             (re.match("^[0-9a-fA-F]$", xkey) and len(xkey) % 32 == 0):
-        pcode = bip47_serialize_paycode(bip47_ckd(xkey))
-    elif xkey[:4] == "xpub":
-        pcode = bip47_serialize_paycode(xkey)
-    return pcode
 
 
-def bip47_find_S(a, B):
+def find_S(a, B):
     """Find secret point, S, from notification Tx's 1st privkey (a) and receiver's pubkey (B)"""
     assert is_privkey(a) and is_pubkey(B)
     a, B = decode_privkey(a), decode_pubkey(B)
@@ -89,34 +90,45 @@ def bip47_find_S(a, B):
     return S[2:]
     
 
-def bip47_find_blinding_factor(a, B, outpoint):
+def find_blinding_factor(a, B, outpoint):
     """Outpoint is in "TXID:VOUT", a is Alice's privkey, B is Bob's pubkey"""
     txid, vout = outpoint.split(":")
-    x = changebase(bip47_find_S(a, B), 16, 256, 32)
+    x = changebase(find_S(a, B), 16, 256, 32)
     o = changebase(txid, 16, 256, 32)[::-1] + changebase(vout, 16, 256,  4)[::-1]
     s = hmac.new(x, o, hashlib.sha512).hexdigest()
     return s
 
 
-def bip47_get_xor_paycode(a, B, outpoint, paycode_in):
-    def sxor(s1, s2):
-        return ''.join([chr(ord(a) ^ ord(b)) for a,b in zip(s1, s2)])
-    bf = unhexlify(bip47_find_blinding_factor(a, B, outpoint))
-    x, c = bip47_deserialize_paycode(paycode_in)
+# TODO: not working, matches A0
+# deserialize_paycode() broken??
+# def bip47_check_derivation(privkey, paycode):
+#     assert RE_PRIVKEY.match(privkey), "{0} is not a privkey".format(privkey)
+#     assert RE_PAYCODE.match(paycode), "{0} is not a paycode".format(paycode)
+#     pubkey, _ = deserialize_paycode(paycode)
+#     return compress(privtopub(privkey)) == pubkey
+
+
+def get_xor_paycode(a, B, outpoint, paycode_in):
+    #assert bip47_check_derivation(a, paycode_in), "Privkey, {0}, not derived from {1}".format(a, paycode_in)
+    bf = unhexlify(find_blinding_factor(a, B, outpoint))
+    x, c = deserialize_paycode(paycode_in)
     parity = x[:2]
     x = x[2:]
     assert parity in ('02', '03')
     xdash = sxor(bf[:32], changebase(x, 16, 256, 32))
     cdash = sxor(bf[-32:], changebase(c, 16, 256, 32))
-    return bip47_serialize_paycode(parity+changebase(xdash, 256, 16, 64), changebase(cdash, 256, 16, 64))
+    return serialize_paycode(parity+changebase(xdash, 256, 16, 64), changebase(cdash, 256, 16, 64))
 
+
+#def check_blinded_paycode(a, B, outpoint, paycode_in):
+#    bf = unhexlify(find_blinding_factor(a, B, outpoint))
 
 # a = private key which signs outpoint, "txid:1", and sends to B's notification address
 def bip47_mk_notification_tx(a, outpoint, paycodeB):
     # a is a privkey which should be difficult to associate with Alice
     from_addr = privtoaddr(a)
     from_pubkey = compress(privtopub(a))
-    pubB, chaincodeB = bip47_deserialize_paycode(paycodeB)
+    pubB, chaincodeB = deserialize_paycode(paycodeB)
     notification_address = pubtoaddr(pubB)
     
     # TODO: need to figure out how the value is decided
@@ -130,7 +142,7 @@ def bip47_mk_notification_tx(a, outpoint, paycodeB):
 #                      
 #         if spk[-1] in (from_pubkey, decompress(from_pubkey)):
 #              outpoint = "{hash}:{index}".format(hash=inp["outpoint"]["hash"], index=inp["outpoint"]["index"])
-#     txo['outs'].append({'script': bip47_get_xor_paycode(a, B, outpoint, ), 'value': 0})
+#     txo['outs'].append({'script': get_xor_paycode(a, B, outpoint, ), 'value': 0})
 
 
 
@@ -199,4 +211,7 @@ outs = ['1ChvUUvht2hUQufHBXF8NgLhW8SwE2ecGV:50000']
 outpoint = ins[0]
 raw = "0100000001040210eb3d18636022020c48d48d0037a821432506a868d15b25b11f68f114940100000000ffffffff0150c30000000000001976a9148066a8e7ee82e5c5b9b7dc1765038340dc5420a988ac00000000"
 rawo = {'locktime': 0, 'outs': [{'value': 50000, 'script': '76a9148066a8e7ee82e5c5b9b7dc1765038340dc5420a988ac'}], 'version': 1, 'ins': [{'script': '', 'outpoint': {'index': 1, 'hash': '9414f1681fb1255bd168a806254321a837008dd4480c02226063183deb100204'}, 'sequence': 4294967295}]}
-#rawo['outs'].append({'script': bip47_get_xor_paycode(a0, B0, outpoint, Bpc), 'value': 0})
+#rawo['outs'].append({'script': get_xor_paycode(a0, B0, outpoint, Bpc), 'value': 0})
+
+Apubkey = "xpub6D3t231wUi5v9PEa8mgmyV7Tovg3CzrGEUGNQTfm9cK93je3PgX9udfhzUDx29pkeeHQBPpTSHpAxnDgsf2XRbvLrmbCUQybjtHx8SUb3JB"
+Bpubkey = "xpub6CcJ6kZ6c9PaqcHS11GvRBHtGQS6Q5scFxNoBBSHMGZgXgPQdnwA9xZwfquC4rnLVH9ua1sNmL6uBLFHSYH2ZwFvsVHV1ELuM5pSDSA9pfK"
