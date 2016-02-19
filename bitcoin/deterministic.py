@@ -245,7 +245,7 @@ def bip32_ckd(key, *args, **kwargs):
 
 def parse_bip32_path(path):
     """Takes bip32 path, "m/0'/2H" or "m/0H/1/2H/2/1000000000.pub", returns list of ints """
-    path = path.lstrip("m/").rstrip(".pub")
+    path = path.lstrip("mM/").rstrip(".pub")
     if not path:
         return []
     elif path.endswith("/"):
