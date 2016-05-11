@@ -267,18 +267,22 @@ def decode_privkey(priv,formt=None):
     else: raise Exception("WIF does not represent privkey")
 
 
-def convert_privkey(priv, formt=None):
+def convert_privkey(priv, to_format=None):
     from_format = get_privkey_format(priv)
-    is_compressed = "compressed" in from_format
-    if formt is None:
-        "hex_compressed" if is_compressed else "hex"
-    if from_format == to_format:
+    is_compressed = "compressed" in from_format 
+    if to_format is None:
+        to_format = "hex_compressed" if is_compressed else "hex"
+    elif "wif" in to_format:
+        return encode_privkey(decode_privkey(priv, from_format), to_format, get_version_byte(to_format))
+    elif from_format == to_format:
         return priv
-    return encode_privkey(decode_privkey(priv, from_format), to_format)
+    else:
+        return encode_privkey(decode_privkey(priv, from_format), to_format)
 
 
 def wif_to_sec(wif):
-    return convert_privkey(wif, )
+    is_compressed = "compressed" in get_privkey_format(wif)
+    return convert_privkey(wif, "hex_compressed" if is_compressed else "hex")
 
 
 def add_pubkeys(p1, p2):
