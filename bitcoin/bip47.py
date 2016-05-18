@@ -212,6 +212,6 @@ outpoint = ins[0]
 raw = "0100000001040210eb3d18636022020c48d48d0037a821432506a868d15b25b11f68f114940100000000ffffffff0150c30000000000001976a9148066a8e7ee82e5c5b9b7dc1765038340dc5420a988ac00000000"
 rawo = {'locktime': 0, 'outs': [{'value': 50000, 'script': '76a9148066a8e7ee82e5c5b9b7dc1765038340dc5420a988ac'}], 'version': 1, 'ins': [{'script': '', 'outpoint': {'index': 1, 'hash': '9414f1681fb1255bd168a806254321a837008dd4480c02226063183deb100204'}, 'sequence': 4294967295}]}
 #rawo['outs'].append({'script': get_xor_paycode(a0, B0, outpoint, Bpc), 'value': 0})
-
+ 
 Apubkey = "xpub6D3t231wUi5v9PEa8mgmyV7Tovg3CzrGEUGNQTfm9cK93je3PgX9udfhzUDx29pkeeHQBPpTSHpAxnDgsf2XRbvLrmbCUQybjtHx8SUb3JB"
 Bpubkey = "xpub6CcJ6kZ6c9PaqcHS11GvRBHtGQS6Q5scFxNoBBSHMGZgXgPQdnwA9xZwfquC4rnLVH9ua1sNmL6uBLFHSYH2ZwFvsVHV1ELuM5pSDSA9pfK"
