@@ -63,17 +63,8 @@ def is_testnet(inp):
 
     ## ADDRESSES
     if re.match(ur'^[123mn][a-km-zA-HJ-NP-Z0-9]{25,34}$', inp):
-        if re.match("^[2mn][a-km-zA-HJ-NP-Z0-9]{26,35}$", inp):
-            req = json.loads(make_request("https://testnet.blockexplorer.com/api/addr-validate/{addr}".format(addr=inp)))
-            assert req
-            return True
-        elif re.match("^[13][a-km-zA-HJ-NP-Z0-9]{26,35}$", inp):
-            req = json.loads(make_request("https://blockexplorer.com/api/addr-validate/{addr}".format(addr=inp)))
-            assert req
-            return False
-        else:
-            #sys.stderr.write("Bad address format %s")
-            return None
+        req = json.loads(make_request("https://blockexplorer.com/api/addr-validate/{addr}".format(addr=inp)))
+        return req or None
 
     ## TXID 
     elif re.match('^[0-9a-fA-F]{64}$', inp) or len(inp)==32:
