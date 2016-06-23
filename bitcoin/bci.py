@@ -16,7 +16,7 @@ except:
 
 FLAG_TESTNET = None
 
-BET_URL, BE_URL = "https://testnet.blockexplorer.com/api", "https://blockexplorer.com/api"
+BE_URL = "https://blockexplorer.com/api"    # BET_URL dead
 BLOCKRT_URL, BLOCKR_URL = "http://tbtc.blockr.io/api/v1", "http://btc.blockr.io/api/v1"
 BLOCKCYPHERT_URL, BLOCKCYPHER_URL = 'https://api.blockcypher.com/v1/btc/test3/', 'https://api.blockcypher.com/v1/btc/main/'
 
@@ -25,7 +25,6 @@ BLOCKCYPHERT_URL, BLOCKCYPHER_URL = 'https://api.blockcypher.com/v1/btc/test3/',
 def set_api(svc="blockcypher", code=""):
     """Set API code for web service"""
     pass
-
 
 
 def make_request(*args, **kwargs):
@@ -62,9 +61,10 @@ def is_testnet(inp):
         pass
 
     ## ADDRESSES
-    if re.match(ur'^[123mn][a-km-zA-HJ-NP-Z0-9]{25,34}$', inp):
-        req = json.loads(make_request("https://blockexplorer.com/api/addr-validate/{addr}".format(addr=inp)))
-        return req or None
+    if re.match(ur'^[123mn][a-km-zA-HJ-NP-Z0-9]{25,35}$', inp):
+        req = json.loads(make_request("https://tbtc.blockr.io/api/v1/address/info/{addr}".format(addr=inp)))
+        assert req.get("status") == 'success'
+        return bool(req.get("data").get("is_valid"))
 
     ## TXID 
     elif re.match('^[0-9a-fA-F]{64}$', inp) or len(inp)==32:
