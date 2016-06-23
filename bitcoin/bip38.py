@@ -1,4 +1,5 @@
-#! python
+#! python2
+#designed with Pythonista 3 for iOS 
 
 from bitcoin.main import *
 from bitcoin.pyspecials import *
@@ -20,7 +21,8 @@ except ImportError:
 
 
 COMPRESSION_FLAGBYTES = [u'20', u'24', u'28', u'2c', u'30', u'34', u'38', u'3c', u'e0', u'e8', u'f0', u'f8']
-    
+LOTSEQUENCE_FLAGBYTES = [u'04', u'0c', u'14', u'1c', u'24', u'2c', u'34', u'3c']
+
 
 def aes_encrypt_bip38(msg, key, pad="{", blocksize=16):
     if len(key) != 32:
@@ -119,7 +121,7 @@ def bip38_decrypt_privkey(password, enckey, returnLot=False):
     elif prefix == '0143':
         addrhash = enckeyhex[6:-64]
         ownerentropy = enckeyhex[14:-48]
-        encryptedhalf1, encryptedhalf2 = unhexlify(enckeyhex[30:-32]), unhexlify(enckeyhex[46:])
+        encryptedhalf1firsthalf, encryptedhalf2 = unhexlify(enckeyhex[30:-32]), unhexlify(enckeyhex[46:])
     else:
         raise Exception('decrypt_priv_key() unknown private key input error 1')
     
@@ -145,5 +147,50 @@ def bip38_decrypt_privkey(password, enckey, returnLot=False):
                 return base58_check_and_encode(rehexlify(privKeyHex)), False, False
             else:
                 return base58_check_and_encode(rehexlify(privKeyHex))
-
-                
+    elif prefix == "0143":
+        if flagbyte.lower() in LOTSEQUENCE_FLAGBYTES:
+            lotsequence = ownerentropy[8:]
+            ownersalt = ownerentropy[:-8]
+            returnlot2 = True
+        else:
+            ownersalt = ownerentropy
+            returnlot2 = False
+        scryptsalt = unhexlify(ownersalt)
+        prefactor = hexlify(scrypt.hash(password, scryptsalt, 16384, 8, 8, 32))
+        if flagbyte.lower() in LOTSEQUENCE_FLAGBYTES: 
+            passfactor = dbl_sha256(prefactor + ownerentropy)
+        else:
+            passfactor = prefactor
+        
+        passpoint = compress(privtopub(passfactor))
+        password2 = unhexlify(passpoint)
+        scryptsalt2 = unhexlify(addrhash + ownerentropy)
+        secondseedbkey = scrypt.hash(password2, scryptSalt2, 1024, 1, 1, 64)
+        decryption2 = aes_decrypt_bip38(encryptedhalf2, secondseedbkey[32:])
+        encryptedHalf1SecondHalfCATseedblastthird = encode(
+                                decode(decryption2, 256) ^ decode(secondseedbkey, 256), 
+                                                            256, 16)
+        encryptedhalf1 = encryptedhalf1firsthalf + encryptedHalf1SecondHalfCATseedblastthird[:-8]
+        decryption1 = aes_decrypt_bip38(encryptedhalf1, secondseedbkey[32:])
+        seedbfirstpart = encode(decode(decryption1, 256) ^ decode(secondseedbkey[:-48], 256), 256, 8)
+        seedb = seedbfirstpart + encryptedHalf1SecondHalfCATseedblastthird[8:]
+        factorb = bin_dbl_sha256(seedb)
+        
+        newprivkey = encode(int(decode(factorb, 256) * decode(passfactor, 256)) % N, 16, 64)
+        newpubkey = compress(privtopub(newprivkey)) if flagbyte.lower() in \
+                    COMPRESSION_FLAGBYTES else decompress(rivtopub(newprivkey))
+        btcaddr = pubtoaddr(newpubkey)
+        checksum = bin_dbl_sha256(btcaddr)[:4]
+        
+        if addrhash == checksum:
+            newprivkey = newprivkey + "01" if flagbyte.lower() in COMPRESSION_FLAGBYTES else newprivkey
+            if returnLot:
+                if returnlot2:
+                    lotsequence = decode(lotsequence, 16)
+                    sequencenum = int(lotsequence % 4096)
+                    lotnum = (lotsequence - sequencenum) // 4096
+                    return hex_to_b58check(newprivkey), lotnum, sequencenum
+                else:
+                    return hex_to_b58check(newprivkey), False, False
+            else:
+                return hex_to_b58check(newprivkey)
