@@ -462,7 +462,7 @@ def be_fetchtx(txhash, network=None):
         return [be_fetchtx(h) for h in txhash]
     if not re.match('^[0-9a-fA-F]*$', txhash):
         txhash = safe_hexlify(txhash)
-    data = make_request("%s/tx/%s" % BE_URL, txhash))
+    data = make_request("%s/tx/%s" % BE_URL, txhash)
     jsonobj = json.loads(data)
     txh = jsonobj.get("rawtx")
     return txh
