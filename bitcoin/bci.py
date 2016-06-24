@@ -61,10 +61,10 @@ def is_testnet(inp):
         pass
 
     ## ADDRESSES
-    if re.match(ur'^[123mn][a-km-zA-HJ-NP-Z0-9]{25,35}$', inp):
-        req = json.loads(make_request("https://tbtc.blockr.io/api/v1/address/info/{addr}".format(addr=inp)))
-        assert req.get("status") == 'success'
-        return bool(req.get("data").get("is_valid"))
+    if re.match('^[123mn][a-km-zA-HJ-NP-Z0-9]{25,35}$', inp):
+        if re.match('^[2mn][a-km-zA-HJ-NP-Z0-9]{25,35}$', inp):
+	        return True
+        return False
 
     ## TXID 
     elif re.match('^[0-9a-fA-F]{64}$', inp) or len(inp)==32:
@@ -130,10 +130,14 @@ def parse_addr_args(*args):
 # Gets the unspent outputs of one or more addresses
 
 def be_unspent(*args, **kwargs):
-    try: addrs, network = parse_addr_args(*args)
-    except: network = "btc", args[:-1]
+    try:
+        addrs, network = parse_addr_args(*args)
+    except:
+        network = "btc", args[:-1]
+    if network == 'testnet':
+        raise Exception("BlockExplorer no longer supports testnet")
     u = []
-    baseurl = "https://{network}blockexplorer.com/api/addr/{address}/utxo?noCache=1"
+    baseurl = "https://blockexplorer.com/api/addr/{address}/utxo?noCache=1"
     for a in addrs:
         try:
             data = make_request(baseurl.format(network=("testnet." if network=="testnet" else ""), address=a))
@@ -206,33 +210,6 @@ def blockr_unspent(*args):
             })
     return o
 
-
-#def biteasy_unspent(*args):
-#    addrs, network = parse_addr_args(*args)
-#    base_url = "https://api.biteasy.com/{network}/v1/addresses/{addr}/unspent-outputs?per_page=20"
-#    offset, txs = 0, []
-#    for addr in addrs:
-#        url = base_url.format(network=('testnet' if network=='testnet' else 'blockchain'), addr=addr)
-#        # TODO: fix multi address search
-#        while True:
-#            data = make_request(url)
-#            try:
-#                jsondata = json.loads(data.decode('utf-8'))
-#            except:
-#                raise Exception("Could not decode JSON data")
-#            txs.extend(jsondata['data']['outputs'])
-#            if jsondata['data']['pagination']['next_page'] is False:
-#                break
-#            offset += 20 # jsondata['data']['pagination']["per_page"]
-#            sys.stderr.write("Fetching more transactions... " + str(offset) + '\n')
-#        o = []
-#        for utxo in txs:
-#            assert utxo['to_address'] == addr and utxo['is_spent'] == 0, "Wrong address or UTXO is spent"
-#            o.append({
-#                "output": "%s:%d" % (utxo['transaction_hash'], utxo['transaction_index']),
-#                "value": utxo['value']
-#            })
-#        return o
 
 
 def blockcypher_unspent(*args):
@@ -459,10 +436,10 @@ def pushtx(*args, **kwargs):
 
 
 def last_block_height(network='btc'):
-    if network == 'testnet':
-        jsonobj = json.loads(make_request('%s/status?q=getBlockCount' % BET_URL))
-        return jsonobj.get("blockcount")
-    elif network == "btc":
+    #if network == 'testnet':
+    #    jsonobj = json.loads(make_request('%s/status?q=getBlockCount' % BET_URL))
+    #    return jsonobj.get("blockcount")
+    if network == "btc":
         jsonobj = json.loads(make_request('%s/status?q=getBlockCount' % BE_URL))
         return jsonobj.get("blockcount")
 
@@ -479,11 +456,13 @@ def bci_fetchtx(txhash):
 
 def be_fetchtx(txhash, network=None):
     network = set_network(txhash) if not network else network
+    if network == 'testnet':
+        raise Exception("BlockExplorer does not support Testnet any longer")
     if isinstance(txhash, list):
         return [be_fetchtx(h) for h in txhash]
     if not re.match('^[0-9a-fA-F]*$', txhash):
         txhash = safe_hexlify(txhash)
-    data = make_request("%s/tx/%s" % ((BET_URL if network=="testnet" else BE_URL), txhash))
+    data = make_request("%s/tx/%s" % BE_URL, txhash))
     jsonobj = json.loads(data)
     txh = jsonobj.get("rawtx")
     return txh
@@ -604,7 +583,9 @@ get_block_by_height = get_block_at_height
 
 
 def get_block_height(blockhash, network="btc"):
-    url = "%s/api/block/%s" % (BET_URL if network=="testnet" else BE_URL, blockhash)
+    if network == 'testnet':
+        raise Exception("BlockExplorer does not support Testnet any longer")
+    url = "%s/api/block/%s" % (BE_URL, blockhash)
     jsonobj = json.loads(make_request(url))
     return jsonobj.get("height")
 
@@ -720,7 +701,7 @@ def smartbits_search(q, network='btc'):
 
 
 def estimate_fee_by_nblocks(nblocks=6, network="btc"):
-    url = "%s/utils/estimatefee?nbBlocks=%d" % (BET_URL if network == "testnet" else BE_URL, int(nblocks))
+    url = "%s/utils/estimatefee?nbBlocks=%d" % (BE_URL, int(nblocks))
     data = json.loads(make_request(url))
     btc_to_satoshi = lambda b: int(b*1e8 + 0.5)
     btcfee = data.get(str(nblocks))
@@ -760,7 +741,7 @@ def address_txlist(*args):
     addrs, network = parse_addr_args(*args)
     txs = {}
     for addr in addrs:
-        url = "%s/addr/%s" % (BET_URL if network == "testnet" else BE_URL, addr)
+        url = "%s/addr/%s" % (BE_URL, addr)
         jsonobj = json.loads(make_request(url))
         assert jsonobj.get("addrStr") == addr 
         txs[str(addr)] = jsonobj
