@@ -312,4 +312,3 @@ def bip32_info(xkey):
     deser = [safe_hexlify(x) for x in bip32_deserialize(xkey) if isinstance(x, string_types)]
     deser[0] = "tPRV" if changebase(deser[0], 16, 256, 4) == TESTNET_PRIVATE else "xPRV"
     return deser
-    
