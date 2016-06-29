@@ -1,14 +1,15 @@
 from bitcoin.main import *
 import hmac
 import hashlib
+import re
 from binascii import hexlify
-from bitcoin.mnemonic import prepare_elec2_seed, is_elec1_seed, is_elec2_seed, bip39_check, bip39_to_seed
+from bitcoin.mnemonic import elec2_prepare_seed, is_elec1_seed, is_elec2_seed, bip39_check, bip39_to_seed
 from bitcoin.pyspecials import *
 
 # Electrum wallets
 def bin_electrum_extract_seed(mn_seed, password=b''):
     if isinstance(mn_seed, string_types):
-        mn_seed = prepare_elec2_seed(mn_seed)
+        mn_seed = elec2_prepare_seed(mn_seed)
     else: 
         raise Exception("mnemonic string req")
     rootseed = safe_unhexlify(pbkdf2_hmac_sha512( \
@@ -19,7 +20,7 @@ def bin_electrum_extract_seed(mn_seed, password=b''):
 def electrum_extract_seed(mn_seed, password=''):
     if isinstance(mn_seed, list):
         mn_seed = ' '.join(mn_seed)
-    return safe_hexlify(bin_electrum_extract_seed(prepare_elec2_seed(mn_seed), password))
+    return safe_hexlify(bin_electrum_extract_seed(elec2_prepare_seed(mn_seed), password))
 
 
 def electrum_masterprivkey(mnemonic, password=''):
@@ -148,7 +149,7 @@ def bip32_privtopub(data):
 
 def bip32_master_key(seed, vbytes=MAINNET_PRIVATE):
     """Takes entropy hex or bip39 mnemonic and returns master xprv key"""
-    if bip39_check(seed):
+    if RE_MNEMONIC.match(seed):
         seed = unhexlify(bip39_to_seed(seed))
     elif re.match("^[0-9a-fA-F]$", seed):
         seed = unhexlify(seed)
@@ -214,33 +215,53 @@ def coinvault_priv_to_bip32(*args):
     I3 = ''.join(map(chr, vals[72:104]))
     return bip32_serialize((MAINNET_PRIVATE, 0, b'\x00'*4, 0, I2, I3+b'\x01'))
 
+#def bip32_descend(*args):
+#    """Descend masterkey and return privkey"""
+#    if len(args) == 2 and isinstance(args[1], list):
+#        key, path = args
+#    elif len(args) == 2 and isinstance(args[1], string_types):
+#        key = args[0]
+#        path = map(int, str(args[1]).lstrip("mM/").split('/'))
+#    else:
+#        key, path = args[0], map(int, args[1:])
+#    for p in path:
+#        key = bip32_ckd(key, p)
+#    return bip32_extract_key(key)
+	
+#def bip32_ckd(key, *args, **kwargs):
+#    """Same as bip32_ckd but takes bip32_path or ints"""
+#    # use keyword public=True or end path in .pub for public child derivation
+#    argz = map(str, args)
+#    path = "/".join(argz)    # no effect if "m/path/0"
+#    if not path.startswith(("m/", "M/")):
+#        path = "m/{0}".format(path)
+#    is_public = path.startswith("M/") or path.endswith(".pub") or kwargs.get("public", False)
+#    pathlist = parse_bip32_path(path)
+#    for p in pathlist:
+#        key = bip32_serialize(raw_bip32_ckd(bip32_deserialize(key), p))
+#    return key if not is_public else bip32_privtopub(key)
+
+def bip32_harden(x):
+    return int(x) | 0x80000000
 
 def bip32_descend(*args):
-    """Descend masterkey and return privkey"""
+    return bip32_extract_key(bip32_path(*args))
+
+def bip32_ckd(data, i):
+    return bip32_serialize(raw_bip32_ckd(bip32_deserialize(data), i))
+
+
+def bip32_path(*args, **kwargs):
     if len(args) == 2 and isinstance(args[1], list):
         key, path = args
-    elif len(args) == 2 and isinstance(args[1], string_types):
+    elif len(args) == 2 and RE_BIP32_PATH.match(args[1]):
         key = args[0]
-        path = map(int, str(args[1]).lstrip("mM/").split('/'))
-    elif len(args):
+        path = parse_bip32_path(args[1])		
+    else:
         key, path = args[0], map(int, args[1:])
-    for p in path:
-        key = bip32_ckd(key, p)
-    return bip32_extract_key(key)
-
-
-def bip32_ckd(key, *args, **kwargs):
-    """Same as bip32_ckd but takes bip32_path or ints"""
-    # use keyword public=True or end path in .pub for public child derivation
-    argz = map(str, args)
-    path = "/".join(argz)    # no effect if "m/path/0"
-    if not path.startswith(("m/", "M/")):
-        path = "m/{0}".format(path)
-    is_public = path.startswith("M/") or path.endswith(".pub") or kwargs.get("public", False)
-    pathlist = parse_bip32_path(path)
-    for p in pathlist:
-        key = bip32_serialize(raw_bip32_ckd(bip32_deserialize(key), p))
-    return key if not is_public else bip32_privtopub(key)
+    is_public = str(args[1]).startswith("M/") or str(args[1]).endswith(".pub") or kwargs.get("public", False)
+    ret = reduce(bip32_ckd, path, key)
+    return bip32_privtopub(ret) if is_public else ret
 
 
 def parse_bip32_path(path):
@@ -248,17 +269,15 @@ def parse_bip32_path(path):
     path = path.lstrip("mM/").rstrip(".pub")
     if not path:
         return []
-    elif path.endswith("/"):
+    if path.endswith("/"):
         path += "0"
     patharr = []
     for v in path.split('/'):
-        if not v: 
+        if v is None: 
             continue
         elif v[-1] in ("'H"):  # hardened path
-            v = int(v[:-1]) | 0x80000000
-        else:                  # non-hardened path
-            v = int(v) & 0x7fffffff
-        patharr.append(v)
+            v = bip32_harden(v[:-1])
+        patharr.append(int(v))
     return patharr
 
 
@@ -312,3 +331,4 @@ def bip32_info(xkey):
     deser = [safe_hexlify(x) for x in bip32_deserialize(xkey) if isinstance(x, string_types)]
     deser[0] = "tPRV" if changebase(deser[0], 16, 256, 4) == TESTNET_PRIVATE else "xPRV"
     return deser
+    
