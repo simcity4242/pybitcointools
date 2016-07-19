@@ -220,21 +220,6 @@ def mk_pubkey_script(addr):
 def mk_scripthash_script(addr):
     return 'a914' + b58check_to_hex(addr) + '87'
 
-def mk_opreturn(msg, *args):
-    orhex = serialize_script([0x6a, msg])
-    if len(args) == 0:
-        return orhex
-    elif len(args) == 1:
-        if isinstance(args[0], str) and re.match('^[0-9a-fA-F]*$', args[0]):
-            return serialize(mk_opreturn(msg, deserialize(args[0])))
-        elif isinstance(args[0], dict):
-            txo = args[0]
-    assert 'outs' in txo, "Outputs cannot be empty"
-    txo['outs'].append({'script': orhex, 'value': 0})
-    #if len(json_changebase(multiaccess(txo['outs'], 'script'), lambda x: unhexify(x))) != 1:
-    #    sys.stderr.write(("Outputs cannot have >1 OP_RETURN"))
-    return txo
-
 
 # Address representation to output script
 
@@ -713,9 +698,8 @@ def der_extract(tx):
 #def mutate_tx(txh, i):
 #    from bitcoin.main import neg_privkey
 
-
 def mk_opreturn(msg, txhex=None):
-    """Makes OP_RETURN script from msg, embeds in Tx hex"""    
+    """Makes OP_RETURN script from msg, embeds in Tx hex"""
     hexdata = safe_hexlify(b'\x6a' + wrap_script(msg))
     if txhex is None:
         return hexdata
@@ -727,12 +711,11 @@ def mk_opreturn(msg, txhex=None):
             outs = txo.get('outs')
         else:
             outs = deserialize(txhex).get('outs')
-        
         txo = deserialize(txhex)
         assert (len(outs) > 0) and sum(multiaccess(outs, 'value')) > 0 \
                 and not any([o for o in outs if o.get("script")[:2] == '6a']), "Tx limited to *1* OP_RETURN, and only whilst the other outputs send funds"
-        outs.append({
-                    'script': hexdata, 
+        txo['outs'].append({
+                    'script': hexdata,
                     'value': 0
                     })
         return serialize(txo)
