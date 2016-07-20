@@ -161,7 +161,7 @@ Fun stuff with json:
 
 * get_block_coinbase   : Return block's coinbase field (if any)
 * bip44_address        :
-* mk_opreturn          :
+* mk_opreturn          : (message, rawtx) -> add arbitrary metadata, limited to 80 chars, to a txout
 
 
 BLOCKCHAIN DECODING/ENCODING:
