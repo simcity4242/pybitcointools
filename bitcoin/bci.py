@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2
 from bitcoin.pyspecials import *
 #from bitcoin.constants import *
 
@@ -78,7 +78,7 @@ def is_testnet(inp):
         #sys.stderr.write("TxID %s has no match for testnet or mainnet (Bad TxID)")
         return None
         
-    elif re.match(ur'^(00000)[0-9a-f]{59}$', inp) or len(inp)==32:
+    elif re.match(r'^(00000)[0-9a-f]{59}$', inp) or len(inp)==32:
         base_url = "http://api.blockcypher.com/v1/btc/{network}/blocks/{blockhash}"
         try:
             make_request(base_url.format(network="test3", blockhash=inp.lower()))
