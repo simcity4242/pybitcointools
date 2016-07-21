@@ -6,21 +6,23 @@ import hashlib
 import struct
 
 
-is_python2 = str == bytes #or sys.version_info.major == 2
+is_python2 = (str == bytes)
 is_ios = "Pythonista" in os.environ.get("XPC_SERVICE_NAME", "")		# for Pythonista iOS
 
-RE_HEX_CHARS = re.compile(ur'^[0-9a-f]*$', re.I)        
-RE_TXID = re.compile(ur'^[0-9a-f]{64}$', re.I)
-RE_TXHEX = re.compile(ur'^01000000[0-9a-f]{108,}$', re.I)
+# REGEX
+
+RE_HEX_CHARS = re.compile(r"^[0-9a-f]*$", re.I)
+RE_TXID = re.compile(r'^[0-9a-f]{64}$', re.I)
+RE_TXHEX = re.compile(r'^01000000[0-9a-f]{108,}$', re.I)
 RE_BASE58_CHARS = re.compile('^[0-9a-km-zA-HJ-NP-Z]$')
-RE_BLOCKHASH = re.compile(ur'^(00000)[0-9a-f]{59}$', re.I)
-RE_ADDR = re.compile(ur'^[123mn][a-km-zA-HJ-NP-Z0-9]{25,34}$')
-RE_PUBKEY = re.compile(ur'^((02|03)[0-9a-f]{64})|(04[0-9a-f]{128})$', re.I)
-RE_PRIVKEY = re.compile(ur'^([0-9a-f]{64}(01)?)|([5KL9c][1-9a-km-zA-LMNP-Z]{50,51})|(\d){1,78}$')
-RE_MNEMONIC = re.compile(ur'^((\w+\b ){11})|(\w+\b ){23}\w+\b$')
-RE_BIP32_PRIV = re.compile(ur'^[xt]+prv[0-9a-km-zA-HJ-NP-Z]{76,108}$')
-RE_BIP32_PUB = re.compile(ur'^[xt]pub[0-9a-km-zA-HJ-NP-Z]{76,108}$')
-RE_BIP32_PATH = re.compile(ur'^((m/)|(M/))?[\d\'H/]*(\.pub)?$')
+RE_BLOCKHASH = re.compile(r'^(00000)[0-9a-f]{59}$', re.I)
+RE_ADDR = re.compile(r'^[123mn][a-km-zA-HJ-NP-Z0-9]{25,34}$')
+RE_PUBKEY = re.compile(r'^((02|03)[0-9a-f]{64})|(04[0-9a-f]{128})$', re.I)
+RE_PRIVKEY = re.compile(r'^([0-9a-f]{64}(01)?)|([5KL9c][1-9a-km-zA-LMNP-Z]{50,51})|(\d){1,78}$')
+RE_MNEMONIC = re.compile(r'^((\w+\b ){11})|(\w+\b ){23}\w+\b$')
+RE_BIP32_PRIV = re.compile(r'^[xt]+prv[0-9a-km-zA-HJ-NP-Z]{76,108}$')
+RE_BIP32_PUB = re.compile(r'^[xt]pub[0-9a-km-zA-HJ-NP-Z]{76,108}$')
+RE_BIP32_PATH = re.compile(r'^((m/)|(M/))?[\d\'H/]*(\.pub)?$')
 RE_DER = re.compile(ur'''
     30(?P<siglen>[0-4][0-9a-f])
     02(?P<rlen>[0-2][0-9a-f])(?P<r>(?:00)?[a-f0-9]{2,64})
@@ -31,7 +33,6 @@ RE_DER = re.compile(ur'''
 #   PYTHON 2
 if is_python2:
     
-    is_python2 = bytes == str
     st = lambda u: str(u)
     by = lambda v: bytes(v)
 
@@ -269,7 +270,7 @@ if is_python2:
 
 
 #   PYTHON 3
-elif sys.version_info.major == 3:
+elif sys.version_info.major > 2:
 
     xrange = range
     string_types = str
