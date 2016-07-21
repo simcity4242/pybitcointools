@@ -391,14 +391,14 @@ def is_privkey(priv):
 
 def is_pubkey(pubkey):
     pubkey = hexlify(pubkey) if not RE_HEX_CHARS.match(pubkey) else pubkey
-    RE_PUBKEY = re.compile(ur'^((02|03)[0-9a-f]{64})|(04[0-9a-f]{128})$', re.IGNORECASE)
+    RE_PUBKEY = re.compile(r'^((02|03)[0-9a-f]{64})|(04[0-9a-f]{128})$', re.IGNORECASE)
     return bool(RE_PUBKEY.match(pubkey))
     try:
         get_pubkey_format(pubkey)
         return True
     except:
         return False
-    #RE_PUBKEY = re.compile(ur'^((02|03)[0-9a-f]{64})|(04[0-9a-f]{128})$', re.IGNORECASE)
+    #RE_PUBKEY = re.compile(r'^((02|03)[0-9a-f]{64})|(04[0-9a-f]{128})$', re.IGNORECASE)
     #return bool(RE_PUBKEY.match(pubkey))
  
 
