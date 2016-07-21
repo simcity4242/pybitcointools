@@ -9,11 +9,12 @@ import random
 import hmac
 from bitcoin.ripemd import *
 
-if "ripemd160" not in hashlib.algorithms:
+is_python2 = str == bytes
+
+if (is_python2 and "ripemd160" not in hashlib.algorithms) or \
+   (not is_python2 and "ripemd160" not in hashlib.algorithms_available):
     from bitcoin import ripemd
     setattr(hashlib, 'ripemd160', ripemd.RIPEMD160)
-
-is_python2 = str == bytes
 
 
 # Elliptic curve parameters (secp256k1)
