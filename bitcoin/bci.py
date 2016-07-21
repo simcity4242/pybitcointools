@@ -2,15 +2,22 @@
 from bitcoin.pyspecials import *
 #from bitcoin.constants import *
 
-import json, re, binascii, datetime, urlparse, urllib2, random, sys
+import json, re, binascii, datetime, random, sys
+try:
+    import urllib.parse as urlparse
+    urljoin = urlparse.urljoin
+except:
+    import urlparse
+    from urlparse import urljoin
+    
 try:   
     import requests
 except ImportError: 
     pass
 
-from urlparse import urljoin
 try:    
     from urllib.request import build_opener, Request
+    from urllib.error import HTTPError
 except: 
     from urllib2 import build_opener, Request, HTTPError
 
@@ -43,10 +50,10 @@ def make_request(*args, **kwargs):
         data = None
         method = "GET"
     data = json.dumps(data) if isinstance(data, dict) else data
-    req = urllib2.Request(url, data=data, headers=headers)
+    req = Request(url, data=data, headers=headers)
     try:
-        return urllib2.urlopen(req).read().strip()
-    except urllib2.HTTPError as e:
+        return urlopen(req).read().strip()
+    except HTTPError as e:
         raise e
 
 
