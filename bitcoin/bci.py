@@ -157,7 +157,7 @@ def be_unspent(*args, **kwargs):
                     "value": p
                 })
         except:
-            print data
+            print(data)
             sys.stderr.write("Failed to decode data: "+data)
     return u
 
@@ -947,7 +947,7 @@ def get_chart(*args, **kwargs):
     """
     cmds = ['block-interval', 'block-reward', 'block-reward-per-block', 'block-size', 'block-size-total', 'blocks', 'blocks-total', 'currency-total', 'difficulty', 'hash-rate', 'miner-revenue', 'miner-revenue-per-block', 'output-amount', 'output-amount-per-block', 'transaction-fees', 'transaction-fees-per-block', 'transaction-fees-per-transaction', 'transactions', 'transactions-per-block', 'transactions-per-second', 'transactions-total']
     if len(args) < 1:
-        print '\n'.join(cmds)
+        print('\n'.join(cmds))
     elif len(args) == 1:
         chart_type = args[0].strip().lower()
     params = {}
