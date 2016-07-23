@@ -391,21 +391,16 @@ def is_privkey(priv):
         return False
 
 def is_pubkey(pubkey):
-    pubkey = hexlify(pubkey) if not RE_HEX_CHARS.match(pubkey) else pubkey
-    RE_PUBKEY = re.compile(r'^((02|03)[0-9a-f]{64})|(04[0-9a-f]{128})$', re.IGNORECASE)
-    return bool(RE_PUBKEY.match(pubkey))
     try:
         get_pubkey_format(pubkey)
-        return True
     except:
         return False
-    #RE_PUBKEY = re.compile(r'^((02|03)[0-9a-f]{64})|(04[0-9a-f]{128})$', re.IGNORECASE)
-    #return bool(RE_PUBKEY.match(pubkey))
+    finally:
+        return True
  
 
 def is_address(addr):
-    ADDR_RE = re.compile("^[123mn][a-km-zA-HJ-NP-Z0-9]{26,33}$")
-    return bool(ADDR_RE.match(addr))
+    return bool(RE_ADDR.match(addr))
 
 
 # Hashes
@@ -414,7 +409,8 @@ def is_address(addr):
 def bin_hash160(string):
     intermed = hashlib.sha256(string).digest()
     digest = ''
-    if not hasattr(hashlib, 'ripemd160') or "ripemd160" not in hashlib.algorithms:
+    if not hasattr(hashlib, 'ripemd160') or \
+     "ripemd160" not in (hashlib.algorithms if is_python2 else hashlib.algorithms_available):
         hashlib.ripemd160 = RIPEMD160
     digest = hashlib.ripemd160(intermed).digest()
     return digest
@@ -434,7 +430,8 @@ def sha256(string):
 
 
 def bin_ripemd160(string):
-    if not hasattr(hashlib, 'ripemd160') or "ripemd160" not in hashlib.algorithms:
+    if not hasattr(hashlib, 'ripemd160') or \
+     "ripemd160" not in (hashlib.algorithms if is_python2 else hashlib.algorithms_available):
         hashlib.ripemd160 = RIPEMD160
     digest = hashlib.ripemd160(string).digest()
     return digest
@@ -478,6 +475,7 @@ def num_to_var_int(x):
     elif x < 2**32:   return from_int_to_byte(254) + encode(x, 256, 4)[::-1]
     elif x < 2**64:   return from_int_to_byte(255) + encode(x, 256, 8)[::-1]
     else:             raise ValueError(x < 2**64)
+
 
 def num_to_op_push(x):
     x = int(x)
@@ -610,17 +608,14 @@ def ecdsa_raw_sign(msghash, priv):
     returns signature (v,r,s) with low s (BIP66) by default"""
     z = hash_to_int(msghash)
     k = deterministic_generate_k(msghash, priv)
-    #is_compressed = 'compressed' in get_privkey_format(priv)
+    is_compressed = 'compressed' in get_privkey_format(priv)
     r, y = fast_multiply(G, k)
     s = inv(k, N) * (z + r * decode_privkey(priv)) % N
     
-    #is_high_s = s*2  N
-    #v = (31 if is_compressed else 27) + ((y % 2) ^ is_high_s)
-    v, r, s = 27+((y % 2) ^ (0 if s * 2 < N else 1)), r, s if s * 2 < N else N - s
-    if 'compressed' in get_privkey_format(priv):
-        v += 4
+    is_high_s = s*2 > N
+    v = (31 if is_compressed else 27) + ((y % 2) ^ (1 if is_high_s else 0))
+    s = N-s if is_high_s else s
     return v, r, s
-
 
 
 
@@ -646,7 +641,7 @@ def ecdsa_raw_verify(msghash, vrs, pub):
     u1, u2 = z*w % N, r*w % N
     pub = decode_pubkey(pub)
     x, y = fast_add(fast_multiply(G, u1), fast_multiply(pub, u2))
-    return bool(r == x and (r % N) and (s % N))
+    return bool(r == x and ((r % N) and (s % N)))
 
 
 # For BitcoinCore
@@ -692,7 +687,7 @@ def ecdsa_recover(msg, sig):
     """Recover pubkey from message and base64 signature. For BTCCore msg=addr"""
     v,r,s = decode_sig(sig)
     Q = ecdsa_raw_recover(electrum_sig_hash(msg), (v,r,s))
-    return encode_pubkey(Q, 'hex_compressed') if v >= 30 else encode_pubkey(Q, 'hex')
+    return encode_pubkey(Q, 'hex_compressed' if v >= 30 else 'hex')
 
 
 # Modifications based on https://matt.ucc.asn.au/src/pbkdf2.py
@@ -715,6 +710,7 @@ def bin_pbkdf2_hmac(hashname, password, salt, rounds, dklen=None):
         i += 1
     return bytes(key[:dklen])
 
+
 def pbkdf2_hmac_sha512(password, salt):
     password, salt = from_str_to_bytes(password), from_str_to_bytes(salt)
     if hasattr(hashlib, 'pbkdf2_hmac'):
@@ -722,6 +718,7 @@ def pbkdf2_hmac_sha512(password, salt):
     else:
         b = bin_pbkdf2_hmac('sha512', password, salt, 2048, 64)
     return safe_hexlify(b)
+
 
 hmac_sha256 = lambda k, s: hmac.new(k, s, hashlib.sha256)
 hmac_sha512 = lambda k, s: hmac.new(k, s, hashlib.sha512)
@@ -751,7 +748,8 @@ def format_output(num, output_type):
 # amount, label, message, request
 def uri_encode(addr, amount=None, label=None, message=None):
     #bitcoin:1NS17iag9jJgTHD1VXjvLCEnZuQ3rJED9L?amount=20.3&label=Luke-Jr&message=Donation%20for%20project%20xyz
-    from urllib import urlencode
+    try:     from urllib.parse import urlencode  # Python 3
+    except:  from urllib import urlencode        # Python 2
     base_uri = "bitcoin:{address}?{params}"
     params = urlencode([
                         ("amount", str(satoshi_to_btc(int(amount)))), 
