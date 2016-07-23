@@ -1,25 +1,22 @@
 #!/usr/bin/python2
 from bitcoin.pyspecials import *
-#from bitcoin.constants import *
-
 import json, re, binascii, datetime, random, sys
-try:
+
+try:    # Python 3
     import urllib.parse as urlparse
     urljoin = urlparse.urljoin
-except:
+except: # Python 2
     import urlparse
     from urlparse import urljoin
     
-try:   
-    import requests
-except ImportError: 
-    pass
-
-try:    
-    from urllib.request import build_opener, Request
+try:    # Python 3
+    from urllib.request import build_opener, Request, urlopen
     from urllib.error import HTTPError
-except: 
-    from urllib2 import build_opener, Request, HTTPError
+except: # Python 2
+    from urllib2 import build_opener, Request, HTTPError, urlopen
+
+try:                import requests
+except ImportError: pass
 
 FLAG_TESTNET = None
 
@@ -70,7 +67,7 @@ def is_testnet(inp):
     ## ADDRESSES
     if re.match('^[123mn][a-km-zA-HJ-NP-Z0-9]{25,35}$', inp):
         if re.match('^[2mn][a-km-zA-HJ-NP-Z0-9]{25,35}$', inp):
-	        return True
+            return True
         return False
 
     ## TXID 
@@ -131,14 +128,14 @@ def parse_addr_args(*args):
     if addr_args and isinstance(addr_args, tuple) and isinstance(addr_args[0], list):
         addr_args = addr_args[0]
     network = set_network(addr_args)
-    return addr_args, network
+    return network, addr_args
 
 
 # Gets the unspent outputs of one or more addresses
 
 def be_unspent(*args, **kwargs):
     try:
-        addrs, network = parse_addr_args(*args)
+        network, addrs = parse_addr_args(*args)
     except:
         network = "btc", args[:-1]
     if network == 'testnet':
@@ -170,7 +167,7 @@ def be_unspent(*args, **kwargs):
 
 
 def bci_unspent(*args):
-    addrs, network = parse_addr_args(*args)
+    network, addrs = parse_addr_args(*args)
     if not network == "btc":
         raise Exception("BCI only supports mainnet, Network %s unsupported" % network)
     u = []
@@ -195,7 +192,7 @@ def bci_unspent(*args):
 
 def blockr_unspent(*args):
     # Where network is 'btc' or 'testnet'
-    addr_args, network = parse_addr_args(*args)
+    network, addr_args = parse_addr_args(*args)
 
     if network == 'testnet':
         blockr_url = 'http://tbtc.blockr.io/api/v1/address/unspent/'
@@ -220,7 +217,7 @@ def blockr_unspent(*args):
 
 
 def blockcypher_unspent(*args):
-    addrs, network = parse_addr_args(*args)
+    network, addrs = parse_addr_args(*args)
     url = "http://api.blockcypher.com/v1/btc/{network}/addrs/{addr_args}?unspentOnly=true&confirmations=0".format( \
         network=("test3" if network=="testnet" else "main"), 
         addr_args=";".join(list(addrs) if isinstance(addrs, tuple) else addrs)
@@ -259,7 +256,7 @@ def history(*args):
     #                      history(addr1, addr2, addr3, "testnet")
     if len(args) == 0 or (len(args)==1 and args[0] in ('testnet','btc')):
         return []
-    addrs, network = parse_addr_args(*args)
+    network, addrs = parse_addr_args(*args)
 
     if network == "btc":
         txs = []
@@ -745,7 +742,7 @@ def get_stats(days=1, network="btc", **kwargs):
 #stats = get_stats(
 
 def address_txlist(*args):
-    addrs, network = parse_addr_args(*args)
+    network, addrs = parse_addr_args(*args)
     txs = {}
     for addr in addrs:
         url = "%s/addr/%s" % (BE_URL, addr)
@@ -802,7 +799,7 @@ def get_decoded_txhex(txhex):
 
 def get_unconfirmed_txs(*args):
     '''Takes '''
-    addrs_args, network = parse_addr_args(*args)
+    network, addrs_args = parse_addr_args(*args)
     addrs = ';'.join(list(*addrs_args)) if not isinstance(addrs_args, list) else addrs_args
     url = "%s/addrs/%s/balance" % ((BLOCKCYPHERT_URL if network == 'testnet' else BLOCKCYPHER_URL), addrs)
     jdata = json.loads(make_request(url))
