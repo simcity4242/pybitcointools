@@ -188,13 +188,13 @@ def bin_txhash(tx, hashcode=None):
     return binascii.unhexlify(txhash(tx, hashcode))
 
 
-def ecdsa_tx_sign(tx, priv, hashcode=SIGHASH_ALL, low_s=True):
+def ecdsa_tx_sign(tx, priv, hashcode=SIGHASH_ALL):
     """Returns DER sig for rawtx w/ hashcode apppended"""
     rawsig = ecdsa_raw_sign(bin_txhash(tx, hashcode), priv)
-    if low_s:
-        v,r,s = rawsig
-        s = N-s if s>N//2 else s
-        rawsig = v,r,s
+    #if low_s:
+    #    v,r,s = rawsig
+    #    s = N-s if s>N//2 else s
+    #    rawsig = v,r,s
     return der_encode_sig(*rawsig) + encode(hashcode, 16, 2)
 
 
@@ -219,6 +219,21 @@ def mk_pubkey_script(addr):
 
 def mk_scripthash_script(addr):
     return 'a914' + b58check_to_hex(addr) + '87'
+
+def mk_opreturn(msg, *args):
+    orhex = serialize_script([0x6a, msg])
+    if len(args) == 0:
+        return orhex
+    elif len(args) == 1:
+        if isinstance(args[0], str) and re.match('^[0-9a-fA-F]*$', args[0]):
+            return serialize(mk_opreturn(msg, deserialize(args[0])))
+        elif isinstance(args[0], dict):
+            txo = args[0]
+    assert 'outs' in txo, "Outputs cannot be empty"
+    txo['outs'].append({'script': orhex, 'value': 0})
+    #if len(json_changebase(multiaccess(txo['outs'], 'script'), lambda x: unhexify(x))) != 1:
+    #    sys.stderr.write(("Outputs cannot have >1 OP_RETURN"))
+    return txo
 
 
 # Address representation to output script
@@ -407,8 +422,7 @@ def is_outp(arg):
 
 
 def is_txhex(txhex):
-    if not isinstance(txhex, string_types):
-        return False
+    RE_TXHEX = re.compile(ur'^01000000[0-9a-f]{108,}$', re.IGNORECASE)
     return bool(RE_TXHEX.match(txhex))
 
 
@@ -551,11 +565,16 @@ def get_script(*args, **kwargs):
 def get_scriptsig(*args, **kwargs):
     """Return scriptSig for 'txid:index'"""
     argz = args + ('ins',)
-    if len(args) == 1:
-        return get_script(*argz, **kwargs)
-    elif len(args) == 2:
-        ret = get_script(*argz, **kwargs)
-        return ret[int(args[-1])]
+    return get_script(*argz, **kwargs)
+#    if len(args) == 1 and ':' in args[0]:
+#        txid, vout = args[0].split(':')
+#    elif len(args) == 2 and args[0][:8] == '01000000' and str(args[1]).isdigit():
+#        txh, vout = args[0], int(args[1])
+#    network = kwargs.get('network', 'btc')
+#    try:    txo = deserialize(fetchtx(txid, network))
+#    except: txo = deserialize(txh)
+#    scriptsig = reduce(access, ["ins", vout, "script"], txo)
+#    return scriptsig
 
 
 # takes "txid:vout" or hex_tx, index
@@ -563,11 +582,16 @@ def get_scriptpubkey(*args, **kwargs):
     """Return scriptPubKey for 'txid:index'"""
     # TODO: can use biteasy to retrieve a Tx's SPK
     argz = args + ('outs',)
-    if len(args) == 1:
-        return get_script(*argz, **kwargs)
-    elif len(args) == 2:
-        ret = get_script(*argz, **kwargs)
-        return ret[int(args[-1])]
+    return get_script(*argz, **kwargs)
+#    if len(args) == 1 and ':' in args[0]:
+#        txid, vout = args[0].split(':')
+#    elif len(args) == 2 and args[0][:8] == '01000000' and str(args[1]).isdigit():
+#        txh, vout = args[0], int(args[1])
+#    network = kwargs.get('network', 'btc')
+#    try:    txo = deserialize(fetchtx(txid, network))
+#    except: txo = deserialize(txh)
+#    script_pubkey = reduce(access, ["outs", vout, "script"], txo)
+#    return script_pubkey
 
 
 # return inpoints, "TXID:vout", for raw Tx
@@ -576,7 +600,7 @@ def get_outpoints(rawtx, i=None):
     # if isinstance(rawtx, str) and not re.match('^[0-9a-fA-F]*$', rawtx):    # binary
     #     return safe_unhexlify(get_outpoints(rawtx, i))
     rawtxo = deserialize(rawtx) if (isinstance(rawtx, str) and re.match('^[0-9a-fA-F]*$', rawtx)) else rawtx 
-    assert isinstance(rawtxo, dict)
+    assert isinstance(rawtx, dict)
     #i = i or int(i)
     outpoints = []
     for tx in multiaccess(rawtxo['ins'], 'outpoint'):
@@ -587,7 +611,6 @@ def get_outpoints(rawtx, i=None):
 extract_tx_outpoints = get_outpoints
 
 # https://github.com/richardkiss/pycoin/blob/master/tests/bc_transaction_test.py#L177-L210
-# TODO: check functionality
 def check_transaction(tx):
     if isinstance(tx, string_types):
         if re.match('^[0-9a-fA-F]*$', tx):
@@ -639,7 +662,7 @@ def check_transaction(tx):
 
 def estimate_tx_size(rawtx):
     # Estimate size of Tx in bytes
-    if isinstance(rawtx, string_types) and re.match('^[0-9a-fA-F]*$', rawtx):
+    if isinstance(rawtx, basestring) and re.match('^[0-9a-fA-F]*$', rawtx):
         return estimate_tx_size(deserialize(rawtx))
     outs = rawtx.get("outs", [])
     ins = rawtx.get("ins", [])
@@ -647,7 +670,7 @@ def estimate_tx_size(rawtx):
 
 
 def deserialize_der(sig):
-    sig = bytes(bytearray.fromhex(sig)) if RE_HEX_CHARS.match(sig) else bytes(bytearray(sig))
+    sig = bytes(bytearray.fromhex(sig)) if re.match('^[0-9a-fA-F]*$', sig) else bytes(bytearray(sig))
     totallen = decode(sig[1], 256) + 2
     rlen = decode(sig[3], 256)
     slen = decode(sig[5+rlen], 256)
@@ -659,25 +682,20 @@ def deserialize_der(sig):
 
 
 def der_extract_rs(sig):
-    """Extract r, s values from DER signature"""
     res = deserialize_der(sig)
-    return res[:-1]
+    return res[:-2]
 
 
 def is_der(signature):
-    #RE_DER = re.compile(ur'30([0-4][0-9a-f])02([0-2][0-9a-f])((?:00)?[a-f0-9]{2,64})02([0-2][0-9a-f])((?:00)?[a-f0-9]{2,64})((0|8)[0-3])?', re.I)
-    if not isinstance(signature, string_types):
+    RE_DER = re.compile(ur'30([0-4][0-9a-f])02([0-2][0-9a-f])((?:00)?[a-f0-9]{2,64})02([0-2][0-9a-f])((?:00)?[a-f0-9]{2,64})((0|8)[0-3])?', re.I)
+    if not isinstance(signature, basestring):
         return False
     return bool(RE_DER.match(signature))
 
 
 def der_extract(tx):
-    if isinstance(tx, string_types) and bool(RE_HEX_CHARS.match(tx)):
+    if not isinstance(tx, dict):
         return serialize(der_extract(deserialize(tx)))
-    elif isinstance(tx, dict):
-        pass
-    else:
-        raise Exception("Must be either a JSON dict or Tx as hex")
     nin = len(tx.get("ins"))
     ins = tx.get("ins")
     scripts, ders = [], []
@@ -687,33 +705,34 @@ def der_extract(tx):
         descr = deserialize_script(scr)
         der = filter(lambda s: is_der(s), descr)
         ders.extend(der)
-    return ders if len(ders)>1 else ders[0] if len(ders)==1 else None
+    return ders
+
 
 
 #TODO:
 #def mutate_tx(txh, i):
 #    from bitcoin.main import neg_privkey
 
+
 def mk_opreturn(msg, txhex=None):
-    """Makes OP_RETURN script from msg, embeds in Tx hex"""
+    """Makes OP_RETURN script from msg, embeds in Tx hex"""    
     hexdata = safe_hexlify(b'\x6a' + wrap_script(msg))
     if txhex is None:
         return hexdata
     else:
-        if not RE_HEX_CHARS.match(txhex):
+        if not re.match("^[0-9a-fA-F]*$", txhex):
             return unhexlify(mk_opreturn(msg, hexlify(txhex)))
         elif isinstance(txhex, dict):
             txo = txhex
             outs = txo.get('outs')
         else:
             outs = deserialize(txhex).get('outs')
+        
         txo = deserialize(txhex)
-        # Checks OP_RETURN is not sole output, single OP_RETURN only, outputs' value > 0
         assert (len(outs) > 0) and sum(multiaccess(outs, 'value')) > 0 \
-                and not any([o for o in outs if o.get("script")[:2] == '6a']), \
-            "Tx limited to *1* OP_RETURN, and only whilst the other outputs send funds"
-        txo['outs'].append({
-                    'script': hexdata,
+                and not any([o for o in outs if o.get("script")[:2] == '6a']), "Tx limited to *1* OP_RETURN, and only whilst the other outputs send funds"
+        outs.append({
+                    'script': hexdata, 
                     'value': 0
                     })
         return serialize(txo)
