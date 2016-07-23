@@ -220,6 +220,7 @@ def mk_pubkey_script(addr):
 def mk_scripthash_script(addr):
     return 'a914' + b58check_to_hex(addr) + '87'
 
+
 def mk_opreturn(msg, *args):
     orhex = serialize_script([0x6a, msg])
     if len(args) == 0:
@@ -422,8 +423,19 @@ def is_outp(arg):
 
 
 def is_txhex(txhex):
-    RE_TXHEX = re.compile(ur'^01000000[0-9a-f]{108,}$', re.IGNORECASE)
+    if not isinstance(txhex, string_or_bytes_types):
+        return False
     return bool(RE_TXHEX.match(txhex))
+
+
+def is_txobj(txo):
+    if not isinstance(txo, dict):
+        return False
+    if "ins" not in txo and "outs" not in txo:
+        return False
+    if txo.get("ins", []) == [] or txo.get("outs", []) == []:
+        return False
+    return True
 
 
 def mktx(*args, **kwargs):
@@ -565,16 +577,9 @@ def get_script(*args, **kwargs):
 def get_scriptsig(*args, **kwargs):
     """Return scriptSig for 'txid:index'"""
     argz = args + ('ins',)
+    if len(args) == 2:
+        return get_script(*argz, **kwargs)[int(args[-1])]
     return get_script(*argz, **kwargs)
-#    if len(args) == 1 and ':' in args[0]:
-#        txid, vout = args[0].split(':')
-#    elif len(args) == 2 and args[0][:8] == '01000000' and str(args[1]).isdigit():
-#        txh, vout = args[0], int(args[1])
-#    network = kwargs.get('network', 'btc')
-#    try:    txo = deserialize(fetchtx(txid, network))
-#    except: txo = deserialize(txh)
-#    scriptsig = reduce(access, ["ins", vout, "script"], txo)
-#    return scriptsig
 
 
 # takes "txid:vout" or hex_tx, index
@@ -582,16 +587,10 @@ def get_scriptpubkey(*args, **kwargs):
     """Return scriptPubKey for 'txid:index'"""
     # TODO: can use biteasy to retrieve a Tx's SPK
     argz = args + ('outs',)
+    if len(args) == 2:
+        return get_script(*argz, **kwargs)[int(args[-1])]
     return get_script(*argz, **kwargs)
-#    if len(args) == 1 and ':' in args[0]:
-#        txid, vout = args[0].split(':')
-#    elif len(args) == 2 and args[0][:8] == '01000000' and str(args[1]).isdigit():
-#        txh, vout = args[0], int(args[1])
-#    network = kwargs.get('network', 'btc')
-#    try:    txo = deserialize(fetchtx(txid, network))
-#    except: txo = deserialize(txh)
-#    script_pubkey = reduce(access, ["outs", vout, "script"], txo)
-#    return script_pubkey
+
 
 
 # return inpoints, "TXID:vout", for raw Tx
