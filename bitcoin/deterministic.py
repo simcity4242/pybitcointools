@@ -244,10 +244,14 @@ def coinvault_priv_to_bip32(*args):
 def bip32_harden(x):
     return int(x) | 0x80000000
 
+
 def bip32_descend(*args):
     return bip32_extract_key(bip32_path(*args))
 
+
 def bip32_ckd(data, i):
+    if not str(i).isdigit() and RE_BIP32_PATH:
+        return
     return bip32_serialize(raw_bip32_ckd(bip32_deserialize(data), i))
 
 
@@ -259,18 +263,20 @@ def bip32_path(*args, **kwargs):
         path = parse_bip32_path(args[1])		
     else:
         key, path = args[0], map(int, args[1:])
-    is_public = str(args[1]).startswith("M/") or str(args[1]).endswith(".pub") or kwargs.get("public", False)
+    is_public = (str(args[1]).startswith("M/") or str(args[1]).endswith(".pub")) \
+                or kwargs.get("public", False)
     ret = reduce(bip32_ckd, path, key)
     return bip32_privtopub(ret) if is_public else ret
 
 
 def parse_bip32_path(path):
     """Takes bip32 path, "m/0'/2H" or "m/0H/1/2H/2/1000000000.pub", returns list of ints """
-    path = path.lstrip("mM/").rstrip(".pub")
-    if not path:
-        return []
     if path.endswith("/"):
         path += "0"
+    path = path.lstrip("mM/").rstrip(".pub")
+
+    if not path:
+        return []
     patharr = []
     for v in path.split('/'):
         if v is None: 
@@ -281,17 +287,32 @@ def parse_bip32_path(path):
     return patharr
 
 
-def bip44_ckd(masterkey, account=0, change=0, **kwargs):
+def hd_lookup(root, account=None, index=None, change=0, coin=0):
+    depth = bip32_deserialize(root)[1]
+    if depth == 0: #if root is master (has a depth=0)
+        if index:
+            return bip32_path(root, bip32_harden(44), bip32_harden(coin), bip32_harden(account), change, index)
+        else:
+            return bip32_path(root, bip32_harden(44), bip32_harden(coin), bip32_harden(account))
+    elif depth == 3:
+        return bip32_path(root, change, index)
+    else:
+        raise Exception("{root} does not appear to be a bip44-compatible xpubkey!".format(root=root))
+
+
+def bip44_ckd(rootkey, account=0, change=0, **kwargs):
     # m / purpose' / coin_type' / account' / change / address_index
-    assert masterkey[0] in "xt", "Master key {0} must be xprv/xpub or tprv/tpub".format(masterkey)
-    is_public = masterkey[:4] in ('xpub', 'tpub') or kwargs.get('public', False)
-    path = "{keytype}/44H/{network}/{account}/{change}".format( \
+
+    assert bool(RE_BIP32_PRIV.match(rootkey) or RE_BIP32_PUB.match(rootkey)), \
+        "Master key {0} must be xprv/xpub or tprv/tpub".format(rootkey)
+    is_public = bool(RE_BIP32_PUB.match(rootkey)) or kwargs.get('public', False)
+    path = "{keytype}/44H/{network}/{account}/{change}".format(
                 keytype = "M" if is_public else "m",
-                network = "{0}H".format(1 if masterkey.startswith("t") else 0), 
+                network = "{0}H".format(1 if rootkey.startswith("t") else 0),
                 account = "{0}H".format(account),
                 change = change
            )
-    return bip32_ckd(masterkey, path)
+    return bip32_path(rootkey, path)
     
     
 def bip44_ckd_privpub(masterkey, account=0, change=0, **kwargs):
