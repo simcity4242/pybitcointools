@@ -84,6 +84,7 @@ class TestElectrumWalletInternalConsistency(unittest.TestCase):
 
     def test_all(self):
         for i in range(3):
+            electrum_mpk = electrum_masterprivkey
             seed = sha256(str(random.randrange(2**40)))[:32]
             mpk = electrum_mpk(seed)
             for i in range(5):
