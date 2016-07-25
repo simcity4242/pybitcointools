@@ -116,6 +116,8 @@ class TestRawSignRecover(unittest.TestCase):
             )
 
 
+# TODO: this test fails on vbuterin/pybitcointools also...possible low_s issue??
+#       
 class TestTransactionSignVerify(unittest.TestCase):
 
     @classmethod
