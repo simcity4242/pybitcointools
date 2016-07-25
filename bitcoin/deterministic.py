@@ -3,6 +3,7 @@ import hmac
 import hashlib
 import re
 from binascii import hexlify
+from _functools import reduce
 from bitcoin.mnemonic import elec2_prepare_seed, is_elec1_seed, is_elec2_seed, bip39_check, bip39_to_seed
 from bitcoin.pyspecials import *
 
@@ -12,7 +13,7 @@ def bin_electrum_extract_seed(mn_seed, password=b''):
         mn_seed = elec2_prepare_seed(mn_seed)
     else: 
         raise Exception("mnemonic string req")
-    rootseed = safe_unhexlify(pbkdf2_hmac_sha512( \
+    rootseed = safe_unhexlify(pbkdf2_hmac_sha512(
         from_str_to_bytes(mn_seed), from_str_to_bytes("electrum"+password)))
     assert len(rootseed) == 64
     return rootseed
@@ -26,6 +27,7 @@ def electrum_extract_seed(mn_seed, password=''):
 def electrum_masterprivkey(mnemonic, password=''):
     return bip32_master_key(bin_electrum_extract_seed(mnemonic, password))
 
+electrum_mpk = electrum_masterprivkey
 
 def electrum_keystretch(seed, password=None):
     if isinstance(seed, string_types) and re.match('^[0-9a-fA-F]*$', seed):
@@ -215,31 +217,6 @@ def coinvault_priv_to_bip32(*args):
     I3 = ''.join(map(chr, vals[72:104]))
     return bip32_serialize((MAINNET_PRIVATE, 0, b'\x00'*4, 0, I2, I3+b'\x01'))
 
-#def bip32_descend(*args):
-#    """Descend masterkey and return privkey"""
-#    if len(args) == 2 and isinstance(args[1], list):
-#        key, path = args
-#    elif len(args) == 2 and isinstance(args[1], string_types):
-#        key = args[0]
-#        path = map(int, str(args[1]).lstrip("mM/").split('/'))
-#    else:
-#        key, path = args[0], map(int, args[1:])
-#    for p in path:
-#        key = bip32_ckd(key, p)
-#    return bip32_extract_key(key)
-	
-#def bip32_ckd(key, *args, **kwargs):
-#    """Same as bip32_ckd but takes bip32_path or ints"""
-#    # use keyword public=True or end path in .pub for public child derivation
-#    argz = map(str, args)
-#    path = "/".join(argz)    # no effect if "m/path/0"
-#    if not path.startswith(("m/", "M/")):
-#        path = "m/{0}".format(path)
-#    is_public = path.startswith("M/") or path.endswith(".pub") or kwargs.get("public", False)
-#    pathlist = parse_bip32_path(path)
-#    for p in pathlist:
-#        key = bip32_serialize(raw_bip32_ckd(bip32_deserialize(key), p))
-#    return key if not is_public else bip32_privtopub(key)
 
 def bip32_harden(x):
     return int(x) | 0x80000000
