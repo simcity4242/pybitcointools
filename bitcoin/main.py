@@ -311,11 +311,8 @@ def divide(pubkey, privkey):
 
 # See https://github.com/daedalus/pybitcointools/blob/40327b3a2343698d2aa0ca1af9e1875f034ac2e8/bitcoin/main.py#L279
 def pubkey_to_privkey_verify(pubkey, privkey):
-    p1 = decode_pubkey(pubkey, get_pubkey_format(pubkey))
-    p2 = decode_privkey(privkey, get_privkey_format(privkey))
     div = divide(pubkey, privkey)
-    fdiv = get_pubkey_format(div)
-    return bool(decode_pubkey(div, fdiv) == G)
+    return decode_pubkey(div, get_pubkey_format(div)) == G
 
 
 def compress(pubkey):
