@@ -11,8 +11,7 @@ from bitcoin.ripemd import *
 
 is_python2 = str == bytes
 
-if (is_python2 and "ripemd160" not in hashlib.algorithms) or \
-   (not is_python2 and "ripemd160" not in hashlib.algorithms_available):
+if "ripemd160" not in (hashlib.algorithms if is_python2 else hashlib.algorithms_available):
     from bitcoin import ripemd
     setattr(hashlib, 'ripemd160', ripemd.RIPEMD160)
 
@@ -54,10 +53,10 @@ def inv(a, n):
 
 
 def is_point(pubkey):
-    """Is point on curve? (takes pubkey or (x,y))"""
+    """Checks if point is on curve"""
     pubkey = decode_pubkey(pubkey)
     curve_ec = ((pubkey[0]**3 + B) - (pubkey[1]**2)) % P
-    return bool(not isinf(pubkey) and curve_ec == 0)
+    return not isinf(pubkey) and (curve_ec == 0)
 
 
 # JSON access (for pybtctool convenience)
