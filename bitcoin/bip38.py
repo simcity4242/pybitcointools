@@ -1,17 +1,20 @@
 #! python2
-#designed with Pythonista 3 for iOS 
+#designed with Pythonista 3 for iOS
+
+import unicodedata
+import binascii
+import re
 
 from bitcoin.main import *
 from bitcoin.pyspecials import *
-
 import pyscrypt
-import unicodedata, binascii, base64, sys, os, math, re
+
 
 try:
     from Crypto.Cipher import AES
 except ImportError:
-    import aes
-
+    pass
+    # TODO: fix so it will import crypto/aes.py
 try:
     from strxor import strxor
 except ImportError:
