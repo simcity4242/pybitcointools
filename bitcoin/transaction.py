@@ -4,7 +4,7 @@ from bitcoin.main import *
 from _functools import reduce
 from bitcoin.pyspecials import *
 from bitcoin.bci import fetchtx
-#import pdb
+
 
 # Transaction serialization and deserialization
 
@@ -152,8 +152,8 @@ def is_bip66(sig):
     """Checks hex DER sig for BIP66 compliance"""
     #https://raw.githubusercontent.com/bitcoin/bips/master/bip-0066.mediawiki
     #0x30  [total-len]  0x02  [R-len]  [R]  0x02  [S-len]  [S]  [sighash]
-    sig = bytearray.fromhex(sig) if (isinstance(sig, string_types) and \
-             re.match('^[0-9a-fA-F]*$', sig)) else bytearray(sig)
+    sig = bytearray.fromhex(sig) if (isinstance(sig, string_types) and
+             RE_HEX_CHARS.match(sig)) else bytearray(sig)
     if sig[1] == len(sig)-2: 
         sig.extend(b"\1")		# add SIGHASH for BIP66 check
 
@@ -175,6 +175,7 @@ def is_bip66(sig):
     
     return True
 
+
 def txhash(tx, hashcode=None):
     if isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx):
         tx = changebase(tx, 16, 256)
@@ -189,12 +190,8 @@ def bin_txhash(tx, hashcode=None):
 
 
 def ecdsa_tx_sign(tx, priv, hashcode=SIGHASH_ALL):
-    """Returns DER sig for rawtx w/ hashcode apppended"""
+    """Returns DER sig for rawtx w/ hashcode appended"""
     rawsig = ecdsa_raw_sign(bin_txhash(tx, hashcode), priv)
-    #if low_s:
-    #    v,r,s = rawsig
-    #    s = N-s if s>N//2 else s
-    #    rawsig = v,r,s
     return der_encode_sig(*rawsig) + encode(hashcode, 16, 2)
 
 
@@ -609,57 +606,55 @@ def get_outpoints(rawtx, i=None):
 
 extract_tx_outpoints = get_outpoints
 
-# TODO: doesn't work yet
 # https://github.com/richardkiss/pycoin/blob/master/tests/bc_transaction_test.py#L177-L210
-# def check_transaction(tx):
-#     if isinstance(tx, string_types):
-#         if re.match('^[0-9a-fA-F]*$', tx):
-#             txo = json_unhexlify(deserialize(tx))
-#         else:
-#             txo = deserialize(tx)
-#     elif isinstance(tx, dict):
-#         txo = json_unhexlify(tx) if json_is_base(tx, 16) else tx
-#     else: raise Exception("JSON must be base16)")  # Dict with base256 *values*
-# 
-#     if 'ins' not in txo:
-#         raise Exception("TxIns missing")
-#     if 'outs' not in txo:
-#         raise Exception("TxOuts missing")
-# 
-#     #Size limits
-#     MAX_BLOCK_SIZE = 1000000
-#     if len(serialize(txo)) > MAX_BLOCK_SIZE:
-#         raise Exception("size exceeds MAX BLOCK SIZE: %d" % MAX_BLOCK_SIZE)
-# 
-#     #Check for negative or overflow output values
-#     MAX_MONEY = 21000000 * 100000000
-#     nValueOut = 0
-#     for i, txout in enumerate(txo['outs']):
-#         if not (0 <= txout['value'] <= MAX_MONEY):
-#             raise Exception("TxOut %d: value negative or out of range" % i)
-#         nValueOut += txout['value']
-#         if nValueOut > MAX_MONEY:
-#             raise Exception("TxOuts' total out of range")
-# 
-#     #Check for duplicate inputs
-#     INS = txo['ins']
-#     OUTPOINTS = multiaccess(INS, 'outpoint')
-#     if len(set(("%s:%d" % (x["hash"], x["index"]) for x in OUTPOINTS))) < len(txo["ins"]):
-#         raise Exception("duplicate inputs")
-# 
-#     #Check is coinbase
-#     NULL = (b'00'*32, b'\0'*32, 0, 0x80)
-#     NEG_ONE = (-1, 0x81, 0xffffffff, b"ff"*4)
-#     if len(INS) == 1 and (OUTPOINTS[0]["hash"] in NULL) and (OUTPOINTS[0]["index"] in NEG_ONE):
-#         if len(INS[0]["script"]) not in xrange(2, 101):    # script's len 2<=len<=100
-#             raise Exception("bad coinbase script size")
-# 
-#     #Check ins aren't missing
-#     if not len(INS):        # if len(INS) == 0
-#         raise Exception("prevout is null")
-# 
-#     return True
+def check_transaction(tx):
+    if isinstance(tx, string_types):
+        if re.match('^[0-9a-fA-F]*$', tx):
+            txo = json_unhexlify(deserialize(tx))
+        else:
+            txo = deserialize(tx)
+    elif isinstance(tx, dict):
+        txo = json_unhexlify(tx) if json_is_base(tx, 16) else tx
+    else: raise Exception("JSON must be base16)")  # Dict with base256 *values*
 
+    if 'ins' not in txo:
+        raise Exception("TxIns missing")
+    if 'outs' not in txo:
+        raise Exception("TxOuts missing")
+
+    #Size limits
+    MAX_BLOCK_SIZE = 1000000
+    if len(serialize(txo)) > MAX_BLOCK_SIZE:
+        raise Exception("size exceeds MAX BLOCK SIZE: %d" % MAX_BLOCK_SIZE)
+
+    #Check for negative or overflow output values
+    MAX_MONEY = 21000000 * 100000000
+    nValueOut = 0
+    for i, txout in enumerate(txo['outs']):
+        if not (0 <= txout['value'] <= MAX_MONEY):
+            raise Exception("TxOut %d: value negative or out of range" % i)
+        nValueOut += txout['value']
+        if nValueOut > MAX_MONEY:
+            raise Exception("TxOuts' total out of range")
+
+    #Check for duplicate inputs
+    INS = txo['ins']
+    OUTPOINTS = multiaccess(INS, 'outpoint')
+    if len(set(("%s:%d" % (x["hash"], x["index"]) for x in OUTPOINTS))) < len(txo["ins"]):
+        raise Exception("duplicate inputs")
+
+    #Check is coinbase
+    NULL = (b'00'*32, b'\0'*32, 0, 0x80)
+    NEG_ONE = (-1, 0x81, 0xffffffff, b"ff"*4)
+    if len(INS) == 1 and (OUTPOINTS[0]["hash"] in NULL) and (OUTPOINTS[0]["index"] in NEG_ONE):
+        if len(INS[0]["script"]) not in xrange(2, 101):    # script's len 2<=len<=100
+            raise Exception("bad coinbase script size")
+
+    #Check ins aren't missing
+    if not len(INS):        # if len(INS) == 0
+        raise Exception("prevout is null")
+
+    return True
 
 def estimate_tx_size(rawtx):
     # Estimate size of Tx in bytes
