@@ -162,6 +162,8 @@ class TestSerialize(unittest.TestCase):
         )
 
 
+# TODO: verify_tx_input is failing
+
 class TestTransaction(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -405,10 +407,10 @@ class TestRipeMD160PythonBackup(unittest.TestCase):
         for i, s in enumerate(strvec):
             digest = ripemd.RIPEMD160(s).digest()
             hash160digest = ripemd.RIPEMD160(bin_sha256(s)).digest()
-            self.assertEqual(bytes_to_hex_string(digest), target[i])
-            self.assertEqual(bytes_to_hex_string(hash160digest), hash160target[i])
-            self.assertEqual(bytes_to_hex_string(bin_hash160(from_string_to_bytes(s))), hash160target[i])
-            self.assertEqual(hash160(from_string_to_bytes(s)), hash160target[i])
+            self.assertEqual(from_bytes_to_str(digest), target[i])
+            self.assertEqual(from_bytes_to_str(hash160digest), hash160target[i])
+            self.assertEqual(from_bytes_to_str(bin_hash160(from_string_to_bytes(s))), hash160target[i])
+            self.assertEqual(hash160(from_str_to_bytes(s)), hash160target[i])
 
 
 class TestScriptVsAddressOutputs(unittest.TestCase):
