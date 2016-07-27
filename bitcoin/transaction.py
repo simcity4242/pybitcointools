@@ -9,7 +9,7 @@ from bitcoin.bci import fetchtx
 # Transaction serialization and deserialization
 
 def deserialize(tx):
-    if isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx):
+    if isinstance(tx, str) and RE_HEX_CHARS.match(tx):
         return json_hexlify(deserialize(binascii.unhexlify(tx)))
     # http://stackoverflow.com/questions/4851463/python-closure-write-to-variable-in-parent-scope
     # Python's scoping rules are demented, requiring me to make pos an object
@@ -126,8 +126,10 @@ def der_encode_sig(*args):
         v,r,s = args
     elif len(args) == 2:
         r,s = args
+    elif len(args) == 1 and isinstance(args[0], tuple):
+        return der_encode_sig(*args[0])
     b1, b2 = encode(r, 256), encode(s, 256)
-    if len(b1) and changebase(b1[0], 256, 16, 1) in "89abcdef":		# add null bytes if interpreted as negative number
+    if len(b1) and changebase(b1[0], 256, 16, 1) in "89abcdef":	# add null bytes if interpreted as negative number
         b1 = b'\x00' + b1
     if len(b2) and ord(b2[0]) & 0x80:
         b2 = b'\x00' + b2
@@ -177,7 +179,7 @@ def is_bip66(sig):
 
 
 def txhash(tx, hashcode=None):
-    if isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx):
+    if isinstance(tx, string_types) and RE_HEX_CHARS.match(tx):
         tx = changebase(tx, 16, 256)
     if hashcode is not None:
         return dbl_sha256(from_str_to_bytes(tx) + from_int_to_le_bytes(int(hashcode), 4))
@@ -205,7 +207,7 @@ def ecdsa_tx_recover(tx, sig, hashcode=SIGHASH_ALL):
     _, r, s = der_decode_sig(sig)
     left = ecdsa_raw_recover(z, (0, r, s))
     right = ecdsa_raw_recover(z, (1, r, s))
-    return (encode_pubkey(left, 'hex'), encode_pubkey(right, 'hex'))
+    return encode_pubkey(left, 'hex'), encode_pubkey(right, 'hex')
 
 # Scripts
 
@@ -223,7 +225,7 @@ def mk_opreturn(msg, *args):
     if len(args) == 0:
         return orhex
     elif len(args) == 1:
-        if isinstance(args[0], str) and re.match('^[0-9a-fA-F]*$', args[0]):
+        if isinstance(args[0], str) and RE_HEX_CHARS.match(args[0]):
             return serialize(mk_opreturn(msg, deserialize(args[0])))
         elif isinstance(args[0], dict):
             txo = args[0]
@@ -245,7 +247,7 @@ def address_to_script(addr):
 # Output script to address representation
 
 def script_to_address(script, vbyte=0):
-    if re.match('^[0-9a-fA-F]*$', script):
+    if RE_HEX_CHARS.match(script):
         script = binascii.unhexlify(script)
     if script[:3] == b'\x76\xa9\x14' and script[-2:] == b'\x88\xac' and len(script) == 25:
         return bin_to_b58check(script[3:-2], vbyte)  # pubkey hash addresses
@@ -258,7 +260,7 @@ def script_to_address(script, vbyte=0):
 
 
 def p2sh_scriptaddr(script, magicbyte=5):
-    if re.match('^[0-9a-fA-F]*$', script):
+    if RE_HEX_CHARS.match(script):
         script = binascii.unhexlify(script)
     return hex_to_b58check(hash160(script), magicbyte)
 
@@ -266,7 +268,7 @@ scriptaddr = p2sh_scriptaddr
 
 
 def deserialize_script(script):
-    if isinstance(script, str) and re.match('^[0-9a-fA-F]*$', script):
+    if isinstance(script, str) and RE_HEX_CHARS.match(script):
        return json_hexlify(deserialize_script(safe_unhexlify(script)))
     out, pos = [], 0
     while pos < len(script):
@@ -341,11 +343,11 @@ def mk_multisig_script(*args):
 
 def verify_tx_input(tx, i, script, sig, pub):
     """tx = scriptsig replaced by scriptPubKey"""
-    if re.match('^[0-9a-fA-F]*$', tx):
+    if RE_HEX_CHARS.match(tx):
         tx = binascii.unhexlify(tx)
-    if re.match('^[0-9a-fA-F]*$', script):
+    if RE_HEX_CHARS.match(script):
         script = binascii.unhexlify(script)
-    if not re.match('^[0-9a-fA-F]*$', sig):
+    if not (RE_DER.match(sig) or RE_HEX_CHARS.match(sig)):
         sig = safe_hexlify(sig)
     hashcode = decode(sig[-2:], 16)
     modtx = signature_form(tx, int(i), script, hashcode)
@@ -354,7 +356,7 @@ def verify_tx_input(tx, i, script, sig, pub):
 
 def sign(tx, i, priv, hashcode=SIGHASH_ALL):
     i = int(i)
-    if (not is_python2 and isinstance(re, bytes)) or not re.match('^[0-9a-fA-F]*$', tx):
+    if (not is_python2 and isinstance(re, bytes)) or not RE_HEX_CHARS.match(tx):
         return binascii.unhexlify(sign(safe_hexlify(tx), i, priv))
     if len(priv) <= 33:
         priv = safe_hexlify(priv)
@@ -380,9 +382,9 @@ def signall(tx, priv):
 
 
 def multisign(tx, i, script, pk, hashcode=SIGHASH_ALL):
-    if re.match('^[0-9a-fA-F]*$', tx):
+    if RE_HEX_CHARS.match(tx):
         tx = binascii.unhexlify(tx)
-    if re.match('^[0-9a-fA-F]*$', script):
+    if RE_HEX_CHARS.match(script):
         script = binascii.unhexlify(script)
     modtx = signature_form(tx, i, script, hashcode)
     return ecdsa_tx_sign(modtx, pk, hashcode)
@@ -393,10 +395,10 @@ def apply_multisignatures(*args):
     tx, i, script = args[0], int(args[1]), args[2]
     sigs = args[3] if isinstance(args[3], list) else list(args[3:])
 
-    if isinstance(script, str) and re.match('^[0-9a-fA-F]*$', script):
+    if isinstance(script, str) and RE_HEX_CHARS.match(script):
         script = binascii.unhexlify(script)
     sigs = [binascii.unhexlify(x) if x[:2] == '30' else x for x in sigs]
-    if isinstance(tx, str) and re.match('^[0-9a-fA-F]*$', tx):
+    if isinstance(tx, str) and RE_HEX_CHARS.match(tx):
         tx = binascii.unhexlify(tx)
         return safe_hexlify(apply_multisignatures(tx, i, script, sigs))
 
@@ -461,7 +463,7 @@ def mktx(*args, **kwargs):
             addr = o[:o.find(':')]
             val = int(o[o.find(':')+1:])
             o = {}
-            if re.match('^[0-9a-fA-F]*$', addr):
+            if RE_HEX_CHARS.match(addr):
                 o["script"] = addr
             else:
                 o["address"] = addr
@@ -593,9 +595,9 @@ def get_scriptpubkey(*args, **kwargs):
 # return inpoints, "TXID:vout", for raw Tx
 def get_outpoints(rawtx, i=None):
     """get rawtx's inpoints as 'txid:0' """
-    # if isinstance(rawtx, str) and not re.match('^[0-9a-fA-F]*$', rawtx):    # binary
+    # if isinstance(rawtx, str) and not RE_HEX_CHARS.match(rawtx):    # binary
     #     return safe_unhexlify(get_outpoints(rawtx, i))
-    rawtxo = deserialize(rawtx) if (isinstance(rawtx, str) and re.match('^[0-9a-fA-F]*$', rawtx)) else rawtx 
+    rawtxo = deserialize(rawtx) if (isinstance(rawtx, str) and RE_HEX_CHARS.match(rawtx)) else rawtx
     assert isinstance(rawtx, dict)
     #i = i or int(i)
     outpoints = []
@@ -609,7 +611,7 @@ extract_tx_outpoints = get_outpoints
 # https://github.com/richardkiss/pycoin/blob/master/tests/bc_transaction_test.py#L177-L210
 def check_transaction(tx):
     if isinstance(tx, string_types):
-        if re.match('^[0-9a-fA-F]*$', tx):
+        if RE_HEX_CHARS.match(tx):
             txo = json_unhexlify(deserialize(tx))
         else:
             txo = deserialize(tx)
@@ -658,7 +660,7 @@ def check_transaction(tx):
 
 def estimate_tx_size(rawtx):
     # Estimate size of Tx in bytes
-    if isinstance(rawtx, basestring) and re.match('^[0-9a-fA-F]*$', rawtx):
+    if isinstance(rawtx, basestring) and RE_HEX_CHARS.match(rawtx):
         return estimate_tx_size(deserialize(rawtx))
     outs = rawtx.get("outs", [])
     ins = rawtx.get("ins", [])
@@ -666,7 +668,7 @@ def estimate_tx_size(rawtx):
 
 
 def deserialize_der(sig):
-    sig = bytes(bytearray.fromhex(sig)) if re.match('^[0-9a-fA-F]*$', sig) else bytes(bytearray(sig))
+    sig = bytes(bytearray.fromhex(sig)) if RE_HEX_CHARS.match(sig) else bytes(bytearray(sig))
     totallen = decode(sig[1], 256) + 2
     rlen = decode(sig[3], 256)
     slen = decode(sig[5+rlen], 256)
@@ -726,7 +728,8 @@ def mk_opreturn(msg, txhex=None):
         
         txo = deserialize(txhex)
         assert (len(outs) > 0) and sum(multiaccess(outs, 'value')) > 0 \
-                and not any([o for o in outs if o.get("script")[:2] == '6a']), "Tx limited to *1* OP_RETURN, and only whilst the other outputs send funds"
+                and not any([o for o in outs if o.get("script")[:2] == '6a']), 
+                "Tx limited to *1* OP_RETURN, and only whilst the other outputs send funds"
         outs.append({
                     'script': hexdata, 
                     'value': 0
