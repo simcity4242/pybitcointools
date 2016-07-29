@@ -497,5 +497,32 @@ class TestConversions(unittest.TestCase):
         )
 
 
+class Transaction_Misc(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        print("Testing new transaction calls/functions...")
+
+    def test_all(self):
+        testnet_vars = [
+            "45138cc9dd17b13950230cd64d75891df829ec9b4b3e8aa3b9d2efbb3710965e",
+            "n2kx7k6JuA5Wy27fawaeiPX7dq8mbRDPAv",
+            "00000000eb0f55acb42a17e5d3ebd6fc638a69b7d72b9a089a556b320b9f33a2"
+            ]
+        mainnet_vars = [
+            "6df88400ab991f31be5d44be76d46ff3cb482e6417c8b472037d932424a191ff",
+            "1MBngSqZbMydscpzSoehjP8kznMaHAzh9y",
+            "000000004257f209a21040d1baeb99c1ea852271238ef67a124a2c5349e1d870"
+        ]
+
+        for var in testnet_vars:
+            self.assertTrue(is_testnet(var), "is_testnet failed for {0}".format(str(var)))
+        
+        for var in mainnet_vars:
+            self.assertFalse(is_testnet(var) is False, "is_testnet should fail for mainnet {0}".format(str(var)))
+
+
+
+
 if __name__ == '__main__':
     unittest.main()
+
