@@ -70,18 +70,7 @@ def is_testnet(inp):
             return True
         return False
 
-    ## TXID 
-    elif re.match('^[0-9a-fA-F]{64}$', inp) or len(inp)==32:
-        base_url = "http://api.blockcypher.com/v1/btc/{network}/txs/{txid}?includesHex=false"
-        try:         # try testnet fetchtx
-            make_request(base_url.format(network="test3", txid=inp.lower()))
-            return True
-        except:      # try mainnet fetchtx
-            make_request(base_url.format(network="main", txid=inp.lower()))
-            return False
-        #sys.stderr.write("TxID %s has no match for testnet or mainnet (Bad TxID)")
-        return None
-        
+    ## BLOCKHASH
     elif re.match(r'^(00000)[0-9a-f]{59}$', inp) or len(inp)==32:
         base_url = "http://api.blockcypher.com/v1/btc/{network}/blocks/{blockhash}"
         try:
@@ -90,7 +79,18 @@ def is_testnet(inp):
         except:
             make_request(base_url.format(network="main", blockhash=inp.lower()))
             return False
-        return None
+
+    ## TXID
+    elif re.match(r'^[0-9a-fA-F]{64}$', inp) or len(inp)==32:
+        base_url = "http://api.blockcypher.com/v1/btc/{network}/txs/{txid}?includesHex=false"
+        try:         # try testnet fetchtx
+            make_request(base_url.format(network="test3", txid=inp.lower()))
+            return True
+        except:      # try mainnet fetchtx
+            make_request(base_url.format(network="main", txid=inp.lower()))
+            return False
+        #sys.stderr.write("TxID %s has no match for testnet or mainnet (Bad TxID)")
+
     else:
         raise TypeError("{0} is unknown input".format(inp))
 
@@ -101,7 +101,7 @@ def set_network(*args):
     for arg in args:
         if not arg: 
             pass
-        if isinstance(arg, basestring):
+        if isinstance(arg, string_types):
             r.append(is_testnet(arg))
         elif isinstance(arg, (list, tuple)):
             return set_network(*arg)
