@@ -15,8 +15,6 @@ try:    # Python 3
 except: # Python 2
     from urllib2 import build_opener, Request, HTTPError, urlopen
 
-try:                import requests
-except ImportError: pass
 
 FLAG_TESTNET = None
 
@@ -181,7 +179,7 @@ def bci_unspent(*args):
         try:
             jsonobj = json.loads(data.decode('utf-8'))
             for o in jsonobj["unspent_outputs"]:
-                h = safe_hexlify(unsafe_hexlify(o['tx_hash'])[::-1])
+                h = safe_hexlify(safe_unhexlify(o['tx_hash'])[::-1])
                 u.append({
                     "output": h+':'+str(o['tx_output_n']),
                     "value": o['value']})
@@ -304,57 +302,57 @@ def history(*args):
                             outs[key]["spend"] = tx["hash"] + ':' + str(i)
         return [outs[k] for k in outs]
         
-    elif network == "testnet":
-        txs = []         # using http://api.blockcypher.com/v1/btc/test3/addrs/n1hjyVvYQPQtejJcANd5ZJM5rmxHCCgWL7;n2kx7k6JuA5Wy27fawaeiPX7dq8mbRDPAv?confirmations=0&limit=50&before
-        #addrs = ';'.join((addrs if isinstance(addrs, list) else [addrs]))
-        for addr in addrs:    # or 
-            offset = 0
-            bh = last_block_height("testnet")
-            while 1:
-                gathered = False
-                while not gathered:
-                    try:
-                        data = make_request("http://api.blockcypher.com/v1/btc/test3/addrs/%s"
-                                            "?confirmations=0&limit=200&before=%d&unspentOnly=false&includeScript" % (addr, bh))
-                        gathered = True
-                    except Exception as e:
-                        try:    sys.stderr.write(e.read().strip())
-                        except: sys.stderr.write(str(e))
-                        gathered = False
-                try:
-                    jsonobj = json.loads(data)
-                except:
-                    raise Exception("Failed to decode data: " + data)
-                assert addr == jsonobj.get("address"), "Tx data doesn't match address %s" % addr
-                txs.extend(jsonobj['txrefs'])
-                if 200 <= jsonobj['n_tx']: # because records=200
-                    break
-                if "hasMore" in jsonobj: 
-                    bh = txs[-1].get("block_height")
-                offset += 200
-                sys.stderr.write("Fetching more transactions... " + str(offset) + '\n')
-            for tx in txs:
-                tx.update(dict(address=addr))
-        outs = {}
-        #from bitcoin.main import hex_to_b58check, btc_to_satoshi
-        for tx in txs:
-            if o.get('address', None) in addrs:
-                key = str(tx["confirmed"])+':'+str(o["tx_output_"])
-                outs[key] = {
-                    "address": o["address"],
-                    "value": o["value"],
-                    "output": tx["hash"]+':'+str(o["tx_output_n"]),
-                    "block_height": tx.get("block_height")
-                    }
-        for tx in txs:      # if output is spent adds "spend": "spending_TxID:i"
-            for i, inp in enumerate(tx["inputs"]):
-                if "prev_out" in inp:
-                    if inp["prev_out"].get("addr", None) in addrs:
-                        key = str(inp["prev_out"]["tx_index"]) + \
-                              ':'+str(inp["prev_out"]["n"])
-                        if outs.get(key):
-                            outs[key]["spend"] = tx["hash"] + ':' + str(i)
-        return [outs[k] for k in outs]
+    # elif network == "testnet":
+    #     txs = []         # using http://api.blockcypher.com/v1/btc/test3/addrs/n1hjyVvYQPQtejJcANd5ZJM5rmxHCCgWL7;n2kx7k6JuA5Wy27fawaeiPX7dq8mbRDPAv?confirmations=0&limit=50&before
+    #     #addrs = ';'.join((addrs if isinstance(addrs, list) else [addrs]))
+    #     for addr in addrs:    # or 
+    #         offset = 0
+    #         bh = last_block_height("testnet")
+    #         while 1:
+    #             gathered = False
+    #             while not gathered:
+    #                 try:
+    #                     data = make_request("http://api.blockcypher.com/v1/btc/test3/addrs/%s"
+    #                                         "?confirmations=0&limit=200&before=%d&unspentOnly=false&includeScript" % (addr, bh))
+    #                     gathered = True
+    #                 except Exception as e:
+    #                     try:    sys.stderr.write(e.read().strip())
+    #                     except: sys.stderr.write(str(e))
+    #                     gathered = False
+    #             try:
+    #                 jsonobj = json.loads(data)
+    #             except:
+    #                 raise Exception("Failed to decode data: " + data)
+    #             assert addr == jsonobj.get("address"), "Tx data doesn't match address %s" % addr
+    #             txs.extend(jsonobj['txrefs'])
+    #             if 200 <= jsonobj['n_tx']: # because records=200
+    #                 break
+    #             if "hasMore" in jsonobj: 
+    #                 bh = txs[-1].get("block_height")
+    #             offset += 200
+    #             sys.stderr.write("Fetching more transactions... " + str(offset) + '\n')
+    #         for tx in txs:
+    #             tx.update(dict(address=addr))
+    #     outs = {}
+    #     #from bitcoin.main import hex_to_b58check, btc_to_satoshi
+    #     for tx in txs:
+    #         if o.get('address', None) in addrs:
+    #             key = str(tx["confirmed"])+':'+str(o["tx_output_"])
+    #             outs[key] = {
+    #                 "address": o["address"],
+    #                 "value": o["value"],
+    #                 "output": tx["hash"]+':'+str(o["tx_output_n"]),
+    #                 "block_height": tx.get("block_height")
+    #                 }
+    #     for tx in txs:      # if output is spent adds "spend": "spending_TxID:i"
+    #         for i, inp in enumerate(tx["inputs"]):
+    #             if "prev_out" in inp:
+    #                 if inp["prev_out"].get("addr", None) in addrs:
+    #                     key = str(inp["prev_out"]["tx_index"]) + \
+    #                           ':'+str(inp["prev_out"]["n"])
+    #                     if outs.get(key):
+    #                         outs[key]["spend"] = tx["hash"] + ':' + str(i)
+    #     return [outs[k] for k in outs]
         
 
 
@@ -392,7 +390,7 @@ def blockr_pushtx(tx, network=None):
 
     if not re.match('^[0-9a-fA-F]*$', tx):
         tx = safe_hexlify(tx)
-    return make_request(blockr_url, '{"hex":"%s"}' % tx)
+    return make_request(base_url, '{"hex":"%s"}' % tx)
 
 
 def helloblock_pushtx(tx, network="btc"):
@@ -500,7 +498,7 @@ def helloblock_fetchtx(txhash, network='btc'):
         url = 'https://mainnet.helloblock.io/v1/transactions/'
     else:
         raise Exception('Unsupported network {0} for helloblock_fetchtx'.format(network))
-    data = request(url + txhash)["data"]["transaction"]
+    data = make_request(url + txhash)["data"]["transaction"]
     o = {
         "locktime": data["locktime"],
         "version": data["version"],
@@ -729,7 +727,7 @@ def get_stats(days=1, network="btc", **kwargs):
         if network == "testnet":
             raise Exception("No %s functionality for %s" % (network, svc))
         sb_url = "https://api.smartbit.com.au/v1/blockchain/stats?%d" % int(days)
-        stats = json.loads(make_request(url))
+        stats = json.loads(make_request(sb_url))
     elif svc == "webbtc":
         if network == "testnet":
             wb_url = "http://test.webbtc.com/stats.json"
@@ -994,6 +992,7 @@ def get_xpub_unspent_addrs(*args):
 def get_xpub_addrs(*args):
     """Returns all known (used) addresses for xpub(s)"""
     from bitcoin.main import multiaccess
+    from bitcoin.deterministic import bip32_privtopub
     xpubs = [bip32_privtopub(x) if x.startswith("xprv") else x for x in args]
     jdata = json.loads(make_request("https://www.blockonomics.co/api/balance", \
                                       json.dumps({"addr": " ".join(xpubs)}))).get("response")
@@ -1003,6 +1002,7 @@ def get_xpub_addrs(*args):
 
 def get_xpub_outputs(*args):
     from bitcoin.main import multiaccess
+    from bitcoin.deterministic import bip32_privtopub
     xpubs = [bip32_privtopub(x) if x.startswith("xprv") else x for x in args]
     jdata = json.loads(make_request("https://www.blockonomics.co/api/balance", \
                                       json.dumps({"addr": " ".join(xpubs)}))).get("response")
