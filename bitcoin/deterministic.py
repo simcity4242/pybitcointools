@@ -235,9 +235,9 @@ def bip32_ckd(data, i):
 def bip32_path(*args, **kwargs):
     if len(args) == 2 and isinstance(args[1], list):
         key, path = args
-    elif len(args) == 2 and RE_BIP32_PATH.match(args[1]):
+    elif len(args) == 2 and RE_BIP32_PATH.match(str(args[1])):
         key = args[0]
-        path = parse_bip32_path(args[1])		
+        path = _parse_bip32_path(args[1])		
     else:
         key, path = args[0], map(int, args[1:])
     is_public = (str(args[1]).startswith("M/") or 
@@ -247,7 +247,7 @@ def bip32_path(*args, **kwargs):
     return bip32_privtopub(ret) if is_public else ret
 
 
-def parse_bip32_path(path):
+def _parse_bip32_path(path):
     """Takes bip32 path, "m/0'/2H" or "m/0H/1/2H/2/1000000000.pub", returns list of ints """
     if path.endswith("/"):
         path += "0"
