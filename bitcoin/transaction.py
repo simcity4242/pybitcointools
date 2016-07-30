@@ -220,20 +220,20 @@ def mk_scripthash_script(addr):
     return 'a914' + b58check_to_hex(addr) + '87'
 
 
-def mk_opreturn(msg, *args):
-    orhex = serialize_script([0x6a, msg])
-    if len(args) == 0:
-        return orhex
-    elif len(args) == 1:
-        if isinstance(args[0], str) and RE_HEX_CHARS.match(args[0]):
-            return serialize(mk_opreturn(msg, deserialize(args[0])))
-        elif isinstance(args[0], dict):
-            txo = args[0]
-    assert 'outs' in txo, "Outputs cannot be empty"
-    txo['outs'].append({'script': orhex, 'value': 0})
-    #if len(json_changebase(multiaccess(txo['outs'], 'script'), lambda x: unhexify(x))) != 1:
-    #    sys.stderr.write(("Outputs cannot have >1 OP_RETURN"))
-    return txo
+# def mk_opreturn(msg, *args):
+#     orhex = serialize_script([0x6a, msg])
+#     if len(args) == 0:
+#         return orhex
+#     elif len(args) == 1:
+#         if isinstance(args[0], str) and RE_HEX_CHARS.match(args[0]):
+#             return serialize(mk_opreturn(msg, deserialize(args[0])))
+#         elif isinstance(args[0], dict):
+#             txo = args[0]
+#     assert 'outs' in txo, "Outputs cannot be empty"
+#     txo['outs'].append({'script': orhex, 'value': 0})
+#     #if len(json_changebase(multiaccess(txo['outs'], 'script'), lambda x: unhexify(x))) != 1:
+#     #    sys.stderr.write(("Outputs cannot have >1 OP_RETURN"))
+#     return txo
 
 
 # Address representation to output script
@@ -679,21 +679,25 @@ def deserialize_der(sig):
     return r, s, sighash
 
 
+der_deserialize = deserialize_der
+
+
 def der_extract_rs(sig):
     res = deserialize_der(sig)
     return res[:-2]
 
 
 def is_der(signature):
-    RE_DER = re.compile(ur'30([0-4][0-9a-f])02([0-2][0-9a-f])((?:00)?[a-f0-9]{2,64})02([0-2][0-9a-f])((?:00)?[a-f0-9]{2,64})((0|8)[0-3])?', re.I)
-    if not isinstance(signature, basestring):
+    #RE_DER = re.compile(r'30([0-4][0-9a-f])02([0-2][0-9a-f])((?:00)?[a-f0-9]{2,64})02([0-2][0-9a-f])((?:00)?[a-f0-9]{2,64})((0|8)[0-3])?', re.I)
+    if not isinstance(signature, string_types):
         return False
     return bool(RE_DER.match(signature))
 
 
 def der_extract(tx):
-    if not isinstance(tx, dict):
-        return serialize(der_extract(deserialize(tx)))
+    """Extract DERs from a Tx Object"""
+    if isinstance(tx, string_types) and RE_TXHEX.match(tx):
+        tx = deserialize(tx)
     nin = len(tx.get("ins"))
     ins = tx.get("ins")
     scripts, ders = [], []
@@ -703,13 +707,10 @@ def der_extract(tx):
         descr = deserialize_script(scr)
         der = filter(lambda s: is_der(s), descr)
         ders.extend(der)
-    return ders
+    return ders if len(ders) > 1 else ders[0] if len(ders) == 1 else []
 
 
-
-#TODO:
-#def mutate_tx(txh, i):
-#    from bitcoin.main import neg_privkey
+get_tx_sigs = extract_ders = der_extract
 
 
 def mk_opreturn(msg, txhex=None):
@@ -728,8 +729,7 @@ def mk_opreturn(msg, txhex=None):
         
         txo = deserialize(txhex)
         assert (len(outs) > 0) and sum(multiaccess(outs, 'value')) > 0 \
-                and not any([o for o in outs if o.get("script")[:2] == '6a']), 
-                "Tx limited to *1* OP_RETURN, and only whilst the other outputs send funds"
+                and not any([o for o in outs if o.get("script")[:2] == '6a']), "Tx limited to *1* OP_RETURN, and only whilst the other outputs send funds"
         outs.append({
                     'script': hexdata, 
                     'value': 0
