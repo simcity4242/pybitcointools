@@ -22,7 +22,7 @@ RE_PRIVKEY = re.compile(r'^([0-9a-f]{64}(01)?)|([5KL9c][1-9a-km-zA-LMNP-Z]{50,51
 RE_MNEMONIC = re.compile(r'^((\w+\b ){11})|(\w+\b ){23}\w+\b$')
 RE_BIP32_PRIV = re.compile(r'^[xt]+prv[0-9a-km-zA-HJ-NP-Z]{76,108}$')
 RE_BIP32_PUB = re.compile(r'^[xt]pub[0-9a-km-zA-HJ-NP-Z]{76,108}$')
-RE_BIP32_PATH = re.compile(r'^((m/)|(M/))?[\d\'H/]*(\.pub)?$')
+RE_BIP32_PATH = re.compile(r'^((m/)|(M/))(\d+[\'H/])*(\.pub)?$')
 RE_DER = re.compile(r'''
     30(?P<siglen>[0-4][0-9a-f])
     02(?P<rlen>[0-2][0-9a-f])(?P<r>(?:00)?[a-f0-9]{2,64})
