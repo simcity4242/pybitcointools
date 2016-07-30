@@ -646,7 +646,7 @@ def ecdsa_raw_verify(msghash, vrs, pub):
     u1, u2 = z*w % N, r*w % N
     pub = decode_pubkey(pub)
     x, y = fast_add(fast_multiply(G, u1), fast_multiply(pub, u2))
-    return bool(r == x and ((r % N) and (s % N)))
+    return bool(r == x and ((r % N) != 0 and (s % N) != 0))
 
 
 # For BitcoinCore
