@@ -227,8 +227,6 @@ def bip32_descend(*args):
 
 
 def bip32_ckd(data, i):
-    if not str(i).isdigit() and RE_BIP32_PATH.match(str(i)):
-        return bip32_path(data, i)
     return bip32_serialize(raw_bip32_ckd(bip32_deserialize(data), i))
 
 
@@ -237,7 +235,7 @@ def bip32_path(*args, **kwargs):
         key, path = args
     elif len(args) == 2 and RE_BIP32_PATH.match(str(args[1])):
         key = args[0]
-        path = _parse_bip32_path(args[1])		
+        path = _parse_bip32_path(str(args[1]))
     else:
         key, path = args[0], map(int, args[1:])
     is_public = (str(args[1]).startswith("M/") or 
