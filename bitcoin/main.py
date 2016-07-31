@@ -637,8 +637,8 @@ def ecdsa_sign(msg, priv):
 def ecdsa_raw_verify(msghash, vrs, pub):
     """Verifies signature against pubkey for digest hash (msghash)"""
     v, r, s = vrs
-    if not (27 <= v <= 34):
-        return False
+    # if v is not None and (v not in xrange(27, 34+1)):
+    #     return False
 
     w = inv(s, N)
     z = hash_to_int(msghash)
@@ -670,9 +670,9 @@ def ecdsa_raw_recover(msghash, vrs):
     """Recovers (x,y) point from msghash and sig values (v,r,s)"""
     v, r, s = vrs
     if not (27 <= v <= 34):
-        raise ValueError("%d must in range 27-31" % v)
+        raise ValueError("%d must in range 27-34" % v)
     x = r
-    alpha = (x*x*x+A*x+B) % P
+    alpha = (x**3 + A*x + B) % P
     beta = pow(alpha, (P+1)//4, P)                            # determine which
     y = beta if ((v % 2) ^ (beta % 2)) else (P - beta)        # y val from parity and v
     # If alpha isn't a quadratic residue, the sig is invalid
