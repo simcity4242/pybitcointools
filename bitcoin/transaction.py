@@ -220,22 +220,6 @@ def mk_scripthash_script(addr):
     return 'a914' + b58check_to_hex(addr) + '87'
 
 
-# def mk_opreturn(msg, *args):
-#     orhex = serialize_script([0x6a, msg])
-#     if len(args) == 0:
-#         return orhex
-#     elif len(args) == 1:
-#         if isinstance(args[0], str) and RE_HEX_CHARS.match(args[0]):
-#             return serialize(mk_opreturn(msg, deserialize(args[0])))
-#         elif isinstance(args[0], dict):
-#             txo = args[0]
-#     assert 'outs' in txo, "Outputs cannot be empty"
-#     txo['outs'].append({'script': orhex, 'value': 0})
-#     #if len(json_changebase(multiaccess(txo['outs'], 'script'), lambda x: unhexify(x))) != 1:
-#     #    sys.stderr.write(("Outputs cannot have >1 OP_RETURN"))
-#     return txo
-
-
 # Address representation to output script
 
 def address_to_script(addr):
@@ -609,54 +593,54 @@ def get_outpoints(rawtx, i=None):
 extract_tx_outpoints = get_outpoints
 
 # https://github.com/richardkiss/pycoin/blob/master/tests/bc_transaction_test.py#L177-L210
-def check_transaction(tx):
-    if isinstance(tx, string_types):
-        if RE_HEX_CHARS.match(tx):
-            txo = json_unhexlify(deserialize(tx))
-        else:
-            txo = deserialize(tx)
-    elif isinstance(tx, dict):
-        txo = json_unhexlify(tx) if json_is_base(tx, 16) else tx
-    else: raise Exception("JSON must be base16)")  # Dict with base256 *values*
-
-    if 'ins' not in txo:
-        raise Exception("TxIns missing")
-    if 'outs' not in txo:
-        raise Exception("TxOuts missing")
-
-    #Size limits
-    MAX_BLOCK_SIZE = 1000000
-    if len(serialize(txo)) > MAX_BLOCK_SIZE:
-        raise Exception("size exceeds MAX BLOCK SIZE: %d" % MAX_BLOCK_SIZE)
-
-    #Check for negative or overflow output values
-    MAX_MONEY = 21000000 * 100000000
-    nValueOut = 0
-    for i, txout in enumerate(txo['outs']):
-        if not (0 <= txout['value'] <= MAX_MONEY):
-            raise Exception("TxOut %d: value negative or out of range" % i)
-        nValueOut += txout['value']
-        if nValueOut > MAX_MONEY:
-            raise Exception("TxOuts' total out of range")
-
-    #Check for duplicate inputs
-    INS = txo['ins']
-    OUTPOINTS = multiaccess(INS, 'outpoint')
-    if len(set(("%s:%d" % (x["hash"], x["index"]) for x in OUTPOINTS))) < len(txo["ins"]):
-        raise Exception("duplicate inputs")
-
-    #Check is coinbase
-    NULL = (b'00'*32, b'\0'*32, 0, 0x80)
-    NEG_ONE = (-1, 0x81, 0xffffffff, b"ff"*4)
-    if len(INS) == 1 and (OUTPOINTS[0]["hash"] in NULL) and (OUTPOINTS[0]["index"] in NEG_ONE):
-        if len(INS[0]["script"]) not in xrange(2, 101):    # script's len 2<=len<=100
-            raise Exception("bad coinbase script size")
-
-    #Check ins aren't missing
-    if not len(INS):        # if len(INS) == 0
-        raise Exception("prevout is null")
-
-    return True
+# def check_transaction(tx):
+#     if isinstance(tx, string_types):
+#         if RE_HEX_CHARS.match(tx):
+#             txo = json_unhexlify(deserialize(tx))
+#         else:
+#             txo = deserialize(tx)
+#     elif isinstance(tx, dict):
+#         txo = json_unhexlify(tx) if json_is_base(tx, 16) else tx
+#     else: raise Exception("JSON must be base16)")  # Dict with base256 *values*
+#
+#     if 'ins' not in txo:
+#         raise Exception("TxIns missing")
+#     if 'outs' not in txo:
+#         raise Exception("TxOuts missing")
+#
+#     #Size limits
+#     MAX_BLOCK_SIZE = 1000000
+#     if len(serialize(txo)) > MAX_BLOCK_SIZE:
+#         raise Exception("size exceeds MAX BLOCK SIZE: %d" % MAX_BLOCK_SIZE)
+#
+#     #Check for negative or overflow output values
+#     MAX_MONEY = 21000000 * 100000000
+#     nValueOut = 0
+#     for i, txout in enumerate(txo['outs']):
+#         if not (0 <= txout['value'] <= MAX_MONEY):
+#             raise Exception("TxOut %d: value negative or out of range" % i)
+#         nValueOut += txout['value']
+#         if nValueOut > MAX_MONEY:
+#             raise Exception("TxOuts' total out of range")
+#
+#     #Check for duplicate inputs
+#     INS = txo['ins']
+#     OUTPOINTS = multiaccess(INS, 'outpoint')
+#     if len(set(("%s:%d" % (x["hash"], x["index"]) for x in OUTPOINTS))) < len(txo["ins"]):
+#         raise Exception("duplicate inputs")
+#
+#     #Check is coinbase
+#     NULL = (b'00'*32, b'\0'*32, 0, 0x80)
+#     NEG_ONE = (-1, 0x81, 0xffffffff, b"ff"*4)
+#     if len(INS) == 1 and (OUTPOINTS[0]["hash"] in NULL) and (OUTPOINTS[0]["index"] in NEG_ONE):
+#         if len(INS[0]["script"]) not in xrange(2, 101):    # script's len 2<=len<=100
+#             raise Exception("bad coinbase script size")
+#
+#     #Check ins aren't missing
+#     if not len(INS):        # if len(INS) == 0
+#         raise Exception("prevout is null")
+#
+#     return True
 
 def estimate_tx_size(rawtx):
     # Estimate size of Tx in bytes
@@ -668,6 +652,7 @@ def estimate_tx_size(rawtx):
 
 
 def deserialize_der(sig):
+    """Deserialize DER signature => (r, s, hashcode)"""
     sig = bytes(bytearray.fromhex(sig)) if RE_HEX_CHARS.match(sig) else bytes(bytearray(sig))
     totallen = decode(sig[1], 256) + 2
     rlen = decode(sig[3], 256)
@@ -683,15 +668,15 @@ der_deserialize = deserialize_der
 
 
 def der_extract_rs(sig):
-    res = deserialize_der(sig)
-    return res[:-2]
+    r, s, sighash = deserialize_der(sig)
+    return r, s
 
 
-def is_der(signature):
+def is_der(sig):
     #RE_DER = re.compile(r'30([0-4][0-9a-f])02([0-2][0-9a-f])((?:00)?[a-f0-9]{2,64})02([0-2][0-9a-f])((?:00)?[a-f0-9]{2,64})((0|8)[0-3])?', re.I)
-    if not isinstance(signature, string_types):
+    if not isinstance(sig, string_types):
         return False
-    return bool(RE_DER.match(signature))
+    return bool(RE_DER.match(sig))
 
 
 def der_extract(tx):
@@ -707,7 +692,7 @@ def der_extract(tx):
         descr = deserialize_script(scr)
         der = filter(lambda s: is_der(s), descr)
         ders.extend(der)
-    return ders if len(ders) > 1 else ders[0] if len(ders) == 1 else []
+    return ders if nin > 1 else ders[0] if nin == 1 else []
 
 
 get_tx_sigs = extract_ders = der_extract
@@ -719,7 +704,7 @@ def mk_opreturn(msg, txhex=None):
     if txhex is None:
         return hexdata
     else:
-        if not re.match("^[0-9a-fA-F]*$", txhex):
+        if isinstance(txhex, string_types) and not RE_TXHEX.match(txhex):
             return unhexlify(mk_opreturn(msg, hexlify(txhex)))
         elif isinstance(txhex, dict):
             txo = txhex
@@ -729,7 +714,8 @@ def mk_opreturn(msg, txhex=None):
         
         txo = deserialize(txhex)
         assert (len(outs) > 0) and sum(multiaccess(outs, 'value')) > 0 \
-                and not any([o for o in outs if o.get("script")[:2] == '6a']), "Tx limited to *1* OP_RETURN, and only whilst the other outputs send funds"
+                and not any([o for o in outs if o.get("script")[:2] == '6a']), \
+            "Tx limited to *1* OP_RETURN, and only whilst the other outputs send funds"
         outs.append({
                     'script': hexdata, 
                     'value': 0
