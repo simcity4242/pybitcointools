@@ -669,8 +669,10 @@ def ecdsa_verify(msg, sig, pub):
 def ecdsa_raw_recover(msghash, vrs):
     """Recovers (x,y) point from msghash and sig values (v,r,s)"""
     v, r, s = vrs
-    if not (27 <= v <= 34):
-        raise ValueError("%d must in range 27-34" % v)
+    if not v:
+        pass
+    elif not (27 <= v <= 34):
+        raise ValueError("{0} must in range 27-34".format(v))
     x = r
     alpha = (x**3 + A*x + B) % P
     beta = pow(alpha, (P+1)//4, P)                            # determine which
