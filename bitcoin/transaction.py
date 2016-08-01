@@ -514,6 +514,8 @@ def mksend(*args, **kwargs):
     return mktx(ins, outputs2, **kwargs)
 
 
+# script functions
+
 # args = "TxID:index"     or     
 # args = txhex, index
 # append 'ins' or 'outs' to args: args = "txid:0", 'ins'
@@ -651,6 +653,8 @@ def estimate_tx_size(rawtx):
     return (len(ins) or 1) * 148 + (34 * len(outs)) + 10
 
 
+# DER signature related
+
 def deserialize_der(sig):
     """Deserialize DER signature => (r, s, hashcode)"""
     sig = bytes(bytearray.fromhex(sig)) if RE_HEX_CHARS.match(sig) else bytes(bytearray(sig))
@@ -673,7 +677,6 @@ def der_extract_rs(sig):
 
 
 def is_der(sig):
-    #RE_DER = re.compile(r'30([0-4][0-9a-f])02([0-2][0-9a-f])((?:00)?[a-f0-9]{2,64})02([0-2][0-9a-f])((?:00)?[a-f0-9]{2,64})((0|8)[0-3])?', re.I)
     if not isinstance(sig, string_types):
         return False
     return bool(RE_DER.match(sig))
