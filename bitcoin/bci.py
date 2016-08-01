@@ -135,7 +135,7 @@ def be_unspent(*args, **kwargs):
     try:
         network, addrs = parse_addr_args(*args)
     except:
-        network = "btc", args[:-1]
+        network, addrs = "btc", args[:-1]
     if network == 'testnet':
         raise Exception("BlockExplorer no longer supports testnet")
     u = []
