@@ -116,8 +116,6 @@ class TestRawSignRecover(unittest.TestCase):
             )
 
 
-# TODO: this test fails on vbuterin/pybitcointools also...possible low_s issue??
-#       
 class TestTransactionSignVerify(unittest.TestCase):
 
     @classmethod
@@ -161,8 +159,6 @@ class TestSerialize(unittest.TestCase):
             "Script serialize roundtrip failed"
         )
 
-
-# TODO: verify_tx_input is failing
 
 class TestTransaction(unittest.TestCase):
     @classmethod
@@ -274,8 +270,8 @@ class TestBIP0032(unittest.TestCase):
                 right,
                 "Test vector does not match. Details: \n%s\n%s\n\%s" % (
                     tv[0],
-                    [x.encode('hex') if isinstance(x, str) else x for x in bip32_deserialize(left)],
-                    [x.encode('hex') if isinstance(x, str) else x for x in bip32_deserialize(right)],
+                    [safe_hexlify(x) if isinstance(x, str) else x for x in bip32_deserialize(left)],
+                    [safe_hexlify(x) if isinstance(x, str) else x for x in bip32_deserialize(right)],
                 )
             )
 
