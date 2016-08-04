@@ -2,6 +2,7 @@ import json
 import os
 import random
 import unittest
+import string
 
 import bitcoin.ripemd as ripemd
 from bitcoin import *
@@ -517,41 +518,117 @@ class Transaction_Misc(unittest.TestCase):
             self.assertFalse(is_testnet(var) is False, "is_testnet should fail for mainnet {0}".format(str(var)))
 
 
-        print("Checking predicate functions...")
+        print("Checking predicate/regexp functions...")
 
-        preds = {
-         "address": "1MBngSqZbMydscpzSoehjP8kznMaHAzh9y",
-         "blockhash": "000000004257f209a21040d1baeb99c1ea852271238ef67a124a2c5349e1d870",
-         "txid": "6df88400ab991f31be5d44be76d46ff3cb482e6417c8b472037d932424a191ff",
-         "privkey": "0ecd20654c2e2be708495853e8da35c664247040c00bd10b9b13e5e86e6a808d",
-         "pubkey": "042daa93315eebbe2cb9b5c3505df4c6fb6caca8b756786098567550d4820c09db988fe9997d049d687292f815ccd6e7fb5c1b1a91137999818d17c73d0f80aef9",
-         "txhex": "0100000003d5001aae8358ae98cb02c1b6f9859dc1ac3dbc1e9cc88632afeb7b7e3c510a49000000008b4830450221009e03bb6122437767e2ca785535824f4ed13d2ebbb9fa4f9becc6d6f4e1e217dc022064577353c08d8d974250143d920d3b963b463e43bbb90f3371060645c49266b90141048ef80f6bd6b073407a69299c2ba89de48adb59bb9689a5ab040befbbebcfbb15d01b006a6b825121a0d2c546c277acb60f0bd3203bd501b8d67c7dba91f27f47ffffffff1529d655dff6a0f6c9815ee835312fb3ca4df622fde21b6b9097666e9284087d010000008a473044022035dd67d18b575ebd339d05ca6ffa1d27d7549bd993aeaf430985795459fc139402201aaa162cc50181cee493870c9479b1148243a33923cb77be44a73ca554a4e5d60141048ef80f6bd6b073407a69299c2ba89de48adb59bb9689a5ab040befbbebcfbb15d01b006a6b825121a0d2c546c277acb60f0bd3203bd501b8d67c7dba91f27f47ffffffff23d5f9cf0a8c233b35443c3ae48d0bdb41bef357b8bfb972336322a34cd75c80010000008b483045022014daa5c5bbe9b3e5f2539a5cd8e22ce55bc84788f946c5b3643ecac85b4591a9022100a4062074a1df3fa0aea5ef67368d0b1f0eaac520bee6e417c682d83cd04330450141048ef80f6bd6b073407a69299c2ba89de48adb59bb9689a5ab040befbbebcfbb15d01b006a6b825121a0d2c546c277acb60f0bd3203bd501b8d67c7dba91f27f47ffffffff02204e0000000000001976a914946cb2e08075bcbaf157e47bcb67eb2b2339d24288ac5b3c4411000000001976a914a41d15ae657ad3bfd0846771a34d7584c37d54a288ac00000000",
-         "txo": {
-                 'ins': [
-                     {'outpoint': {'hash': '490a513c7e7bebaf3286c89c1ebc3dacc19d85f9b6c102cb98ae5883ae1a00d5',
-                                   'index': 0},
-                                   'script': '4830450221009e03bb6122437767e2ca785535824f4ed13d2ebbb9fa4f9becc6d6f4e1e217dc022064577353c08d8d974250143d920d3b963b463e43bbb90f3371060645c49266b90141048ef80f6bd6b073407a69299c2ba89de48adb59bb9689a5ab040befbbebcfbb15d01b006a6b825121a0d2c546c277acb60f0bd3203bd501b8d67c7dba91f27f47',
-                                   'sequence': 4294967295L},
-                     {'outpoint': {'hash': '7d0884926e6697906b1be2fd22f64dcab32f3135e85e81c9f6a0f6df55d62915',
-                                   'index': 1},
-                                   'script': '473044022035dd67d18b575ebd339d05ca6ffa1d27d7549bd993aeaf430985795459fc139402201aaa162cc50181cee493870c9479b1148243a33923cb77be44a73ca554a4e5d60141048ef80f6bd6b073407a69299c2ba89de48adb59bb9689a5ab040befbbebcfbb15d01b006a6b825121a0d2c546c277acb60f0bd3203bd501b8d67c7dba91f27f47',
-                                   'sequence': 4294967295L},
-                     {'outpoint': {'hash': '805cd74ca322633372b9bfb857f3be41db0b8de43a3c44353b238c0acff9d523',
-                                   'index': 1},
-                                   'script': '483045022014daa5c5bbe9b3e5f2539a5cd8e22ce55bc84788f946c5b3643ecac85b4591a9022100a4062074a1df3fa0aea5ef67368d0b1f0eaac520bee6e417c682d83cd04330450141048ef80f6bd6b073407a69299c2ba89de48adb59bb9689a5ab040befbbebcfbb15d01b006a6b825121a0d2c546c277acb60f0bd3203bd501b8d67c7dba91f27f47',
-                                   'sequence': 4294967295L}
-                 ],
-                                   'locktime': 0,
-                 'outs': [
-                     {'script': '76a914946cb2e08075bcbaf157e47bcb67eb2b2339d24288ac',
-                      'value': 20000},
-                     {'script': '76a914a41d15ae657ad3bfd0846771a34d7584c37d54a288ac',
-                      'value': 289684571}
-                 ],
-                    'version': 1
-                   }
-        }
 
+        addresses = [privtoaddr(random_key()) for x in range(10) ]
+        for addr in addresses:
+            self.assertRegexpMatches(
+                addr,
+                RE_ADDR,
+                "RE_ADDR failed for {address}".format(address=addr)
+            )
+            self.assertTrue(is_address(addr), "is_address failed for {addr}".format(addr=addr))
+
+
+        blockhashes = []
+        hexchars = string.hexdigits
+        for i in range(16):
+            blockhashes.append((hexchars[int(i)]*56).zfill(64))
+
+        for bh in blockhashes:
+            self.assertRegexpMatches(
+                bh,
+                RE_BLOCKHASH,
+                "RE_BLOCKHASH failed for {bh}".format(bh=bh)
+            )
+            self.assertTrue(is_blockhash(bh), "is_blockhash failed for {bh}".format(bh=bh))
+
+        privkeys = [random_key()]
+        privkeys.append(privkeys[0] + "01")
+        privkeys.append(encode_privkey(decode_privkey(privkeys[0]), "wif"))
+        privkeys.append(encode_privkey(decode_privkey(privkeys[0]), "wif_compressed"))
+
+        for pk in privkeys:
+            self.assertRegexpMatches(
+                pk,
+                RE_PRIVKEY,
+                "RE_PRIVKEY failed for {pk}".format(pk=pk))
+            self.assertTrue(is_privkey(pk), "is_privkey failed for {pk}".format(pk=pk))
+
+
+        pubkeys = [privtopub(random_key()) for x in range(5)] + \
+                  [compress(privtopub(random_key())) for x in range(5)]
+
+        for pubk in pubkeys:
+            self.assertRegexpMatches(
+                pubk,
+                RE_PUBKEY,
+                "RE_PUBKEY failed for {pubk}".format(pubk=pubk)
+            )
+            self.assertTrue(is_pubkey(pubk), "is_pubkey failed for {pubk}".format(pubk=pubk))
+
+
+        txhexes = [
+            "010000000186f411ab1c8e70ae8a0795ab7a6757aea6e4d5ae1826fc7b8f00c597d500609c010000006"
+            "b483045022100ac8c6dbc482c79e86c18928a8b364923c774bfdbd852059f6b3778f2319b59a7022029"
+            "d7cc5724e2f41ab1fcfc0ba5a0d4f57ca76f72f19530ba97c860c70a6bf0a801210272d83d8a1fa323f"
+            "eab1c085157a0791b46eba34afb8bfbfaeb3a3fcc3f2c9ad8ffffffff0210270000000000001976a914"
+            "8066a8e7ee82e5c5b9b7dc1765038340dc5420a988ac1027000000000000536a4c50010002063e4eb95"
+            "e62791b06c50e1a3a942e1ecaaa9afbbeb324d16ae6821e091611fa96c0cf048f607fe51a0327f5e252"
+            "8979311c78cb2de0d682c61e1180fc3d543b0000000000000000000000000000000000",
+            
+            "0100000003d5001aae8358ae98cb02c1b6f9859dc1ac3dbc1e9cc88632afeb7b7e3c510a49000000008"
+            "b4830450221009e03bb6122437767e2ca785535824f4ed13d2ebbb9fa4f9becc6d6f4e1e217dc022064"
+            "577353c08d8d974250143d920d3b963b463e43bbb90f3371060645c49266b90141048ef80f6bd6b0734"
+            "07a69299c2ba89de48adb59bb9689a5ab040befbbebcfbb15d01b006a6b825121a0d2c546c277acb60f"
+            "0bd3203bd501b8d67c7dba91f27f47ffffffff1529d655dff6a0f6c9815ee835312fb3ca4df622fde21"
+            "b6b9097666e9284087d010000008a473044022035dd67d18b575ebd339d05ca6ffa1d27d7549bd993ae"
+            "af430985795459fc139402201aaa162cc50181cee493870c9479b1148243a33923cb77be44a73ca554a"
+            "4e5d60141048ef80f6bd6b073407a69299c2ba89de48adb59bb9689a5ab040befbbebcfbb15d01b006a"
+            "6b825121a0d2c546c277acb60f0bd3203bd501b8d67c7dba91f27f47ffffffff23d5f9cf0a8c233b354"
+            "43c3ae48d0bdb41bef357b8bfb972336322a34cd75c80010000008b483045022014daa5c5bbe9b3e5f2"
+            "539a5cd8e22ce55bc84788f946c5b3643ecac85b4591a9022100a4062074a1df3fa0aea5ef67368d0b1"
+            "f0eaac520bee6e417c682d83cd04330450141048ef80f6bd6b073407a69299c2ba89de48adb59bb9689"
+            "a5ab040befbbebcfbb15d01b006a6b825121a0d2c546c277acb60f0bd3203bd501b8d67c7dba91f27f4"
+            "7ffffffff02204e0000000000001976a914946cb2e08075bcbaf157e47bcb67eb2b2339d24288ac5b3c"
+            "4411000000001976a914a41d15ae657ad3bfd0846771a34d7584c37d54a288ac00000000"
+        ]
+
+        for txh in txhexes:
+            self.assertRegexpMatches(
+                txh,
+                RE_TXHEX,
+                "RE_TXHEX failed for {txh}".format(txh=txh)
+            )
+            self.assertTrue(is_txhex(txh), "is_txhex failed for {txh}".format(txh=txh))
+
+
+        txobjs = list(map(lambda x: deserialize(x), txhexes))
+        txs = txhexes + txobjs
+
+        for txo in txobjs:
+            self.assertTrue(is_txobj(txo), "is_txobj failed for {txo}".format(txo=txo))
+        
+        for tx in txs:
+            self.assertTrue(is_tx(tx), "is_tx failed for {tx}".format(tx=tx))
+
+        
+        print("Checking DER functions...")
+
+        txhex = "0100000003d5001aae8358ae98cb02c1b6f9859dc1ac3dbc1e9cc88632afeb7b7e3c510a49000000008b4830450221009e03bb6122437767e2ca785535824f4ed13d2ebbb9fa4f9becc6d6f4e1e217dc022064577353c08d8d974250143d920d3b963b463e43bbb90f3371060645c49266b90141048ef80f6bd6b073407a69299c2ba89de48adb59bb9689a5ab040befbbebcfbb15d01b006a6b825121a0d2c546c277acb60f0bd3203bd501b8d67c7dba91f27f47ffffffff1529d655dff6a0f6c9815ee835312fb3ca4df622fde21b6b9097666e9284087d010000008a473044022035dd67d18b575ebd339d05ca6ffa1d27d7549bd993aeaf430985795459fc139402201aaa162cc50181cee493870c9479b1148243a33923cb77be44a73ca554a4e5d60141048ef80f6bd6b073407a69299c2ba89de48adb59bb9689a5ab040befbbebcfbb15d01b006a6b825121a0d2c546c277acb60f0bd3203bd501b8d67c7dba91f27f47ffffffff23d5f9cf0a8c233b35443c3ae48d0bdb41bef357b8bfb972336322a34cd75c80010000008b483045022014daa5c5bbe9b3e5f2539a5cd8e22ce55bc84788f946c5b3643ecac85b4591a9022100a4062074a1df3fa0aea5ef67368d0b1f0eaac520bee6e417c682d83cd04330450141048ef80f6bd6b073407a69299c2ba89de48adb59bb9689a5ab040befbbebcfbb15d01b006a6b825121a0d2c546c277acb60f0bd3203bd501b8d67c7dba91f27f47ffffffff02204e0000000000001976a914946cb2e08075bcbaf157e47bcb67eb2b2339d24288ac5b3c4411000000001976a914a41d15ae657ad3bfd0846771a34d7584c37d54a288ac00000000"
+
+        bip66_ders = [
+            '30450221009e03bb6122437767e2ca785535824f4ed13d2ebbb9fa4f9becc6d6f4e1e217dc022064577353c08d8d974250143d920d3b963b463e43bbb90f3371060645c49266b901',
+            '3044022035dd67d18b575ebd339d05ca6ffa1d27d7549bd993aeaf430985795459fc139402201aaa162cc50181cee493870c9479b1148243a33923cb77be44a73ca554a4e5d601',
+            '3045022014daa5c5bbe9b3e5f2539a5cd8e22ce55bc84788f946c5b3643ecac85b4591a9022100a4062074a1df3fa0aea5ef67368d0b1f0eaac520bee6e417c682d83cd043304501'
+        ]
+
+        for sig in bip66_ders:
+            self.assertTrue(is_der(sig), "is_der failed for {0}".format(sig))
+            self.assertTrue(is_bip66(sig), "is_bip66 failed for {0}".format(sig))
+
+        self.assertListEqual(bip66_ders, extract_ders(txhex), "extract_ders failed")
 
 if __name__ == '__main__':
     unittest.main()
