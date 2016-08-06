@@ -2,6 +2,8 @@ from bitcoin.pyspecials import *
 from bitcoin.main import *
 from bitcoin.deterministic import *
 from bitcoin.bci import *
+from bitcoin.transaction import *
+from bitcoin.composite import *
 
 import re, hmac, hashlib
 try:
@@ -11,20 +13,19 @@ except ImportError:
         return ''.join([chr(ord(a) ^ ord(b)) for a,b in zip(s1, s2)])
 
 
-RE_HEXCODE = re.compile(ur'^0100(02|03)[0-9a-fA-F]{128}0{26}$') 
-RE_PAYCODE = re.compile(ur"^P[1-9a-km-zA-HJ-NP-Z]{0,115}$")
+RE_HEXCODE = re.compile(r'^0100(02|03)[0-9a-fA-F]{128}0{26}$') 
+RE_PAYCODE = re.compile(r"^P[1-9a-km-zA-HJ-NP-Z]{0,115}$")
 
 
 def is_bip47_code(s):
-    assert isinstance(s, basestring)
-    if not re.match("^[0-9a-fA-F]*$", s) and len(s)==80:
+    assert isinstance(s, string_types)
+    if not RE_HEX_CHARS.match(s) and len(s)==80:
         return is_bip47_code(safe_hexlify(s))
-    elif re.match("^[0-9a-fA-F]*$", s) and len(s)==160: 
+    elif RE_HEX_CHARS.match(s) and len(s)==160: 
         return bool(RE_HEXCODE.match(s))
     elif s[0] == 'P':
         return bool(RE_PAYCODE.match(s))
-    else:
-        return False
+    return False
 
 
 def bip47_ckd(seed):
@@ -35,8 +36,8 @@ def bip47_ckd(seed):
 
 def derive_paycode(xkey):
     """Derive paycode from initial entropy, mnemonic or root key """
-    if xkey.startswith("xprv") or xkey.count(" ") in (11, 23) or \
-             (re.match("^[0-9a-fA-F]$", xkey) and len(xkey) % 32 == 0):
+    if xkey.startswith("xprv") or RE_MNEMONIC.match(xkey) or \
+             (RE_HEX_CHARS.match(xkey) and len(xkey) % 32 == 0):
         pcode = serialize_paycode(bip47_ckd(xkey))
     elif xkey[:4] == "xpub":
         pcode = serialize_paycode(xkey)
@@ -62,7 +63,8 @@ def serialize_paycode(*args):
     # Convenience function, derived xpub
     if len(args) == 1 and RE_BIP32_PUB.match(str(args[-1])):
         xpub = args[0]
-        assert bip32_deserialize(xpub)[1] == 3, "xpub = ({0}) instead of 3".format(bip32_deserialize(xpub)[1])
+        assert bip32_deserialize(xpub)[1] == 3, \
+            "xpub = ({0}) instead of 3".format(bip32_deserialize(xpub)[1])
         chaincode = bip32_extract_chaincode(xpub)
         pubkey = bip32_extract_key(xpub)
     elif len(args) == 1 and is_bip47_code(args[0]):
@@ -78,7 +80,8 @@ def deserialize_paycode(pcode):
     hex = decode_paycode(pcode) if pcode.startswith('P') else pcode
     pubkey = hex[4:70]
     chaincode = hex[70:134]
-    assert (hex[:4], hex[-26:]) == ('0100', '00'*13), "Deserialize Error! Ensure hex paycode is hexlified"
+    assert (hex[:4], hex[-26:]) == ('0100', '00'*13), \
+        "Deserialize Error! Ensure hex paycode is hexlified"
     return pubkey, chaincode
 
 
@@ -148,10 +151,11 @@ def bip47_mk_notification_tx(a, outpoint, paycodeB):
 
 
 def bip47_check_address(addr, index=0):
-    """Checks notification address at decreasing indexes for payments, returns [{"txid:vout": "6a4c5001..."}]"""
+    """Checks notification address at decreasing indexes for payments, 
+    returns [{"txid:vout": "6a4c5001..."}]"""
     #from bitcoin.transaction import get_script
     un = unspent(addr)[int(index) : 1+int(index)]
-    outpoint = access(un, "output")[int(index)]
+    outpoints = access(un, "output")[int(index)]
     txids = map(lambda s: str(s[:64]), outpoints)
     #scripts = []
     scriptpks = list(multiaccess(txo.get('outs'), 'script'))
@@ -192,19 +196,18 @@ pchex = "010002063e4eb95e62791b06c50e1a3a942e1ecaaa9afbbeb324d16ae6821e091611fa9
 
 txh = "010000000186f411ab1c8e70ae8a0795ab7a6757aea6e4d5ae1826fc7b8f00c597d500609c010000006b483045022100ac8c6dbc482c79e86c18928a8b364923c774bfdbd852059f6b3778f2319b59a7022029d7cc5724e2f41ab1fcfc0ba5a0d4f57ca76f72f19530ba97c860c70a6bf0a801210272d83d8a1fa323feab1c085157a0791b46eba34afb8bfbfaeb3a3fcc3f2c9ad8ffffffff0210270000000000001976a9148066a8e7ee82e5c5b9b7dc1765038340dc5420a988ac1027000000000000536a4c50010002063e4eb95e62791b06c50e1a3a942e1ecaaa9afbbeb324d16ae6821e091611fa96c0cf048f607fe51a0327f5e2528979311c78cb2de0d682c61e1180fc3d543b0000000000000000000000000000000000"
 
-txo = """ \
-{'ins': [{'outpoint': {'hash': '9c6000d597c5008f7bfc2618aed5e4a6ae57677aab95078aae708e1cab11f486',
+txo = {
+    'ins': [{'outpoint': {'hash': '9c6000d597c5008f7bfc2618aed5e4a6ae57677aab95078aae708e1cab11f486',
                        'index': 1},
           'script': '483045022100ac8c6dbc482c79e86c18928a8b364923c774bfdbd852059f6b3778f2319b59a7022029d7cc5724e2f41ab1fcfc0ba5a0d4f57ca76f72f19530ba97c860c70a6bf0a801210272d83d8a1fa323feab1c085157a0791b46eba34afb8bfbfaeb3a3fcc3f2c9ad8',
           'sequence': 4294967295}],
- 'locktime': 0,
- 'outs': [{'script': '76a9148066a8e7ee82e5c5b9b7dc1765038340dc5420a988ac',
+    'locktime': 0,
+    'outs': [{'script': '76a9148066a8e7ee82e5c5b9b7dc1765038340dc5420a988ac',
            'value': 10000},
           {'script': '6a4c50010002063e4eb95e62791b06c50e1a3a942e1ecaaa9afbbeb324d16ae6821e091611fa96c0cf048f607fe51a0327f5e2528979311c78cb2de0d682c61e1180fc3d543b00000000000000000000000000',
            'value': 10000}],
- 'version': 1}
-"""
-txo=eval(txo)
+    'version': 1}
+
 
 ins = ['9414f1681fb1255bd168a806254321a837008dd4480c02226063183deb100204:1']
 outs = ['1ChvUUvht2hUQufHBXF8NgLhW8SwE2ecGV:50000']
