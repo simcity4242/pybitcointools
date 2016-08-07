@@ -9,8 +9,7 @@ import re, hmac, hashlib
 try:
     from strxor import strxor as sxor
 except ImportError:
-    def sxor(s1, s2):
-        return ''.join([chr(ord(a) ^ ord(b)) for a,b in zip(s1, s2)])
+    sxor = lambda a,b: ''.join([chr(ord(a) ^ ord(b)) for a,b in zip(s1, s2)])
 
 
 RE_HEXCODE = re.compile(r'^0100(02|03)[0-9a-fA-F]{128}0{26}$') 
@@ -30,12 +29,14 @@ def is_bip47_code(s):
 
 def bip47_ckd(seed):
     """Derive derived xpub from entropy or mnemonic"""
-    assert RE_MNEMONIC.match(seed) or RE_BIP32_PRIV.match(seed)
+    assert isinstance(seed, string_types) and \
+           (RE_MNEMONIC.match(seed) or RE_BIP32_PRIV.match(seed)), \
+        ""
     return bip32_ckd(bip32_master_key(seed), "M/47'/0'/0'")
     
 
-def derive_paycode(xkey):
-    """Derive paycode from initial entropy, mnemonic or root key """
+def mk_paycode(xkey):
+    """Derive paycode from initial entropy/mnemonic/bip32 root key """
     if xkey.startswith("xprv") or RE_MNEMONIC.match(xkey) or \
              (RE_HEX_CHARS.match(xkey) and len(xkey) % 32 == 0):
         pcode = serialize_paycode(bip47_ckd(xkey))
@@ -44,13 +45,13 @@ def derive_paycode(xkey):
     return pcode
     
 
-def decode_paycode(pcode):
+def b58_paycode_decode(pcode):
     """Decode b58check to hex paycode"""
     assert is_bip47_code(pcode)
     return b58check_to_hex(pcode)
     
 
-def encode_paycode(hexstr):
+def b58_paycode_encode(hexstr):
     """Encode hex paycode to b58check hexcode"""
     assert is_bip47_code(hexstr)
     return hex_to_b58check(hexstr, 0x47)
@@ -59,25 +60,23 @@ def encode_paycode(hexstr):
 # args = (pubkey, chaincode) or derived xpub(key)
 def serialize_paycode(*args):
     """Serialize xpub or (pubkey, chaincode) into hex"""
-    
     # Convenience function, derived xpub
-    if len(args) == 1 and RE_BIP32_PUB.match(str(args[-1])):
+    if RE_BIP32_PUB.match(str(args[0])):
         xpub = args[0]
-        assert bip32_deserialize(xpub)[1] == 3, \
-            "xpub = ({0}) instead of 3".format(bip32_deserialize(xpub)[1])
-        chaincode = bip32_extract_chaincode(xpub)
-        pubkey = bip32_extract_key(xpub)
-    elif len(args) == 1 and is_bip47_code(args[0]):
-        return args[0]
-    elif len(args) == 2 and isinstance(args[0], tuple):
-        pubkey, chaincode = sorted(args, key=lambda x: -len(x))
-    return '0100{0:066x}{1:064x}{2:026x}'.format(int(pubkey,16), int(chaincode,16), 0)
+        depth = bip32_deserialize(xpub)[1]
+        assert depth == 3, "xpub depth is {0} and must be 3".format(depth)
+        cc = bip32_extract_chaincode(xpub)
+        pub = bip32_extract_key(xpub)
+    elif isinstance(args[0], tuple):
+        pub, cc = sorted(args, key=lambda x: -len(x))
+    pub, cc = decode(pub, 16), decode(cc, 16)
+    return '0100{0:066x}{1:064x}{2:026x}'.format(pub, cc, 0)
 
 
 def deserialize_paycode(pcode):
     """Deserialize hex or b58check paycode to (pubkey, chaincode) """
     assert is_bip47_code(pcode)
-    hex = decode_paycode(pcode) if pcode.startswith('P') else pcode
+    hex = b58_paycode_decode(pcode) if pcode.startswith('P') else pcode
     pubkey = hex[4:70]
     chaincode = hex[70:134]
     assert (hex[:4], hex[-26:]) == ('0100', '00'*13), \
