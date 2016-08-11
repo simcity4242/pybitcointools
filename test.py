@@ -85,7 +85,7 @@ class TestElectrumWalletInternalConsistency(unittest.TestCase):
 
     def test_all(self):
         for i in range(3):
-            electrum_mpk = electrum_masterprivkey
+            electrum_mpk = electrum_mpubk
             seed = sha256(str(random.randrange(2**40)))[:32]
             mpk = electrum_mpk(seed)
             for i in range(5):
@@ -404,9 +404,9 @@ class TestRipeMD160PythonBackup(unittest.TestCase):
         for i, s in enumerate(strvec):
             digest = ripemd.RIPEMD160(s).digest()
             hash160digest = ripemd.RIPEMD160(bin_sha256(s)).digest()
-            self.assertEqual(from_bytes_to_str(digest), target[i])
-            self.assertEqual(from_bytes_to_str(hash160digest), hash160target[i])
-            self.assertEqual(from_bytes_to_str(bin_hash160(from_string_to_bytes(s))), hash160target[i])
+            self.assertEqual(hexlify(from_bytes_to_str(digest)), target[i])
+            self.assertEqual(hexlify(from_bytes_to_str(hash160digest)), hash160target[i])
+            self.assertEqual(hexlify(from_bytes_to_str(bin_hash160(from_str_to_bytes(s)))), hash160target[i])
             self.assertEqual(hash160(from_str_to_bytes(s)), hash160target[i])
 
 
@@ -515,7 +515,7 @@ class Transaction_Misc(unittest.TestCase):
             self.assertTrue(is_testnet(var), "is_testnet failed for {0}".format(str(var)))
         
         for var in mainnet_vars:
-            self.assertFalse(is_testnet(var) is False, "is_testnet should fail for mainnet {0}".format(str(var)))
+            self.assertFalse(is_testnet(var), "is_testnet should fail for mainnet {0}".format(str(var)))
 
 
         print("Checking predicate/regex functions...")
