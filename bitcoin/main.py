@@ -613,12 +613,16 @@ def ecdsa_raw_sign(msghash, priv):
     returns signature (v,r,s) with low s (BIP66) by default"""
     z = hash_to_int(msghash)
     k = deterministic_generate_k(msghash, priv)
-    is_compressed = 'compressed' in get_privkey_format(priv)
+
     r, y = fast_multiply(G, k)
     s = inv(k, N) * (z + r * decode_privkey(priv)) % N
-    
+
+    is_compressed = 'compressed' in get_privkey_format(priv)
     is_high_s = s*2 > N
-    v = (31 if is_compressed else 27) + ((y % 2) ^ (1 if is_high_s else 0))
+
+    v = 27 + ((y % 2) ^ (1 if is_high_s else 0))
+    if is_compressed:
+        v += 4          # 27 for uncompressed, 31 for compressed
     s = N-s if is_high_s else s
     return v, r, s
 
@@ -637,8 +641,8 @@ def ecdsa_sign(msg, priv):
 def ecdsa_raw_verify(msghash, vrs, pub):
     """Verifies signature against pubkey for digest hash (msghash)"""
     v, r, s = vrs
-    # if v is not None and (v not in xrange(27, 34+1)):
-    #     return False
+    # if v is not None and (v not in xrange(27, 34+1)):     # fails for v = 0,1
+    #     return False                                      # in ecdsa_tx_recover
 
     w = inv(s, N)
     z = hash_to_int(msghash)
@@ -753,8 +757,10 @@ def format_output(num, output_type):
 # amount, label, message, request
 def uri_encode(addr, amount=None, label=None, message=None):
     #bitcoin:1NS17iag9jJgTHD1VXjvLCEnZuQ3rJED9L?amount=20.3&label=Luke-Jr&message=Donation%20for%20project%20xyz
-    try:     from urllib.parse import urlencode  # Python 3
-    except:  from urllib import urlencode        # Python 2
+    try:     
+        from urllib.parse import urlencode  # Python 3
+    except:  
+        from urllib import urlencode        # Python 2
     base_uri = "bitcoin:{address}?{params}"
     params = urlencode([
                         ("amount", str(satoshi_to_btc(int(amount)))), 
